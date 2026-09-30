@@ -3,12 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="theme-color" content="#0b0f19">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Smart Panel</title>
-  <link rel="stylesheet" href="css/styles.css?v=4">
-  <script src="js/app.js?v=4" defer></script>
+  <link rel="stylesheet" href="css/styles.css?v=5">
+  <script src="js/app.js?v=5" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -93,11 +96,13 @@
       <section class="view" id="panel-multimedia" role="tabpanel" aria-labelledby="tab-multimedia" data-panel="multimedia" hidden>
         <div class="page-heading"><p class="eyebrow">ENTRETENIMIENTO</p><h1>Multimedia</h1><p>Selecciona un televisor para abrir sus controles.</p></div>
         <section class="tv-section" aria-labelledby="tv-list-heading">
-          <div class="section-heading"><div><p class="eyebrow">DISPOSITIVOS</p><h2 id="tv-list-heading">Televisores</h2></div></div>
+          <div class="section-heading"><div><p class="eyebrow">DISPOSITIVOS</p><h2 id="tv-list-heading">Televisores</h2></div><button class="weather-refresh" id="tv-refresh" type="button" aria-label="Buscar televisores">↻</button></div>
+          <p class="tv-api-status" id="tv-api-status" aria-live="polite">Consultando API local...</p>
           <div class="tv-list" id="tv-list" aria-live="polite"></div>
+          <div class="tv-list-empty panel-surface" id="tv-list-empty" hidden>No hay televisores reportados por la API local.</div>
         </section>
         <section class="tv-control panel-surface" id="tv-control" aria-labelledby="selected-tv-name" hidden>
-          <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV principal</h2><p class="tv-location" id="selected-tv-location">Living</p></div><span class="tv-status"><span class="status-dot"></span> Lista</span></div>
+          <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV principal</h2><p class="tv-location" id="selected-tv-location">Living</p></div><span class="tv-status"><span class="status-dot" id="selected-tv-dot"></span><span id="selected-tv-power">Demo · API no conectada</span></span></div>
           <div class="media-control-inner" aria-labelledby="volume-heading">
             <div class="section-heading"><div><p class="eyebrow">CONTROL DE AUDIO</p><h3 id="volume-heading">Volumen</h3></div><span class="volume-value" id="volume-value">35%</span></div>
             <div class="volume-meter" aria-hidden="true"><span id="volume-meter-fill"></span></div>

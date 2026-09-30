@@ -25,7 +25,13 @@ El clima usa Open-Meteo sin clave y viene configurado con coordenadas de ejemplo
 
 Si aparece `Sin respuesta de red/CORS` en dispositivos de la LAN, comprueba que puedan navegar a `https://api.open-meteo.com`. Si la red bloquea el acceso externo, configura un proxy inverso de Nginx en el mismo origen y cambia la URL de la solicitud en `loadWeather()` para usar ese endpoint local. El timeout ahora hace visible el fallo en lugar de dejar “Consultando” indefinidamente.
 
-La lista `TV_DEVICES` de `js/app.js` es configurable. Volumen y mute se simulan y se guardan por TV; `sendTvAction()` es el punto de integración para una API local. Las apps son acciones simuladas, no abren servicios externos.
+La interfaz consulta `GET /api/tvs` en el mismo servidor cada 30 segundos. Sin ese endpoint solo muestra dos TVs de demostración y lo indica; el navegador no puede descubrir televisores de la LAN por sí solo. El backend debe hablar el protocolo del fabricante o integrarse con Home Assistant/otro controlador. Formato esperado:
+
+```json
+[{"id":"living-tv","name":"TV Living","room":"Living","model":"Smart TV","poweredOn":true,"volume":35,"muted":false}]
+```
+
+Volumen, mute y apps envían `POST /api/tvs/{id}/command` con JSON `{ "action": "set_volume|set_mute|launch_app", "value": 35 }` (para mute el valor es booleano y para abrir app es el nombre de la app). Ajusta `TV_CONFIG.endpoint` en `js/app.js` si tu backend usa otra ruta. Las apps no actúan sobre el TV hasta que el backend implemente esos comandos.
 
 Las cámaras guardan nombre y URL en `localStorage`, pero nunca usuario ni contraseña. Las credenciales solo viven en memoria hasta recargar. El preview directo está pensado para URLs HTTP/MJPEG sin autenticación; RTSP y cámaras con autenticación necesitan un proxy/gateway local que exponga un stream web compatible, como HLS o WebRTC. Safari no reproduce RTSP directamente.
 

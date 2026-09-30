@@ -8,12 +8,19 @@
     longitude: -58.3816,
     location: "Buenos Aires, Argentina"
   };
+  var TV_CONFIG = {
+    endpoint: "/api/tvs",
+    refreshMs: 30000,
+    timeoutMs: 5000
+  };
   var TV_DEVICES = [
     { id: "tv-principal", name: "TV principal", room: "Living", model: "Smart TV" },
     { id: "tv-dormitorio", name: "TV dormitorio", room: "Dormitorio", model: "Smart TV" }
   ];
   var state = readState();
   var cameraCredentials = {};
+  var tvApiAvailable = false;
+  var tvApiEverConnected = false;
   var weatherRetryTimer = null;
   var weatherHasData = false;
 
@@ -311,11 +318,140 @@
     return TV_DEVICES.length ? TV_DEVICES[0] : null;
   }
 
+  function renderTvApiStatus(message) {
+    byId("tv-api-status").textContent = message;
+  }
+
+  function requestTVs() {
+    var request = new XMLHttpRequest();
+    var finished = false;
+    byId("tv-refresh").disabled = true;
+    request.open("GET", TV_CONFIG.endpoint, true);
+    request.timeout = TV_CONFIG.timeoutMs;
+    request.onreadystatechange = function () {
+      if (request.readyState !== 4 || finished) { return; }
+      finished = true;
+      byId("tv-refresh").disabled = false;
+      if (request.status < 200 || request.status >= 300) {
+        tvApiAvailable = false;
+        renderTvApiStatus(tvApiEverConnected ? "API local sin respuesta; estado posiblemente desactualizado." : "API local no conectada; mostrando TVs de demostración.");
+        renderMedia();
+        return;
+      }
+      var payload;
+      try {
+        payload = JSON.parse(request.responseText);
+      } catch (error) {
+        tvApiAvailable = false;
+        renderTvApiStatus(tvApiEverConnected ? "La API devolvió JSON inválido; se conserva el último estado." : "La API local no devolvió JSON válido; mostrando TVs de demostración.");
+        renderMedia();
+        return;
+      }
+      var devices = Array.isArray(payload) ? payload : (payload.tvs || payload.devices);
+      if (!Array.isArray(devices)) {
+        tvApiAvailable = false;
+        renderTvApiStatus(tvApiEverConnected ? "La API devolvió un formato inválido; se conserva el último estado." : "Formato de API inválido: se esperaba una lista de TVs.");
+        renderMedia();
+        return;
+      }
+      TV_DEVICES = devices.filter(function (device) {
+        return device && device.id !== undefined;
+      }).map(function (device) {
+        return {
+          id: String(device.id),
+          name: device.name || device.label || "Televisor",
+          room: device.room || device.location || "Ubicación no indicada",
+          model: device.model || device.brand || "TV",
+          poweredOn: typeof device.poweredOn === "boolean" ? device.poweredOn : (device.state === "on" ? true : (device.state === "off" ? false : null)),
+          volume: typeof device.volume === "number" ? Math.max(0, Math.min(100, device.volume)) : null,
+          muted: typeof device.muted === "boolean" ? device.muted : null
+        };
+      });
+      tvApiAvailable = true;
+      tvApiEverConnected = true;
+      if (TV_DEVICES.length && !getTvById(state.tvId)) {
+        state.tvId = TV_DEVICES[0].id;
+      }
+      TV_DEVICES.forEach(function (device) {
+        if (!state.tvStates[device.id]) {
+          state.tvStates[device.id] = { volume: device.volume === null ? 35 : device.volume, muted: device.muted === true };
+        } else if (device.volume !== null) {
+          state.tvStates[device.id].volume = device.volume;
+          state.tvStates[device.id].muted = device.muted === true;
+        }
+      });
+      saveState();
+      renderTVs();
+      renderMedia();
+    };
+    request.onerror = function () {
+      if (finished) { return; }
+      finished = true;
+      byId("tv-refresh").disabled = false;
+      tvApiAvailable = false;
+      renderTvApiStatus(tvApiEverConnected ? "API local desconectada; estado posiblemente desactualizado." : "API local no conectada; mostrando TVs de demostración.");
+      renderMedia();
+    };
+    request.ontimeout = request.onerror;
+    try {
+      request.send(null);
+    } catch (error) {
+      request.onerror();
+    }
+  }
+
+  function getTvById(id) {
+    var index;
+    for (index = 0; index < TV_DEVICES.length; index += 1) {
+      if (TV_DEVICES[index].id === id) { return TV_DEVICES[index]; }
+    }
+    return null;
+  }
+
+  function sendTVCommand(action, value) {
+    var tv = getSelectedTv();
+    if (!tv) { return; }
+    if (!tvApiAvailable) {
+      byId("media-feedback").textContent = tvApiEverConnected ? "No se envió: API local desconectada." : tv.name + " · modo demostración; conecta /api/tvs para enviar comandos.";
+      return;
+    }
+    var request = new XMLHttpRequest();
+    request.open("POST", TV_CONFIG.endpoint + "/" + encodeURIComponent(tv.id) + "/command", true);
+    request.timeout = TV_CONFIG.timeoutMs;
+    request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+    request.onreadystatechange = function () {
+      if (request.readyState !== 4) { return; }
+      if (request.status >= 200 && request.status < 300) {
+        byId("media-feedback").textContent = tv.name + " · comando enviado.";
+      } else {
+        byId("media-feedback").textContent = tv.name + " · no se pudo enviar el comando.";
+      }
+    };
+    request.onerror = function () { byId("media-feedback").textContent = tv.name + " · error al contactar la API local."; };
+    request.ontimeout = request.onerror;
+    try {
+      request.send(JSON.stringify({ action: action, value: value }));
+      byId("media-feedback").textContent = tv.name + " · enviando comando...";
+    } catch (error) {
+      request.onerror();
+    }
+  }
+
   function renderTVs() {
     var list = byId("tv-list");
     var index;
     var selected = getSelectedTv();
+    var statusMessage;
     while (list.firstChild) { list.removeChild(list.firstChild); }
+    byId("tv-list-empty").hidden = TV_DEVICES.length > 0;
+    if (tvApiAvailable) {
+      statusMessage = "API local conectada · " + TV_DEVICES.length + (TV_DEVICES.length === 1 ? " TV" : " TVs");
+    } else if (tvApiEverConnected) {
+      statusMessage = "API local desconectada · datos posiblemente antiguos";
+    } else {
+      statusMessage = "API local no conectada · lista de demostración";
+    }
+    renderTvApiStatus(statusMessage);
     for (index = 0; index < TV_DEVICES.length; index += 1) {
       (function (tv) {
         var button = document.createElement("button");
@@ -323,6 +459,7 @@
         var copy = document.createElement("span");
         var name = document.createElement("strong");
         var location = document.createElement("span");
+        var power = document.createElement("span");
         var check = document.createElement("span");
         var active = selected && tv.id === selected.id;
         button.type = "button";
@@ -334,8 +471,20 @@
         copy.className = "tv-device-copy";
         name.textContent = tv.name;
         location.textContent = tv.room + " · " + tv.model;
+        power.className = "tv-power-state";
+        if (tv.poweredOn === true) {
+          power.textContent = "Encendida";
+          power.classList.add("is-on");
+        } else if (tv.poweredOn === false) {
+          power.textContent = "Apagada";
+          power.classList.add("is-off");
+        } else {
+          power.textContent = tvApiAvailable ? "Estado no reportado" : "Sin conexión real";
+          power.classList.add("is-unknown");
+        }
         copy.appendChild(name);
         copy.appendChild(location);
+        copy.appendChild(power);
         check.className = "tv-device-check";
         check.setAttribute("aria-hidden", "true");
         check.textContent = active ? "●" : "";
@@ -360,13 +509,18 @@
     if (selected) {
       byId("selected-tv-name").textContent = selected.name;
       byId("selected-tv-location").textContent = selected.room + " · " + selected.model;
+      var powerText = selected.poweredOn === true ? "Encendida" : (selected.poweredOn === false ? "Apagada" : (tvApiAvailable ? "Estado no reportado" : "Demo · API no conectada"));
+      byId("selected-tv-power").textContent = powerText;
+      byId("selected-tv-dot").classList.toggle("is-off", selected.poweredOn === false);
+      byId("selected-tv-dot").classList.toggle("is-unknown", selected.poweredOn !== true && selected.poweredOn !== false);
     }
   }
 
   function sendTvAction(action, value) {
     var tv = getSelectedTv();
-    var label = tv ? tv.name : "Televisor";
-    byId("media-feedback").textContent = label + " · " + action + (value ? " " + value : "") + " (simulado).";
+    if (tv) {
+      sendTVCommand(action, value);
+    }
   }
 
   function createTextElement(tagName, className, text) {
@@ -566,7 +720,7 @@
     byId("volume-meter-fill").style.width = (tvState.muted ? 0 : tvState.volume) + "%";
     byId("mute-button").setAttribute("aria-pressed", tvState.muted ? "true" : "false");
     byId("mute-button").classList.toggle("is-muted", tvState.muted);
-    byId("media-feedback").textContent = tvState.muted ? "Audio silenciado." : "Volumen simulado: " + tvState.volume + "%";
+    byId("media-feedback").textContent = tvApiAvailable ? "TV conectada · controles listos." : "Demostración · no hay conexión con una TV real.";
   }
 
   function getSelectedTvState() {
@@ -621,7 +775,7 @@
         state.muted = false;
         saveState();
         renderMedia();
-        sendTvAction("Volumen", tvState.volume + "%");
+        sendTvAction("set_volume", tvState.volume);
       });
     });
     byId("mute-button").addEventListener("click", function () {
@@ -630,11 +784,11 @@
       state.muted = tvState.muted;
       saveState();
       renderMedia();
-      sendTvAction(tvState.muted ? "Silenciar" : "Activar audio", "");
+      sendTvAction("set_mute", tvState.muted);
     });
     Array.prototype.forEach.call(document.querySelectorAll("[data-app]"), function (button) {
       button.addEventListener("click", function () {
-        sendTvAction("Abrir app", button.getAttribute("data-app"));
+        sendTvAction("launch_app", button.getAttribute("data-app"));
       });
     });
   }
@@ -655,6 +809,9 @@
     byId("weather-refresh").addEventListener("click", loadWeather);
     loadWeather();
     window.setInterval(loadWeather, 30 * 60 * 1000);
+    byId("tv-refresh").addEventListener("click", requestTVs);
+    requestTVs();
+    window.setInterval(requestTVs, TV_CONFIG.refreshMs);
   }
 
   if (document.readyState === "loading") {
