@@ -3,10 +3,16 @@
 
   var STORAGE_KEY = "smart-panel-state-v1";
   var WEATHER_CONFIG = {
-    latitude: null,
-    longitude: null
+    latitude: -34.6037,
+    longitude: -58.3816,
+    location: "Buenos Aires, Argentina"
   };
+  var TV_DEVICES = [
+    { id: "tv-principal", name: "TV principal", room: "Living", model: "Smart TV" },
+    { id: "tv-dormitorio", name: "TV dormitorio", room: "Dormitorio", model: "Smart TV" }
+  ];
   var state = readState();
+  var cameraCredentials = {};
 
   function readState() {
     var defaults = {
@@ -14,7 +20,10 @@
       poolOn: false,
       gateOpen: false,
       volume: 35,
-      muted: false
+      muted: false,
+      tvId: "tv-principal",
+      tvStates: {},
+      cameras: []
     };
     var saved;
     try {
@@ -31,6 +40,21 @@
           defaults.gateOpen = saved.gateOpen === true;
           defaults.volume = typeof saved.volume === "number" ? Math.max(0, Math.min(100, saved.volume)) : defaults.volume;
           defaults.muted = saved.muted === true;
+          defaults.tvId = typeof saved.tvId === "string" ? saved.tvId : defaults.tvId;
+          if (saved.tvStates && typeof saved.tvStates === "object") {
+            Object.keys(saved.tvStates).forEach(function (tvId) {
+              var savedTv = saved.tvStates[tvId];
+              if (savedTv && typeof savedTv === "object") {
+                defaults.tvStates[tvId] = {
+                  volume: typeof savedTv.volume === "number" ? Math.max(0, Math.min(100, savedTv.volume)) : 35,
+                  muted: savedTv.muted === true
+                };
+              }
+            });
+          }
+          defaults.cameras = Array.isArray(saved.cameras) ? saved.cameras.filter(function (camera) {
+            return camera && typeof camera.id === "string" && typeof camera.name === "string" && typeof camera.streamUrl === "string";
+          }) : defaults.cameras;
         }
       }
     } catch (error) {
@@ -138,6 +162,7 @@
 
   function loadWeather() {
     var status = byId("weather-status");
+    byId("weather-location").textContent = WEATHER_CONFIG.location.toUpperCase();
     if (typeof WEATHER_CONFIG.latitude !== "number" || typeof WEATHER_CONFIG.longitude !== "number") {
       status.textContent = "Sin ubicación";
       return;
@@ -150,7 +175,7 @@
       "&longitude=" + WEATHER_CONFIG.longitude +
       "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m" +
       "&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto";
-    status.textContent = "Actualizando...";
+    status.textContent = "Actualizando";
     window.fetch(url).then(function (response) {
       if (!response.ok) { throw new Error("Weather request failed"); }
       return response.json();
@@ -175,7 +200,6 @@
     var list = byId("forecast-list");
     var item = document.createElement("div");
     var summary = weatherDescription(daily.weather_code[0]);
-    var day = new Date(daily.time[0] + "T12:00:00");
     item.className = "forecast-item";
     item.innerHTML = "<span class=\"forecast-time\">Hoy</span><span class=\"forecast-icon\" aria-hidden=\"true\"></span><span class=\"forecast-temperature\"></span>";
     item.querySelector(".forecast-icon").textContent = summary[1];
@@ -183,7 +207,6 @@
     list.innerHTML = "";
     list.appendChild(item);
     if (data.current && data.current.time) {
-      var currentHour = parseInt(data.current.time.slice(11, 13), 10);
       var timeItem = document.createElement("div");
       timeItem.className = "forecast-item";
       timeItem.innerHTML = "<span class=\"forecast-time\"></span><span class=\"forecast-icon\" aria-hidden=\"true\">◷</span><span class=\"forecast-temperature\"></span>";
@@ -192,8 +215,236 @@
       list.appendChild(timeItem);
       timeItem.setAttribute("aria-label", "Temperatura actual " + Math.round(data.current.temperature_2m) + " grados");
       item.setAttribute("aria-label", "Pronóstico de hoy, " + summary[0] + ", máxima " + Math.round(daily.temperature_2m_max[0]) + " grados");
-      day.setHours(currentHour);
     }
+  }
+
+  function getSelectedTv() {
+    var index;
+    for (index = 0; index < TV_DEVICES.length; index += 1) {
+      if (TV_DEVICES[index].id === state.tvId) {
+        return TV_DEVICES[index];
+      }
+    }
+    state.tvId = TV_DEVICES.length ? TV_DEVICES[0].id : "";
+    return TV_DEVICES.length ? TV_DEVICES[0] : null;
+  }
+
+  function renderTVs() {
+    var list = byId("tv-list");
+    var index;
+    var selected = getSelectedTv();
+    while (list.firstChild) { list.removeChild(list.firstChild); }
+    for (index = 0; index < TV_DEVICES.length; index += 1) {
+      (function (tv) {
+        var button = document.createElement("button");
+        var icon = document.createElement("span");
+        var copy = document.createElement("span");
+        var name = document.createElement("strong");
+        var location = document.createElement("span");
+        var check = document.createElement("span");
+        var active = selected && tv.id === selected.id;
+        button.type = "button";
+        button.className = "tv-device" + (active ? " is-selected" : "");
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+        icon.className = "tv-device-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.textContent = "▣";
+        copy.className = "tv-device-copy";
+        name.textContent = tv.name;
+        location.textContent = tv.room + " · " + tv.model;
+        copy.appendChild(name);
+        copy.appendChild(location);
+        check.className = "tv-device-check";
+        check.setAttribute("aria-hidden", "true");
+        check.textContent = active ? "●" : "";
+        button.appendChild(icon);
+        button.appendChild(copy);
+        button.appendChild(check);
+        button.addEventListener("click", function () {
+          if (!state.tvStates[tv.id]) {
+            state.tvStates[tv.id] = { volume: 35, muted: false };
+          }
+          state.tvId = tv.id;
+          state.volume = state.tvStates[tv.id].volume;
+          state.muted = state.tvStates[tv.id].muted;
+          saveState();
+          renderTVs();
+          renderMedia();
+        });
+        list.appendChild(button);
+      }(TV_DEVICES[index]));
+    }
+    byId("tv-control").hidden = !selected;
+    if (selected) {
+      byId("selected-tv-name").textContent = selected.name;
+      byId("selected-tv-location").textContent = selected.room + " · " + selected.model;
+    }
+  }
+
+  function sendTvAction(action, value) {
+    var tv = getSelectedTv();
+    var label = tv ? tv.name : "Televisor";
+    byId("media-feedback").textContent = label + " · " + action + (value ? " " + value : "") + " (simulado).";
+  }
+
+  function createTextElement(tagName, className, text) {
+    var element = document.createElement(tagName);
+    element.className = className;
+    element.textContent = text;
+    return element;
+  }
+
+  function renderCameraCard(camera, index) {
+    var card = document.createElement("article");
+    var preview = document.createElement("div");
+    var image = document.createElement("img");
+    var message = document.createElement("span");
+    var glyph = createTextElement("span", "camera-glyph", "▧");
+    var tag = document.createElement("span");
+    var caption = document.createElement("div");
+    var copy = document.createElement("div");
+    var typeText = camera.streamUrl.toLowerCase().indexOf("rtsp://") === 0 ? "RTSP · gateway requerido" : "Stream HTTP";
+    var authenticated = !!camera.authRequired || !!cameraCredentials[camera.id];
+    var useImage = camera.streamUrl.toLowerCase().indexOf("http://") === 0 || camera.streamUrl.toLowerCase().indexOf("https://") === 0;
+    var remove = document.createElement("button");
+
+    card.className = "camera-card panel-surface";
+    preview.className = "camera-preview";
+    image.className = "camera-stream";
+    image.alt = "Vista de " + camera.name;
+    image.hidden = true;
+    message.className = "camera-stream-message";
+    tag.className = "camera-tag";
+    tag.textContent = useImage && !authenticated ? "CÁMARA IP" : "CONFIGURADA";
+    if (!useImage) {
+      message.textContent = "RTSP requiere un gateway local HLS o WebRTC.";
+    } else if (authenticated) {
+      message.textContent = "La vista con autenticación requiere un proxy local.";
+    } else {
+      message.textContent = "Conectando con el stream...";
+      image.onload = function () {
+        image.hidden = false;
+        glyph.hidden = true;
+        message.hidden = true;
+      };
+      image.onerror = function () {
+        glyph.hidden = false;
+        message.hidden = false;
+        message.textContent = "No se pudo cargar. Revisa URL, red o formato MJPEG.";
+      };
+    }
+    preview.appendChild(image);
+    preview.appendChild(glyph);
+    preview.appendChild(message);
+    preview.appendChild(tag);
+    if (useImage && !authenticated) {
+      image.src = camera.streamUrl;
+    }
+
+    caption.className = "camera-caption";
+    copy.appendChild(createTextElement("h2", "", camera.name));
+    copy.appendChild(createTextElement("p", "", camera.streamUrl.replace(/^https?:\/\//i, "").split("/")[0]));
+    copy.appendChild(createTextElement("span", "camera-type-tag", typeText));
+    caption.appendChild(copy);
+    var actions = document.createElement("div");
+    actions.className = "camera-actions";
+    actions.appendChild(createTextElement("span", "camera-number", String(index + 1).length < 2 ? "0" + (index + 1) : String(index + 1)));
+    remove.type = "button";
+    remove.className = "camera-remove";
+    remove.setAttribute("aria-label", "Eliminar cámara " + camera.name);
+    remove.textContent = "×";
+    remove.addEventListener("click", function () {
+      if (!window.confirm("¿Eliminar la cámara “" + camera.name + "”?")) { return; }
+      state.cameras = state.cameras.filter(function (entry) { return entry.id !== camera.id; });
+      delete cameraCredentials[camera.id];
+      saveState();
+      renderCameras();
+    });
+    actions.appendChild(remove);
+    caption.appendChild(actions);
+    card.appendChild(preview);
+    card.appendChild(caption);
+    return card;
+  }
+
+  function renderCameras() {
+    var grid = byId("camera-grid");
+    var index;
+    while (grid.firstChild) { grid.removeChild(grid.firstChild); }
+    byId("camera-empty").hidden = state.cameras.length > 0;
+    grid.hidden = state.cameras.length === 0;
+    for (index = 0; index < state.cameras.length; index += 1) {
+      grid.appendChild(renderCameraCard(state.cameras[index], index));
+    }
+  }
+
+  function openCameraForm() {
+    byId("camera-modal").hidden = false;
+    byId("camera-form-error").hidden = true;
+    byId("camera-form").querySelector("[name='cameraName']").focus();
+  }
+
+  function closeCameraForm() {
+    byId("camera-modal").hidden = true;
+    byId("camera-form").reset();
+    byId("camera-form-error").hidden = true;
+  }
+
+  function normalizeCameraUrl(value) {
+    var url = value.replace(/^\s+|\s+$/g, "");
+    if (!/^https?:\/\//i.test(url) && !/^rtsp:\/\//i.test(url)) {
+      url = "http://" + url;
+    }
+    if (!/^(https?:|rtsp:)\/\/[^\s/?#]+(?:[/?#]|$)/i.test(url)) {
+      return null;
+    }
+    var authority = url.match(/^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i);
+    if (!authority || authority[1].indexOf("@") !== -1) {
+      return null;
+    }
+    return url;
+  }
+
+  function initializeCameraForm() {
+    var form = byId("camera-form");
+    Array.prototype.forEach.call(document.querySelectorAll("[data-open-camera-form]"), function (button) {
+      button.addEventListener("click", openCameraForm);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-close-camera-form]"), function (button) {
+      button.addEventListener("click", closeCameraForm);
+    });
+    byId("add-camera-button").addEventListener("click", openCameraForm);
+    byId("camera-modal").addEventListener("keydown", function (event) {
+      if (event.key === "Escape" || event.keyCode === 27) {
+        closeCameraForm();
+      }
+    });
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var name = form.querySelector("[name='cameraName']").value.replace(/^\s+|\s+$/g, "");
+      var url = normalizeCameraUrl(form.querySelector("[name='cameraUrl']").value);
+      var user = form.querySelector("[name='cameraUser']").value;
+      var password = form.querySelector("[name='cameraPassword']").value;
+      var error = byId("camera-form-error");
+      if (!name) {
+        error.textContent = "Escribe un nombre para identificar la cámara.";
+        error.hidden = false;
+        return;
+      }
+      if (!url) {
+        error.textContent = "Usa una dirección HTTP, HTTPS o RTSP válida, sin credenciales dentro de la URL.";
+        error.hidden = false;
+        return;
+      }
+      var cameraId = "cam-" + new Date().getTime() + "-" + (state.cameras.length + 1);
+      state.cameras.push({ id: cameraId, name: name, streamUrl: url, authRequired: !!(user || password) });
+      if (user || password) {
+        cameraCredentials[cameraId] = { user: user, password: password };
+      }
+      saveState();
+      renderCameras();
+      closeCameraForm();
+    });
   }
 
   function renderLights() {
@@ -228,11 +479,28 @@
   }
 
   function renderMedia() {
-    byId("volume-value").textContent = state.muted ? "--" : state.volume + "%";
-    byId("volume-meter-fill").style.width = (state.muted ? 0 : state.volume) + "%";
-    byId("mute-button").setAttribute("aria-pressed", state.muted ? "true" : "false");
-    byId("mute-button").classList.toggle("is-muted", state.muted);
-    byId("media-feedback").textContent = state.muted ? "Audio silenciado." : "Volumen simulado: " + state.volume + "%";
+    var tvState = getSelectedTvState();
+    byId("volume-value").textContent = tvState.muted ? "--" : tvState.volume + "%";
+    byId("volume-meter-fill").style.width = (tvState.muted ? 0 : tvState.volume) + "%";
+    byId("mute-button").setAttribute("aria-pressed", tvState.muted ? "true" : "false");
+    byId("mute-button").classList.toggle("is-muted", tvState.muted);
+    byId("media-feedback").textContent = tvState.muted ? "Audio silenciado." : "Volumen simulado: " + tvState.volume + "%";
+  }
+
+  function getSelectedTvState() {
+    var tv = getSelectedTv();
+    if (!tv) {
+      return { volume: state.volume, muted: state.muted };
+    }
+    if (!state.tvStates[tv.id]) {
+      state.tvStates[tv.id] = {
+        volume: tv.id === state.tvId ? state.volume : 35,
+        muted: tv.id === state.tvId ? state.muted : false
+      };
+    }
+    state.volume = state.tvStates[tv.id].volume;
+    state.muted = state.tvStates[tv.id].muted;
+    return state.tvStates[tv.id];
   }
 
   function initializeControls() {
@@ -265,22 +533,36 @@
     });
     Array.prototype.forEach.call(document.querySelectorAll("[data-volume]"), function (button) {
       button.addEventListener("click", function () {
-        state.volume = Math.max(0, Math.min(100, state.volume + (button.getAttribute("data-volume") === "up" ? 5 : -5)));
+        var tvState = getSelectedTvState();
+        tvState.volume = Math.max(0, Math.min(100, tvState.volume + (button.getAttribute("data-volume") === "up" ? 5 : -5)));
+        state.volume = tvState.volume;
         state.muted = false;
         saveState();
         renderMedia();
+        sendTvAction("Volumen", tvState.volume + "%");
       });
     });
     byId("mute-button").addEventListener("click", function () {
-      state.muted = !state.muted;
+      var tvState = getSelectedTvState();
+      tvState.muted = !tvState.muted;
+      state.muted = tvState.muted;
       saveState();
       renderMedia();
+      sendTvAction(tvState.muted ? "Silenciar" : "Activar audio", "");
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-app]"), function (button) {
+      button.addEventListener("click", function () {
+        sendTvAction("Abrir app", button.getAttribute("data-app"));
+      });
     });
   }
 
   function initialize() {
     initializeTabs();
     initializeControls();
+    initializeCameraForm();
+    renderTVs();
+    renderCameras();
     renderLights();
     renderPool();
     renderGate();
@@ -288,6 +570,7 @@
     updateClock();
     window.setInterval(updateClock, 1000);
     loadWeather();
+    window.setInterval(loadWeather, 30 * 60 * 1000);
   }
 
   if (document.readyState === "loading") {

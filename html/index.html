@@ -48,12 +48,12 @@
           <section class="weather-panel panel-surface" aria-labelledby="weather-heading">
             <div class="section-heading">
               <div>
-                <p class="eyebrow">AFUERA</p>
+                <p class="eyebrow" id="weather-location">AFUERA</p>
                 <h2 id="weather-heading">Clima</h2>
               </div>
               <span class="weather-symbol" id="weather-symbol" aria-hidden="true">☁</span>
             </div>
-            <div class="weather-reading"><span id="weather-temperature">--°</span><span class="weather-description" id="weather-description">Configura tu ubicación</span></div>
+            <div class="weather-reading"><span id="weather-temperature">--°</span><span class="weather-description" id="weather-description">Consultando Open-Meteo...</span></div>
             <div class="weather-details">
               <span>Máx. <strong id="weather-high">--°</strong></span>
               <span>Mín. <strong id="weather-low">--°</strong></span>
@@ -84,34 +84,41 @@
               </div>
             </div>
             <div class="forecast-list" id="forecast-list">
-              <div class="forecast-placeholder">El pronóstico aparecerá al configurar las coordenadas.</div>
+              <div class="forecast-placeholder">Cargando temperatura actual y pronóstico...</div>
             </div>
           </section>
         </div>
       </section>
 
       <section class="view" id="panel-multimedia" role="tabpanel" aria-labelledby="tab-multimedia" data-panel="multimedia" hidden>
-        <div class="page-heading"><p class="eyebrow">ENTRETENIMIENTO</p><h1>Multimedia</h1><p>Control rápido para tu sala.</p></div>
-        <section class="media-control panel-surface" aria-labelledby="volume-heading">
-          <div class="section-heading"><div><p class="eyebrow">CONTROL DE AUDIO</p><h2 id="volume-heading">Volumen</h2></div><span class="volume-value" id="volume-value">35%</span></div>
-          <div class="volume-meter" aria-hidden="true"><span id="volume-meter-fill"></span></div>
-          <div class="volume-controls">
-            <button class="icon-button" type="button" data-volume="down" aria-label="Bajar volumen">−</button>
-            <button class="mute-button" type="button" id="mute-button" aria-pressed="false"><span aria-hidden="true">◖</span> Silenciar</button>
-            <button class="icon-button" type="button" data-volume="up" aria-label="Subir volumen">+</button>
-          </div>
-          <p class="control-feedback" id="media-feedback" aria-live="polite">Volumen listo para controlar.</p>
+        <div class="page-heading"><p class="eyebrow">ENTRETENIMIENTO</p><h1>Multimedia</h1><p>Selecciona un televisor para abrir sus controles.</p></div>
+        <section class="tv-section" aria-labelledby="tv-list-heading">
+          <div class="section-heading"><div><p class="eyebrow">DISPOSITIVOS</p><h2 id="tv-list-heading">Televisores</h2></div></div>
+          <div class="tv-list" id="tv-list" aria-live="polite"></div>
         </section>
-        <section class="media-apps" aria-labelledby="apps-heading">
-          <div class="section-heading"><div><p class="eyebrow">ACCESOS DIRECTOS</p><h2 id="apps-heading">Abrir una app</h2></div></div>
-          <div class="app-grid">
-            <a class="app-link app-netflix" href="https://www.netflix.com/" target="_blank" rel="noopener noreferrer"><span class="app-initial">N</span><span>Netflix</span><span class="launch-mark" aria-hidden="true">↗</span></a>
-            <a class="app-link app-youtube" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer"><span class="app-initial">▶</span><span>YouTube</span><span class="launch-mark" aria-hidden="true">↗</span></a>
-            <a class="app-link app-flow" href="https://www.flow.com.ar/" target="_blank" rel="noopener noreferrer"><span class="app-initial">F</span><span>Flow</span><span class="launch-mark" aria-hidden="true">↗</span></a>
-            <a class="app-link app-prime" href="https://www.primevideo.com/" target="_blank" rel="noopener noreferrer"><span class="app-initial">P</span><span>Prime Video</span><span class="launch-mark" aria-hidden="true">↗</span></a>
-            <a class="app-link app-disney" href="https://www.disneyplus.com/" target="_blank" rel="noopener noreferrer"><span class="app-initial">D+</span><span>Disney+</span><span class="launch-mark" aria-hidden="true">↗</span></a>
-            <a class="app-link app-spotify" href="https://open.spotify.com/" target="_blank" rel="noopener noreferrer"><span class="app-initial">♫</span><span>Spotify</span><span class="launch-mark" aria-hidden="true">↗</span></a>
+        <section class="tv-control panel-surface" id="tv-control" aria-labelledby="selected-tv-name" hidden>
+          <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV principal</h2><p class="tv-location" id="selected-tv-location">Living</p></div><span class="tv-status"><span class="status-dot"></span> Lista</span></div>
+          <div class="media-control-inner" aria-labelledby="volume-heading">
+            <div class="section-heading"><div><p class="eyebrow">CONTROL DE AUDIO</p><h3 id="volume-heading">Volumen</h3></div><span class="volume-value" id="volume-value">35%</span></div>
+            <div class="volume-meter" aria-hidden="true"><span id="volume-meter-fill"></span></div>
+            <div class="volume-controls">
+              <button class="icon-button" type="button" data-volume="down" aria-label="Bajar volumen">−</button>
+              <button class="mute-button" type="button" id="mute-button" aria-pressed="false"><span aria-hidden="true">◖</span> Silenciar</button>
+              <button class="icon-button" type="button" data-volume="up" aria-label="Subir volumen">+</button>
+            </div>
+            <p class="control-feedback" id="media-feedback" aria-live="polite">Volumen listo para controlar.</p>
           </div>
+          <section class="media-apps" aria-labelledby="apps-heading">
+            <div class="section-heading"><div><p class="eyebrow">ACCESOS DIRECTOS</p><h3 id="apps-heading">Abrir una app</h3></div></div>
+            <div class="app-grid">
+              <button class="app-link app-netflix" type="button" data-app="Netflix"><span class="app-initial">N</span><span>Netflix</span><span class="launch-mark" aria-hidden="true">↗</span></button>
+              <button class="app-link app-youtube" type="button" data-app="YouTube"><span class="app-initial">▶</span><span>YouTube</span><span class="launch-mark" aria-hidden="true">↗</span></button>
+              <button class="app-link app-flow" type="button" data-app="Flow"><span class="app-initial">F</span><span>Flow</span><span class="launch-mark" aria-hidden="true">↗</span></button>
+              <button class="app-link app-prime" type="button" data-app="Prime Video"><span class="app-initial">P</span><span>Prime Video</span><span class="launch-mark" aria-hidden="true">↗</span></button>
+              <button class="app-link app-disney" type="button" data-app="Disney+"><span class="app-initial">D+</span><span>Disney+</span><span class="launch-mark" aria-hidden="true">↗</span></button>
+              <button class="app-link app-spotify" type="button" data-app="Spotify"><span class="app-initial">♫</span><span>Spotify</span><span class="launch-mark" aria-hidden="true">↗</span></button>
+            </div>
+          </section>
         </section>
       </section>
 
@@ -154,15 +161,29 @@
       </section>
 
       <section class="view" id="panel-camaras" role="tabpanel" aria-labelledby="tab-camaras" data-panel="camaras" hidden>
-        <div class="page-heading"><p class="eyebrow">SEGURIDAD</p><h1>Cámaras</h1><p>Vista general de los puntos de acceso.</p></div>
-        <div class="camera-grid">
-          <article class="camera-card panel-surface"><div class="camera-preview"><span class="camera-glyph" aria-hidden="true">▧</span><span class="camera-tag"><span class="status-dot"></span> SIN SEÑAL</span></div><div class="camera-caption"><div><h2>Entrada</h2><p>Frente de la casa</p></div><span class="camera-number">01</span></div></article>
-          <article class="camera-card panel-surface"><div class="camera-preview camera-preview-alt"><span class="camera-glyph" aria-hidden="true">▧</span><span class="camera-tag"><span class="status-dot"></span> SIN SEÑAL</span></div><div class="camera-caption"><div><h2>Jardín</h2><p>Vista exterior</p></div><span class="camera-number">02</span></div></article>
-          <article class="camera-card panel-surface"><div class="camera-preview camera-preview-side"><span class="camera-glyph" aria-hidden="true">▧</span><span class="camera-tag"><span class="status-dot"></span> SIN SEÑAL</span></div><div class="camera-caption"><div><h2>Garage</h2><p>Acceso vehicular</p></div><span class="camera-number">03</span></div></article>
-          <article class="camera-card panel-surface"><div class="camera-preview camera-preview-pool"><span class="camera-glyph" aria-hidden="true">▧</span><span class="camera-tag"><span class="status-dot"></span> SIN SEÑAL</span></div><div class="camera-caption"><div><h2>Pileta</h2><p>Patio trasero</p></div><span class="camera-number">04</span></div></article>
-        </div>
+        <div class="page-heading camera-page-heading"><div><p class="eyebrow">SEGURIDAD</p><h1>Cámaras</h1><p>Administra tus cámaras IP Wi-Fi.</p></div><button class="primary-button" type="button" id="add-camera-button"><span aria-hidden="true">＋</span> Añadir cámara</button></div>
+        <div class="camera-empty panel-surface" id="camera-empty" hidden><span class="empty-camera-icon" aria-hidden="true">▧</span><h2>No hay cámaras añadidas</h2><p>Añade la dirección de una cámara para organizarla en este panel.</p><button class="secondary-button" type="button" data-open-camera-form>Añadir primera cámara</button></div>
+        <div class="camera-grid" id="camera-grid"></div>
       </section>
     </main>
+
+    <div class="camera-modal" id="camera-modal" hidden>
+      <div class="camera-modal-backdrop" data-close-camera-form></div>
+      <section class="camera-dialog panel-surface" role="dialog" aria-modal="true" aria-labelledby="camera-form-title">
+        <div class="section-heading"><div><p class="eyebrow">NUEVO DISPOSITIVO</p><h2 id="camera-form-title">Añadir cámara</h2></div><button class="modal-close" type="button" aria-label="Cerrar formulario" data-close-camera-form>×</button></div>
+        <form id="camera-form" novalidate>
+          <label class="form-field"><span>Nombre de la cámara</span><input type="text" name="cameraName" maxlength="48" placeholder="Ej. Entrada principal" required></label>
+          <label class="form-field"><span>IP o URL del stream</span><input type="text" name="cameraUrl" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="http://192.168.1.20/stream.mjpg" required><small>Acepta HTTP, HTTPS (MJPEG) o RTSP.</small></label>
+          <div class="form-row">
+            <label class="form-field"><span>Usuario (opcional)</span><input type="text" name="cameraUser" autocomplete="off" autocapitalize="off"></label>
+            <label class="form-field"><span>Contraseña (opcional)</span><input type="password" name="cameraPassword" autocomplete="new-password"></label>
+          </div>
+          <p class="form-notice">Las credenciales se mantienen solo en memoria y se olvidan al recargar. RTSP requiere un gateway compatible para mostrarse en Safari.</p>
+          <p class="form-error" id="camera-form-error" role="alert" hidden></p>
+          <div class="form-actions"><button class="secondary-button" type="button" data-close-camera-form>Cancelar</button><button class="primary-button" type="submit">Guardar cámara</button></div>
+        </form>
+      </section>
+    </div>
     <footer class="app-footer"><span>SMART PANEL</span><span>CONTROL LOCAL · <span id="footer-time">--:--</span></span></footer>
   </div>
 </body>
