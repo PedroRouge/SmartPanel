@@ -1,14 +1,14 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "11";
+  var APP_BUILD_VERSION = "12";
   var STORAGE_KEY = "smart-panel-state-v1";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
     longitude: -60.57469,
     location: "Colonia Ensayo, Entre Ríos"
   };
-  var WEATHER_STORAGE_KEY = "smart-panel-weather-v2-" + WEATHER_CONFIG.latitude + "-" + WEATHER_CONFIG.longitude;
+  var WEATHER_STORAGE_KEY = "smart-panel-weather-v3-" + WEATHER_CONFIG.latitude + "-" + WEATHER_CONFIG.longitude;
   var TV_CONFIG = {
     endpoint: "/api/tvs",
     refreshMs: 30000,
@@ -360,7 +360,11 @@
       item.appendChild(createTextElement("span", "forecast-icon", summary[1]));
       item.lastChild.setAttribute("aria-hidden", "true");
       item.appendChild(createTextElement("span", "forecast-temperature", Math.round(daily.temperature_2m_max[index]) + "° / " + Math.round(daily.temperature_2m_min[index]) + "°"));
-      item.setAttribute("aria-label", dayName + ": " + summary[0] + ", máxima " + Math.round(daily.temperature_2m_max[index]) + " grados, mínima " + Math.round(daily.temperature_2m_min[index]) + " grados");
+      var rainProbability = daily.precipitation_probability_max && typeof daily.precipitation_probability_max[index] === "number" ? daily.precipitation_probability_max[index] : null;
+      item.appendChild(createTextElement("span", "forecast-rain", rainProbability === null ? "Lluvia --%" : "Lluvia " + rainProbability + "%"));
+      var accessibleForecast = dayName + ": " + summary[0] + ", máxima " + Math.round(daily.temperature_2m_max[index]) + " grados, mínima " + Math.round(daily.temperature_2m_min[index]) + " grados";
+      if (rainProbability !== null) { accessibleForecast += ", probabilidad máxima de precipitación " + rainProbability + " por ciento"; }
+      item.setAttribute("aria-label", accessibleForecast);
       list.appendChild(item);
     }
   }

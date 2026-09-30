@@ -12,7 +12,7 @@ import time
 
 
 API_PORT = int(os.environ.get("SMART_PANEL_API_PORT", "5000"))
-API_VERSION = "2026.09.30.2"
+API_VERSION = "2026.09.30.3"
 TV_SCAN_CIDR = os.environ.get("TV_SCAN_CIDR", "").strip()
 TV_SCAN_INTERVAL = 15
 TV_SCAN_TIMEOUT = 0.2
@@ -109,7 +109,7 @@ def fetch_weather(query):
         "latitude": lat,
         "longitude": lon,
         "current": "temperature_2m,weather_code",
-        "daily": "weather_code,temperature_2m_max,temperature_2m_min",
+        "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
         "forecast_days": 7,
         "timezone": "auto"
     })
