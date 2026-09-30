@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0f19">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Smart Panel</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="js/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#inicio" aria-label="Smart Panel, inicio">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        <span>Smart Panel</span>
+      </a>
+      <div class="connection-state"><span class="status-dot"></span> Panel local</div>
+    </header>
+
+    <nav class="tab-bar" role="tablist" aria-label="Secciones del panel">
+      <button class="tab-button is-active" type="button" role="tab" id="tab-inicio" aria-controls="panel-inicio" aria-selected="true" data-tab="inicio"><span aria-hidden="true">⌂</span> Inicio</button>
+      <button class="tab-button" type="button" role="tab" id="tab-multimedia" aria-controls="panel-multimedia" aria-selected="false" data-tab="multimedia" tabindex="-1"><span aria-hidden="true">▣</span> Multimedia</button>
+      <button class="tab-button" type="button" role="tab" id="tab-hogar" aria-controls="panel-hogar" aria-selected="false" data-tab="hogar" tabindex="-1"><span aria-hidden="true">⌂</span> Hogar</button>
+      <button class="tab-button" type="button" role="tab" id="tab-pileta" aria-controls="panel-pileta" aria-selected="false" data-tab="pileta" tabindex="-1"><span aria-hidden="true">≈</span> Pileta</button>
+      <button class="tab-button" type="button" role="tab" id="tab-camaras" aria-controls="panel-camaras" aria-selected="false" data-tab="camaras" tabindex="-1"><span aria-hidden="true">▧</span> Cámaras</button>
+    </nav>
+
+    <main class="main-content">
+      <section class="view is-visible" id="panel-inicio" role="tabpanel" aria-labelledby="tab-inicio" data-panel="inicio">
+        <div class="welcome-row">
+          <div>
+            <p class="eyebrow">TU CASA, DE UN VISTAZO</p>
+            <h1>Buen día</h1>
+          </div>
+          <div class="home-indicator"><span class="status-dot"></span> Todo en calma</div>
+        </div>
+
+        <div class="dashboard-grid">
+          <section class="clock-panel panel-surface" aria-label="Fecha y hora">
+            <p class="eyebrow">HORA LOCAL</p>
+            <time class="clock" id="clock" aria-live="off">--:--</time>
+            <p class="date-line" id="date-line">Cargando fecha...</p>
+          </section>
+
+          <section class="weather-panel panel-surface" aria-labelledby="weather-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">AFUERA</p>
+                <h2 id="weather-heading">Clima</h2>
+              </div>
+              <span class="weather-symbol" id="weather-symbol" aria-hidden="true">☁</span>
+            </div>
+            <div class="weather-reading"><span id="weather-temperature">--°</span><span class="weather-description" id="weather-description">Configura tu ubicación</span></div>
+            <div class="weather-details">
+              <span>Máx. <strong id="weather-high">--°</strong></span>
+              <span>Mín. <strong id="weather-low">--°</strong></span>
+              <span id="weather-status">Open-Meteo listo</span>
+            </div>
+          </section>
+
+          <section class="summary-panel panel-surface" aria-labelledby="summary-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">ESTADO DE CASA</p>
+                <h2 id="summary-heading">Resumen</h2>
+              </div>
+              <span class="summary-icon" aria-hidden="true">⌂</span>
+            </div>
+            <div class="summary-items">
+              <div class="summary-item"><span class="summary-icon light-icon" aria-hidden="true">✳</span><span>Luces encendidas</span><strong id="summary-lights">0</strong></div>
+              <div class="summary-item"><span class="summary-icon pool-icon" aria-hidden="true">≈</span><span>Motor de pileta</span><strong id="summary-pool">Apagado</strong></div>
+              <div class="summary-item"><span class="summary-icon gate-icon" aria-hidden="true">↗</span><span>Portón</span><strong id="summary-gate">Cerrado</strong></div>
+            </div>
+          </section>
+
+          <section class="forecast-panel panel-surface" aria-labelledby="forecast-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">PRÓXIMAS HORAS</p>
+                <h2 id="forecast-heading">Pronóstico</h2>
+              </div>
+            </div>
+            <div class="forecast-list" id="forecast-list">
+              <div class="forecast-placeholder">El pronóstico aparecerá al configurar las coordenadas.</div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="panel-multimedia" role="tabpanel" aria-labelledby="tab-multimedia" data-panel="multimedia" hidden>
+        <div class="page-heading"><p class="eyebrow">ENTRETENIMIENTO</p><h1>Multimedia</h1><p>Control rápido para tu sala.</p></div>
+        <section class="media-control panel-surface" aria-labelledby="volume-heading">
+          <div class="section-heading"><div><p class="eyebrow">CONTROL DE AUDIO</p><h2 id="volume-heading">Volumen</h2></div><span class="volume-value" id="volume-value">35%</span></div>
+          <div class="volume-meter" aria-hidden="true"><span id="volume-meter-fill"></span></div>
+          <div class="volume-controls">
+            <button class="icon-button" type="button" data-volume="down" aria-label="Bajar volumen">−</button>
+            <button class="mute-button" type="button" id="mute-button" aria-pressed="false"><span aria-hidden="true">◖</span> Silenciar</button>
+            <button class="icon-button" type="button" data-volume="up" aria-label="Subir volumen">+</button>
+          </div>
+          <p class="control-feedback" id="media-feedback" aria-live="polite">Volumen listo para controlar.</p>
+        </section>
+        <section class="media-apps" aria-labelledby="apps-heading">
+          <div class="section-heading"><div><p class="eyebrow">ACCESOS DIRECTOS</p><h2 id="apps-heading">Abrir una app</h2></div></div>
+          <div class="app-grid">
+            <a class="app-link app-netflix" href="https://www.netflix.com/" target="_blank" rel="noopener noreferrer"><span class="app-initial">N</span><span>Netflix</span><span class="launch-mark" aria-hidden="true">↗</span></a>
+            <a class="app-link app-youtube" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer"><span class="app-initial">▶</span><span>YouTube</span><span class="launch-mark" aria-hidden="true">↗</span></a>
+            <a class="app-link app-flow" href="https://www.flow.com.ar/" target="_blank" rel="noopener noreferrer"><span class="app-initial">F</span><span>Flow</span><span class="launch-mark" aria-hidden="true">↗</span></a>
+            <a class="app-link app-prime" href="https://www.primevideo.com/" target="_blank" rel="noopener noreferrer"><span class="app-initial">P</span><span>Prime Video</span><span class="launch-mark" aria-hidden="true">↗</span></a>
+            <a class="app-link app-disney" href="https://www.disneyplus.com/" target="_blank" rel="noopener noreferrer"><span class="app-initial">D+</span><span>Disney+</span><span class="launch-mark" aria-hidden="true">↗</span></a>
+            <a class="app-link app-spotify" href="https://open.spotify.com/" target="_blank" rel="noopener noreferrer"><span class="app-initial">♫</span><span>Spotify</span><span class="launch-mark" aria-hidden="true">↗</span></a>
+          </div>
+        </section>
+      </section>
+
+      <section class="view" id="panel-hogar" role="tabpanel" aria-labelledby="tab-hogar" data-panel="hogar" hidden>
+        <div class="page-heading"><p class="eyebrow">AUTOMATIZACIÓN</p><h1>Hogar</h1><p>Luces y accesos principales.</p></div>
+        <section class="gate-panel panel-surface" aria-labelledby="gate-heading">
+          <div class="gate-copy"><p class="eyebrow">ACCESO PRINCIPAL</p><h2 id="gate-heading">Portón automático</h2><p id="gate-description">El portón está cerrado.</p></div>
+          <button class="gate-button" id="gate-button" type="button"><span class="gate-button-icon" aria-hidden="true">↗</span><span id="gate-button-label">Abrir portón</span></button>
+          <p class="control-feedback" id="gate-feedback" aria-live="polite">Control simulado. Conecta tu API para accionar el portón.</p>
+        </section>
+        <section class="devices-section" aria-labelledby="lights-heading">
+          <div class="section-heading"><div><p class="eyebrow">ILUMINACIÓN</p><h2 id="lights-heading">Luces</h2></div><span class="section-count" id="lights-count">0 encendidas</span></div>
+          <div class="device-grid">
+            <article class="device-card panel-surface" data-device="living"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Living</h3><p>Techo</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz del living"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state">Apagada</span></button></article>
+            <article class="device-card panel-surface" data-device="kitchen"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Cocina</h3><p>Mesada</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz de la cocina"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state">Apagada</span></button></article>
+            <article class="device-card panel-surface" data-device="bedroom"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Dormitorio</h3><p>Principal</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz del dormitorio"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state">Apagada</span></button></article>
+            <article class="device-card panel-surface" data-device="garden"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Exterior</h3><p>Jardín</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz exterior"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state">Apagada</span></button></article>
+          </div>
+        </section>
+      </section>
+
+      <section class="view" id="panel-pileta" role="tabpanel" aria-labelledby="tab-pileta" data-panel="pileta" hidden>
+        <div class="page-heading"><p class="eyebrow">EXTERIOR</p><h1>Pileta</h1><p>Circulación y temperatura del agua.</p></div>
+        <section class="pool-layout">
+          <article class="pool-motor panel-surface">
+            <div class="pool-art" aria-hidden="true"><span>≈</span></div>
+            <p class="eyebrow">SISTEMA DE CIRCULACIÓN</p>
+            <h2>Motor de pileta</h2>
+            <p class="device-description" id="pool-description">El motor está apagado.</p>
+            <button class="pool-toggle state-switch" id="pool-toggle" type="button" role="switch" aria-checked="false" aria-label="Motor de pileta"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state">Apagado</span></button>
+          </article>
+          <article class="water-temperature panel-surface">
+            <p class="eyebrow">TEMPERATURA DEL AGUA</p>
+            <div class="temperature-display"><span class="temperature-icon" aria-hidden="true">°</span><span id="water-temperature">--</span><span class="temperature-unit">°C</span></div>
+            <p class="temperature-note" id="water-temperature-note">Sensor pendiente de conectar</p>
+            <div class="temperature-rule"></div>
+            <p class="control-feedback">Listo para integrar un sensor local.</p>
+          </article>
+        </section>
+      </section>
+
+      <section class="view" id="panel-camaras" role="tabpanel" aria-labelledby="tab-camaras" data-panel="camaras" hidden>
+        <div class="page-heading"><p class="eyebrow">SEGURIDAD</p><h1>Cámaras</h1><p>Vista general de los puntos de acceso.</p></div>
+        <div class="camera-grid">
+          <article class="camera-card panel-surface"><div class="camera-preview"><span class="camera-glyph" aria-hidden="true">▧</span><span class="camera-tag"><span class="status-dot"></span> SIN SEÑAL</span></div><div class="camera-caption"><div><h2>Entrada</h2><p>Frente de la casa</p></div><span class="camera-number">01</span></div></article>
+          <article class="camera-card panel-surface"><div class="camera-preview camera-preview-alt"><span class="camera-glyph" aria-hidden="true">▧</span><span class="camera-tag"><span class="status-dot"></span> SIN SEÑAL</span></div><div class="camera-caption"><div><h2>Jardín</h2><p>Vista exterior</p></div><span class="camera-number">02</span></div></article>
+          <article class="camera-card panel-surface"><div class="camera-preview camera-preview-side"><span class="camera-glyph" aria-hidden="true">▧</span><span class="camera-tag"><span class="status-dot"></span> SIN SEÑAL</span></div><div class="camera-caption"><div><h2>Garage</h2><p>Acceso vehicular</p></div><span class="camera-number">03</span></div></article>
+          <article class="camera-card panel-surface"><div class="camera-preview camera-preview-pool"><span class="camera-glyph" aria-hidden="true">▧</span><span class="camera-tag"><span class="status-dot"></span> SIN SEÑAL</span></div><div class="camera-caption"><div><h2>Pileta</h2><p>Patio trasero</p></div><span class="camera-number">04</span></div></article>
+        </div>
+      </section>
+    </main>
+    <footer class="app-footer"><span>SMART PANEL</span><span>CONTROL LOCAL · <span id="footer-time">--:--</span></span></footer>
+  </div>
+</body>
+</html>
