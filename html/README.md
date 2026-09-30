@@ -23,7 +23,7 @@ Al actualizar, copia juntos `index.html`, `css/styles.css` y `js/app.js` a la ca
 
 ## Clima, TVs y cámaras
 
-Arranca `server.py` en la notebook Linux con `python3 server.py`; escucha en `0.0.0.0:5000`. La IP del panel y el puerto `5000` deben ser accesibles desde el iPad/PC. El endpoint `/api/health` informa la versión del backend; el encabezado del panel muestra por separado la versión UI y API. Si el navegador dice `API sin respuesta · IP:5000`, comprueba que el proceso esté activo y el puerto permitido por el firewall.
+Instala el controlador Cast en la notebook Linux con `python3 -m pip install -r requirements.txt` y arranca `server.py` con `python3 server.py`; escucha en `0.0.0.0:5000`. La IP del panel y el puerto `5000` deben ser accesibles desde el iPad/PC. El endpoint `/api/health` informa la versión del backend y `cast_control`; el encabezado del panel muestra por separado las versiones UI y API. Si `cast_control` es `false`, vuelve a instalar los requisitos. Si el navegador dice `API sin respuesta · IP:5000`, comprueba que el proceso esté activo y el puerto permitido por el firewall.
 
 Si el router usa una subred particular, define `TV_SCAN_CIDR=192.168.1.0/24` (cambia el rango por el de tu LAN) antes de arrancar. El escaneo automático asume una red `/24` cuando no se configura. Si ejecutas `server.py` dentro de Docker con red bridge, configura `TV_SCAN_CIDR` con la LAN real y asegúrate de que el contenedor tenga ruta hacia esos dispositivos; para descubrimiento de red local suele ser más sencillo correrlo en el host o usar `network_mode: host` en Linux.
 
@@ -33,13 +33,13 @@ El porcentaje es la probabilidad máxima de precipitación prevista en algún mo
 
 El HTML no depende de un proxy adicional en Nginx para estas rutas: construye la URL del API con el host actual y el puerto `5000`. El servicio Python responde CORS para permitir que el panel estático servido por Nginx le consulte.
 
-La interfaz consulta `GET /api/tvs` en el mismo servidor cada 30 segundos. Sin ese endpoint solo muestra dos TVs de demostración y lo indica; el navegador no puede descubrir televisores de la LAN por sí solo. El backend debe hablar el protocolo del fabricante o integrarse con Home Assistant/otro controlador. Formato esperado:
+La interfaz consulta `GET /api/tvs` en el mismo servidor cada 30 segundos. El backend intenta obtener el nombre registrado desde Eureka (`/setup/eureka_info`) o el descriptor SSDP (`friendlyName`, modelo y fabricante). Si ninguno responde, conserva una etiqueta basada en la IP. El JSON incluye `openPorts` y `supportsCast`; solo dispositivos con el puerto Cast 8009 accesible habilitan los comandos Cast. Un puerto 8008 por sí solo permite detectar/nombrar el televisor, no garantiza que admita control remoto.
 
 ```json
 [{"id":"living-tv","name":"TV Living","room":"Living","model":"Smart TV","poweredOn":true,"volume":35,"muted":false}]
 ```
 
-Volumen, mute y apps envían `POST /api/tvs/{id}/command` con JSON `{ "action": "set_volume|set_mute|launch_app", "value": 35 }` (para mute el valor es booleano y para abrir app es el nombre de la app). Ajusta `TV_CONFIG.endpoint` en `js/app.js` si tu backend usa otra ruta. Las apps no actúan sobre el TV hasta que el backend implemente esos comandos.
+Volumen, mute y apps envían `POST /api/tvs/{id}/command` con JSON `{ "action": "volume_up|volume_down|toggle_mute|launch_app", "value": null }`. PyChromecast implementa volumen relativo (pasos del 5%) y mute en base al estado real reportado. Los receptores Cast configurados son Netflix, YouTube, Disney+ y Spotify; Flow y Prime Video devuelven un error explícito hasta configurar/verificar sus IDs de receptor en esos modelos. Apps disponibles y soporte dependen del fabricante y del país.
 
 Las cámaras guardan nombre y URL en `localStorage`, pero nunca usuario ni contraseña. Las credenciales solo viven en memoria hasta recargar. El preview directo está pensado para URLs HTTP/MJPEG sin autenticación; RTSP y cámaras con autenticación necesitan un proxy/gateway local que exponga un stream web compatible, como HLS o WebRTC. Safari no reproduce RTSP directamente.
 

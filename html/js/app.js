@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "12";
+  var APP_BUILD_VERSION = "14";
   var STORAGE_KEY = "smart-panel-state-v1";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -424,6 +424,8 @@
           name: device.name || device.label || "Televisor",
           room: device.room || device.location || "Ubicación no indicada",
           model: device.model || device.brand || "TV",
+          manufacturer: device.manufacturer || "",
+          deviceUuid: device.deviceUuid || null,
           poweredOn: typeof device.poweredOn === "boolean" ? device.poweredOn : (device.state === "on" ? true : (device.state === "off" ? false : null)),
           online: device.online === true,
           volume: typeof device.volume === "number" ? Math.max(0, Math.min(100, device.volume)) : null,
@@ -485,9 +487,29 @@
     request.onreadystatechange = function () {
       if (request.readyState !== 4) { return; }
       if (request.status >= 200 && request.status < 300) {
-        byId("media-feedback").textContent = tv.name + " · comando enviado.";
+        var result = {};
+        try { result = JSON.parse(request.responseText); } catch (error) { result = {}; }
+        var tvState = getSelectedTvState();
+        if (typeof result.volume === "number") {
+          tvState.volume = result.volume;
+          state.volume = result.volume;
+        }
+        if (typeof result.muted === "boolean") {
+          tvState.muted = result.muted;
+          state.muted = result.muted;
+        }
+        saveState();
+        renderMedia();
+        byId("media-feedback").textContent = result.action === "launch_app" ? tv.name + " · app enviada al Cast." : tv.name + " · control aplicado.";
       } else {
-        byId("media-feedback").textContent = tv.name + " · no se pudo enviar el comando.";
+        var message = tv.name + " · comando rechazado (HTTP " + request.status + ").";
+        try {
+          var errorResponse = JSON.parse(request.responseText);
+          if (errorResponse.error) { message = errorResponse.error; }
+        } catch (error) {
+          // Keep a readable status when the backend response is not JSON.
+        }
+        byId("media-feedback").textContent = message;
       }
     };
     request.onerror = function () { byId("media-feedback").textContent = tv.name + " · error al contactar la API local."; };
@@ -835,16 +857,25 @@
     });
     Array.prototype.forEach.call(document.querySelectorAll("[data-volume]"), function (button) {
       button.addEventListener("click", function () {
+        var direction = button.getAttribute("data-volume");
+        if (tvApiAvailable) {
+          sendTvAction(direction === "up" ? "volume_up" : "volume_down", null);
+          return;
+        }
         var tvState = getSelectedTvState();
-        tvState.volume = Math.max(0, Math.min(100, tvState.volume + (button.getAttribute("data-volume") === "up" ? 5 : -5)));
+        tvState.volume = Math.max(0, Math.min(100, tvState.volume + (direction === "up" ? 5 : -5)));
         state.volume = tvState.volume;
         state.muted = false;
         saveState();
         renderMedia();
-        sendTvAction("set_volume", tvState.volume);
+        sendTvAction("volume_" + direction, null);
       });
     });
     byId("mute-button").addEventListener("click", function () {
+      if (tvApiAvailable) {
+        sendTvAction("toggle_mute", null);
+        return;
+      }
       var tvState = getSelectedTvState();
       tvState.muted = !tvState.muted;
       state.muted = tvState.muted;
