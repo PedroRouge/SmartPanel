@@ -1,8 +1,9 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "17";
+  var APP_BUILD_VERSION = "19";
   var STORAGE_KEY = "smart-panel-state-v1";
+  var API_BASE_URL = (window.SMART_PANEL_API_URL || "http://localhost:5000").replace(/\/+$/, "");
   var WEATHER_CONFIG = {
     latitude: -31.86519,
     longitude: -60.57469,
@@ -90,14 +91,11 @@
   }
 
   function localApiUrl(path) {
-    if (window.location.protocol === "file:") {
-      return "http://localhost:5000" + path;
-    }
-    return window.location.protocol + "//" + window.location.hostname + ":5000" + path;
+    return API_BASE_URL + path;
   }
 
   function localApiAddress() {
-    return window.location.protocol === "file:" ? "localhost:5000" : window.location.hostname + ":5000";
+    return API_BASE_URL;
   }
 
   function initializeVersionReader() {
@@ -117,15 +115,13 @@
       if (request.readyState !== 4) { return; }
       if (request.status >= 200 && request.status < 300) {
         try {
-          var health = JSON.parse(request.responseText);
-          backendHealth = health;
-          byId("backend-version").textContent = "API v" + (health.version || "?");
+          backendHealth = JSON.parse(request.responseText);
+          byId("backend-version").textContent = "API v" + (backendHealth.version || "?");
           dot.classList.remove("is-checking", "is-error");
           dot.classList.add("is-online");
-          if (tvApiAvailable && !TV_DEVICES.length) { renderTVs(); }
           return;
         } catch (error) {
-          // Report malformed health responses as an unavailable backend.
+          // Treat malformed health responses as an unavailable notebook API.
         }
       }
       byId("backend-version").textContent = "API sin respuesta · " + localApiAddress();
@@ -407,14 +403,14 @@
         payload = JSON.parse(request.responseText);
       } catch (error) {
         tvApiAvailable = false;
-        renderTvApiStatus(tvApiEverConnected ? "La API devolvió JSON inválido; se conserva el último estado." : "La API local no devolvió JSON válido; mostrando TVs de demostración.");
+        renderTvApiStatus("La API local no devolvió JSON válido; mostrando TVs de demostración.");
         renderMedia();
         return;
       }
       var devices = Array.isArray(payload) ? payload : (payload.tvs || payload.devices);
       if (!Array.isArray(devices)) {
         tvApiAvailable = false;
-        renderTvApiStatus(tvApiEverConnected ? "La API devolvió un formato inválido; se conserva el último estado." : "Formato de API inválido: se esperaba una lista de TVs.");
+        renderTvApiStatus("Formato de API inválido: se esperaba una lista de TVs.");
         renderMedia();
         return;
       }
@@ -437,9 +433,7 @@
       });
       tvApiAvailable = true;
       tvApiEverConnected = true;
-      if (TV_DEVICES.length && !getTvById(state.tvId)) {
-        state.tvId = TV_DEVICES[0].id;
-      }
+      if (TV_DEVICES.length && !getTvById(state.tvId)) { state.tvId = TV_DEVICES[0].id; }
       TV_DEVICES.forEach(function (device) {
         if (!state.tvStates[device.id]) {
           state.tvStates[device.id] = { volume: device.volume === null ? 35 : device.volume, muted: device.muted === true };
@@ -462,11 +456,7 @@
       renderMedia();
     };
     request.ontimeout = request.onerror;
-    try {
-      request.send(null);
-    } catch (error) {
-      request.onerror();
-    }
+    try { request.send(null); } catch (error) { request.onerror(); }
   }
 
   function getTvById(id) {
@@ -520,7 +510,7 @@
         byId("media-feedback").textContent = result.error || tv.name + " · no se pudo emparejar.";
       }
     };
-    request.onerror = function () { byId("media-feedback").textContent = tv.name + " · error al contactar la API local."; };
+    request.onerror = function () { byId("media-feedback").textContent = tv.name + " · error al contactar la API de la notebook."; };
     request.ontimeout = request.onerror;
     try { request.send(JSON.stringify(payload || {})); } catch (error) { request.onerror(); }
   }
@@ -553,7 +543,7 @@
     var tv = getSelectedTv();
     if (!tv) { return; }
     if (!tvApiAvailable) {
-      byId("media-feedback").textContent = tvApiEverConnected ? "No se envió: API local desconectada." : tv.name + " · modo demostración; conecta /api/tvs para enviar comandos.";
+      byId("media-feedback").textContent = tvApiEverConnected ? "No se envió: API de la notebook desconectada." : tv.name + " · modo demostración; conecta /api/tvs para enviar comandos.";
       return;
     }
     var request = new XMLHttpRequest();
@@ -566,14 +556,8 @@
         var result = {};
         try { result = JSON.parse(request.responseText); } catch (error) { result = {}; }
         var tvState = getSelectedTvState();
-        if (typeof result.volume === "number") {
-          tvState.volume = result.volume;
-          state.volume = result.volume;
-        }
-        if (typeof result.muted === "boolean") {
-          tvState.muted = result.muted;
-          state.muted = result.muted;
-        }
+        if (typeof result.volume === "number") { tvState.volume = result.volume; state.volume = result.volume; }
+        if (typeof result.muted === "boolean") { tvState.muted = result.muted; state.muted = result.muted; }
         if (typeof result.poweredOn === "boolean") {
           var commandTv = getTvById(tv.id);
           if (commandTv) { commandTv.poweredOn = result.poweredOn; }
@@ -588,16 +572,16 @@
           var errorResponse = JSON.parse(request.responseText);
           if (errorResponse.error) { message = errorResponse.error; }
         } catch (error) {
-          // Keep a readable status when the backend response is not JSON.
+          // Keep a readable status when the API response is not JSON.
         }
         byId("media-feedback").textContent = message;
       }
     };
-    request.onerror = function () { byId("media-feedback").textContent = tv.name + " · error al contactar la API local."; };
+    request.onerror = function () { byId("media-feedback").textContent = "No se pudo contactar la API de la notebook: " + localApiAddress(); };
     request.ontimeout = request.onerror;
     try {
       request.send(JSON.stringify({ action: action, value: value }));
-      byId("media-feedback").textContent = tv.name + " · enviando comando...";
+      byId("media-feedback").textContent = tv.name + " · enviando comando a la notebook...";
     } catch (error) {
       request.onerror();
     }
@@ -611,14 +595,12 @@
     while (list.firstChild) { list.removeChild(list.firstChild); }
     byId("tv-list-empty").hidden = TV_DEVICES.length > 0;
     if (tvApiAvailable) {
-      statusMessage = "API local conectada · " + TV_DEVICES.length + (TV_DEVICES.length === 1 ? " TV" : " TVs");
-      if (!TV_DEVICES.length && backendHealth && backendHealth.scan_cidr) {
-        statusMessage += " · escaneo " + backendHealth.scan_cidr;
-      }
+      statusMessage = "API de notebook conectada · " + TV_DEVICES.length + (TV_DEVICES.length === 1 ? " TV" : " TVs");
+      if (!TV_DEVICES.length && backendHealth && backendHealth.scan_cidr) { statusMessage += " · escaneo " + backendHealth.scan_cidr; }
     } else if (tvApiEverConnected) {
-      statusMessage = "API local desconectada · datos posiblemente antiguos";
+      statusMessage = "API de notebook desconectada · datos posiblemente antiguos";
     } else {
-      statusMessage = "API local no conectada · lista de demostración";
+      statusMessage = "API de notebook no conectada · lista de demostración";
     }
     renderTvApiStatus(statusMessage);
     for (index = 0; index < TV_DEVICES.length; index += 1) {
@@ -691,7 +673,7 @@
       var powerReady = selected.powerControlReady === true;
       powerButton.disabled = !tvApiAvailable;
       byId("tv-power-label").textContent = powerReady ? (selected.poweredOn === true ? "Apagar" : "Encender") : "Emparejar";
-      powerButton.setAttribute("aria-label", tvApiAvailable ? (powerReady ? powerLabel : "Emparejar " + selected.name) : "API local no conectada");
+      powerButton.setAttribute("aria-label", tvApiAvailable ? (powerReady ? powerLabel : "Emparejar " + selected.name) : "API de notebook no conectada");
       powerButton.title = powerReady ? powerLabel : "Emparejar con el código del ONN";
       byId("tv-pairing-panel").hidden = tvPairingId !== selected.id;
       byId("tv-power-hint").hidden = powerReady || tvPairingId === selected.id;
@@ -903,7 +885,7 @@
     byId("volume-slider").style.setProperty("--volume-level", tvState.volume + "%");
     byId("mute-button").setAttribute("aria-pressed", tvState.muted ? "true" : "false");
     byId("mute-button").classList.toggle("is-muted", tvState.muted);
-    byId("media-feedback").textContent = tvApiAvailable ? "TV conectada · controles listos." : (tvApiEverConnected ? "API desconectada · los comandos no se enviarán." : "Demostración · no hay conexión con una TV real.");
+    byId("media-feedback").textContent = tvApiAvailable ? "TV conectada · controles listos." : (tvApiEverConnected ? "API de notebook desconectada · los comandos no se enviarán." : "Demostración · conecta la API de la notebook para controlar una TV.");
   }
 
   function getSelectedTvState() {
@@ -982,6 +964,18 @@
         startTVPairing(tv);
       }
     });
+    byId("mute-button").addEventListener("click", function () {
+      if (tvApiAvailable) {
+        sendTvAction("toggle_mute", null);
+        return;
+      }
+      var tvState = getSelectedTvState();
+      tvState.muted = !tvState.muted;
+      state.muted = tvState.muted;
+      saveState();
+      renderMedia();
+      sendTvAction("set_mute", tvState.muted);
+    });
     byId("tv-pairing-form").addEventListener("submit", function (event) {
       event.preventDefault();
       var tv = getSelectedTv();
@@ -1000,18 +994,6 @@
     byId("tv-pairing-cancel").addEventListener("click", function () {
       var tv = getSelectedTv();
       if (tv) { cancelTVPairing(tv); }
-    });
-    byId("mute-button").addEventListener("click", function () {
-      if (tvApiAvailable) {
-        sendTvAction("toggle_mute", null);
-        return;
-      }
-      var tvState = getSelectedTvState();
-      tvState.muted = !tvState.muted;
-      state.muted = tvState.muted;
-      saveState();
-      renderMedia();
-      sendTvAction("set_mute", tvState.muted);
     });
     Array.prototype.forEach.call(document.querySelectorAll("[data-app]"), function (button) {
       button.addEventListener("click", function () {

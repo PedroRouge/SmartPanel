@@ -9,10 +9,11 @@
   <meta name="theme-color" content="#0b0f19">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="smart-panel-version" content="17">
+  <meta name="smart-panel-version" content="19">
   <title>Smart Panel</title>
-  <link rel="stylesheet" href="css/styles.css?v=17">
-  <script src="js/app.js?v=17" defer></script>
+  <link rel="stylesheet" href="css/styles.css?v=19">
+  <script>window.SMART_PANEL_API_URL = window.SMART_PANEL_API_URL || "http://localhost:5000";</script>
+  <script src="js/app.js?v=19" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -21,7 +22,7 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v17</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v19</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
     </header>
 
     <nav class="tab-bar" role="tablist" aria-label="Secciones del panel">
@@ -98,9 +99,9 @@
         <div class="page-heading"><p class="eyebrow">ENTRETENIMIENTO</p><h1>Multimedia</h1><p>Selecciona un televisor para abrir sus controles.</p></div>
         <section class="tv-section" aria-labelledby="tv-list-heading">
           <div class="section-heading"><div><p class="eyebrow">DISPOSITIVOS</p><h2 id="tv-list-heading">Televisores</h2></div><button class="weather-refresh" id="tv-refresh" type="button" aria-label="Buscar televisores">↻</button></div>
-          <p class="tv-api-status" id="tv-api-status" aria-live="polite">Consultando API local...</p>
+          <p class="tv-api-status" id="tv-api-status" aria-live="polite">Consultando API de la notebook...</p>
           <div class="tv-list" id="tv-list" aria-live="polite"></div>
-          <div class="tv-list-empty panel-surface" id="tv-list-empty" hidden>No hay televisores reportados por la API local.</div>
+          <div class="tv-list-empty panel-surface" id="tv-list-empty" hidden>No hay televisores reportados por la API.</div>
         </section>
         <section class="tv-control panel-surface" id="tv-control" aria-labelledby="selected-tv-name" hidden>
           <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV principal</h2><p class="tv-location" id="selected-tv-location">Living</p></div><div class="tv-heading-status"><span class="tv-status"><span class="status-dot" id="selected-tv-dot"></span><span id="selected-tv-power">Demo · API no conectada</span></span><button class="tv-power-button" id="tv-power-button" type="button" aria-label="Emparejar Android TV"><span aria-hidden="true">⏻</span><span id="tv-power-label">Emparejar</span></button></div></div>
