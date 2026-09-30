@@ -1,9 +1,9 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "20";
+  var APP_BUILD_VERSION = "22";
   var STORAGE_KEY = "smart-panel-state-v1";
-  var API_BASE_URL = (window.SMART_PANEL_API_URL || "https://duke-expires-distribute-political.trycloudflare.com").replace(/\/+$/, "");
+  var API_BASE_URL = (window.SMART_PANEL_API_URL || "https://munich-princeton-designated-aka.trycloudflare.com").replace(/\/+$/, "");
   var WEATHER_CONFIG = {
     latitude: -31.86519,
     longitude: -60.57469,

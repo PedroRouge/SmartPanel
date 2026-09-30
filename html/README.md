@@ -19,7 +19,7 @@ html/
 
 Vercel sirve solamente el contenido estático de `html/`; `vercel.json` no define funciones ni reescrituras de API. También se puede configurar el `root` de Nginx para apuntar a esta carpeta.
 
-La API corre por separado en la notebook con `python servidor.py` y escucha en `0.0.0.0:5000`. Instala sus paquetes con `python -m pip install -r requirements.txt`. El frontend apunta al túnel actual `https://duke-expires-distribute-political.trycloudflare.com`. El túnel debe dirigir tráfico HTTPS al puerto `5000` de la notebook y seguir activo.
+La API corre por separado en la notebook con `python servidor.py` y escucha en `0.0.0.0:5000`. Instala sus paquetes con `python -m pip install -r requirements.txt`. El frontend apunta al Quick Tunnel actual `https://munich-princeton-designated-aka.trycloudflare.com`. El túnel temporal debe seguir activo y dirigir tráfico HTTPS al puerto `5000` de esta notebook; su URL puede cambiar al reiniciarlo.
 
 ## Clima, TVs y cámaras
 
