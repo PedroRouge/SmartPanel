@@ -118,6 +118,10 @@ h3 { margin-bottom: 5px; font-size: 14px; font-weight: 620; }
 .tv-status .status-dot { margin-right: 7px; }
 .tv-status .status-dot.is-off { background: var(--red); box-shadow: none; }
 .tv-status .status-dot.is-unknown { background: var(--amber); box-shadow: none; }
+.tv-heading-status { display: inline-flex; align-items: center; gap: 12px; }
+.tv-power-button { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--surface-border); border-radius: 50%; background: var(--surface-raised); color: var(--teal); font-size: 24px; cursor: pointer; }
+.tv-power-button:disabled { color: var(--quiet); cursor: not-allowed; opacity: .55; }
+.tv-power-hint { margin: 12px 0 0; color: var(--quiet); font-size: 11px; line-height: 1.45; }
 .media-control-inner { margin-top: 23px; padding-top: 19px; border-top: 1px solid var(--surface-border); }
 .media-control-inner h3, .media-apps h3 { margin: 0; font-size: 16px; }
 .media-apps { margin-top: 27px; }

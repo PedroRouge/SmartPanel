@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "15";
+  var APP_BUILD_VERSION = "16";
   var STORAGE_KEY = "smart-panel-state-v1";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -429,6 +429,7 @@
           deviceUuid: device.deviceUuid || null,
           poweredOn: typeof device.poweredOn === "boolean" ? device.poweredOn : (device.state === "on" ? true : (device.state === "off" ? false : null)),
           online: device.online === true,
+          powerControlReady: false,
           volume: typeof device.volume === "number" ? Math.max(0, Math.min(100, device.volume)) : null,
           muted: typeof device.muted === "boolean" ? device.muted : null
         };
@@ -488,6 +489,7 @@
       var volumeIsBeingEdited = current.id === state.tvId && (volumeCommandTimer !== null || document.activeElement === byId("volume-slider"));
       current.online = result.online === true;
       current.poweredOn = typeof result.poweredOn === "boolean" ? result.poweredOn : null;
+      current.powerControlReady = result.powerControlReady === true;
       current.volume = typeof result.volume === "number" ? Math.max(0, Math.min(100, result.volume)) : null;
       current.muted = typeof result.muted === "boolean" ? result.muted : null;
       if (current.volume !== null && !volumeIsBeingEdited) {
@@ -527,9 +529,14 @@
           tvState.muted = result.muted;
           state.muted = result.muted;
         }
+        if (typeof result.poweredOn === "boolean") {
+          var commandTv = getTvById(tv.id);
+          if (commandTv) { commandTv.poweredOn = result.poweredOn; }
+        }
         saveState();
+        renderTVs();
         renderMedia();
-        byId("media-feedback").textContent = result.action === "launch_app" ? tv.name + " · app enviada al Cast." : tv.name + " · control aplicado.";
+        byId("media-feedback").textContent = result.action === "launch_app" ? tv.name + " · app enviada al Cast." : (result.action === "power" ? tv.name + (typeof result.poweredOn === "boolean" ? (result.poweredOn ? " · encendida." : " · apagada.") : " · comando enviado.") : tv.name + " · control aplicado.");
       } else {
         var message = tv.name + " · comando rechazado (HTTP " + request.status + ").";
         try {
@@ -634,6 +641,12 @@
       byId("selected-tv-power").textContent = powerText;
       byId("selected-tv-dot").classList.toggle("is-off", selected.poweredOn === false);
       byId("selected-tv-dot").classList.toggle("is-unknown", selected.poweredOn !== true && selected.poweredOn !== false);
+      var powerButton = byId("tv-power-button");
+      var powerLabel = selected.poweredOn === true ? "Apagar " + selected.name : "Encender " + selected.name;
+      powerButton.disabled = selected.powerControlReady !== true;
+      powerButton.setAttribute("aria-label", selected.powerControlReady === true ? powerLabel : "Empareja Android TV para encender o apagar");
+      powerButton.title = selected.powerControlReady === true ? powerLabel : "Ejecuta python3 pair_android_tv.py en el servidor";
+      byId("tv-power-hint").hidden = selected.powerControlReady === true;
     }
   }
 
@@ -911,6 +924,9 @@
         volumeCommandTimer = null;
       }
       if (tvApiAvailable) { sendTvAction("set_volume", Number(this.value)); }
+    });
+    byId("tv-power-button").addEventListener("click", function () {
+      sendTvAction("power", null);
     });
     byId("mute-button").addEventListener("click", function () {
       if (tvApiAvailable) {

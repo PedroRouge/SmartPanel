@@ -11,6 +11,7 @@ import socket
 import threading
 import time
 from uuid import NAMESPACE_URL, UUID, uuid5
+from android_tv_power import power_control_ready, read_android_tv_power_state, toggle_android_tv_power
 
 try:
     import pychromecast
@@ -24,7 +25,7 @@ except ImportError:
 
 
 API_PORT = int(os.environ.get("SMART_PANEL_API_PORT", "5000"))
-API_VERSION = "2026.09.30.7"
+API_VERSION = "2026.09.30.9"
 TV_SCAN_CIDR = os.environ.get("TV_SCAN_CIDR", "").strip()
 TV_SCAN_INTERVAL = 15
 TV_SCAN_TIMEOUT = 0.2
@@ -230,13 +231,20 @@ def read_cast_status(ip, device_uuid):
     try:
         cast.wait(timeout=CAST_COMMAND_TIMEOUT)
         status = cast.status
+        active_input = getattr(status, "is_active_input", None)
         standby = getattr(status, "is_stand_by", None)
         volume = getattr(status, "volume_level", None)
         muted = getattr(status, "volume_muted", None)
+        if active_input is True or standby is False:
+            powered_on = True
+        elif active_input is False or standby is True:
+            powered_on = False
+        else:
+            powered_on = None
         return {
             "ok": True,
             "online": True,
-            "poweredOn": not standby if isinstance(standby, bool) else None,
+            "poweredOn": powered_on,
             "volume": round(volume * 100) if isinstance(volume, (int, float)) else None,
             "muted": muted if isinstance(muted, bool) else None
         }
@@ -346,11 +354,15 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
             if not device:
                 self.send_json(404, {"error": "No se encontró esa TV en la red; actualiza la lista"})
                 return
-            if not device.get("supportsCast"):
-                self.send_json(422, {"error": "La TV no tiene abierto el puerto Cast 8009"})
-                return
             try:
-                self.send_json(200, read_cast_status(device["ip"], device.get("deviceUuid")))
+                status = {"ok": True, "online": device.get("online", False), "poweredOn": None, "volume": None, "muted": None}
+                if device.get("supportsCast"):
+                    status.update(read_cast_status(device["ip"], device.get("deviceUuid")))
+                android_tv_power = read_android_tv_power_state(device["ip"])
+                if isinstance(android_tv_power, bool):
+                    status["poweredOn"] = android_tv_power
+                status["powerControlReady"] = power_control_ready(device["ip"])
+                self.send_json(200, status)
             except RuntimeError as error:
                 self.send_json(503, {"error": str(error)})
             except Exception as error:
@@ -391,6 +403,9 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
                 device = next((item for item in scan_local_tvs() if item["id"] == path_parts[2]), None)
                 if not device:
                     self.send_json(404, {"error": "No se encontró esa TV en la red; actualiza la lista"})
+                    return
+                if action == "power":
+                    self.send_json(200, {"ok": True, "action": action, "poweredOn": toggle_android_tv_power(device["ip"])})
                     return
                 if not device.get("supportsCast"):
                     self.send_json(422, {"error": "La TV está detectada por los puertos {}, pero no tiene abierto el puerto Cast 8009".format(", ".join(str(port) for port in device.get("openPorts", [])))})
