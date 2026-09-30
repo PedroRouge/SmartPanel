@@ -21,6 +21,7 @@
   var cameraCredentials = {};
   var tvApiAvailable = false;
   var tvApiEverConnected = false;
+  var backendHealth = null;
   var weatherRetryTimer = null;
   var weatherHasData = false;
 
@@ -90,6 +91,54 @@
       return "http://localhost:5000" + path;
     }
     return window.location.protocol + "//" + window.location.hostname + ":5000" + path;
+  }
+
+  function localApiAddress() {
+    return window.location.protocol === "file:" ? "localhost:5000" : window.location.hostname + ":5000";
+  }
+
+  function initializeVersionReader() {
+    var versionTag = document.querySelector("meta[name='smart-panel-version']");
+    var loadedVersion = versionTag ? versionTag.getAttribute("content") : "desconocida";
+    var appScript = document.querySelector("script[src*='app.js']");
+    var scriptSource = appScript ? appScript.getAttribute("src") : "";
+    var versionMatch = scriptSource.match(/[?&]v=([^&]+)/);
+    if (versionMatch) { loadedVersion = versionMatch[1]; }
+    byId("frontend-version").textContent = "UI v" + loadedVersion;
+    checkBackendVersion();
+  }
+
+  function checkBackendVersion() {
+    var request = new XMLHttpRequest();
+    var dot = byId("backend-health-dot");
+    request.open("GET", localApiUrl("/api/health"), true);
+    request.timeout = 4000;
+    request.onreadystatechange = function () {
+      if (request.readyState !== 4) { return; }
+      if (request.status >= 200 && request.status < 300) {
+        try {
+          var health = JSON.parse(request.responseText);
+          backendHealth = health;
+          byId("backend-version").textContent = "API v" + (health.version || "?");
+          dot.classList.remove("is-checking", "is-error");
+          dot.classList.add("is-online");
+          if (tvApiAvailable && !TV_DEVICES.length) { renderTVs(); }
+          return;
+        } catch (error) {
+          // Report malformed health responses as an unavailable backend.
+        }
+      }
+      byId("backend-version").textContent = "API sin respuesta · " + localApiAddress();
+      dot.classList.remove("is-checking", "is-online");
+      dot.classList.add("is-error");
+    };
+    request.onerror = function () {
+      byId("backend-version").textContent = "API sin respuesta · " + localApiAddress();
+      dot.classList.remove("is-checking", "is-online");
+      dot.classList.add("is-error");
+    };
+    request.ontimeout = request.onerror;
+    try { request.send(null); } catch (error) { request.onerror(); }
   }
 
   function initializeTabs() {
@@ -241,7 +290,7 @@
       }
       byId("weather-refresh").disabled = false;
     };
-    request.onerror = function () { fail("Error de red o CORS"); };
+    request.onerror = function () { fail("API local inaccesible en " + localApiAddress()); };
     request.ontimeout = function () { fail("Tiempo agotado (12 s)"); };
     request.onabort = function () { fail("Solicitud cancelada"); };
     try {
@@ -345,7 +394,7 @@
       byId("tv-refresh").disabled = false;
       if (request.status < 200 || request.status >= 300) {
         tvApiAvailable = false;
-        renderTvApiStatus(tvApiEverConnected ? "API local sin respuesta; estado posiblemente desactualizado." : "API local no conectada; mostrando TVs de demostración.");
+        renderTvApiStatus(tvApiEverConnected ? "API local sin respuesta en " + localApiAddress() + "; datos posiblemente antiguos." : "No responde " + localApiAddress() + ". Inicia server.py; se muestran TVs demo.");
         renderMedia();
         return;
       }
@@ -401,7 +450,7 @@
       finished = true;
       byId("tv-refresh").disabled = false;
       tvApiAvailable = false;
-      renderTvApiStatus(tvApiEverConnected ? "API local desconectada; estado posiblemente desactualizado." : "API local no conectada; mostrando TVs de demostración.");
+      renderTvApiStatus(tvApiEverConnected ? "API local desconectada en " + localApiAddress() : "No responde " + localApiAddress() + ". Inicia server.py; se muestran TVs demo.");
       renderMedia();
     };
     request.ontimeout = request.onerror;
@@ -458,6 +507,9 @@
     byId("tv-list-empty").hidden = TV_DEVICES.length > 0;
     if (tvApiAvailable) {
       statusMessage = "API local conectada · " + TV_DEVICES.length + (TV_DEVICES.length === 1 ? " TV" : " TVs");
+      if (!TV_DEVICES.length && backendHealth && backendHealth.scan_cidr) {
+        statusMessage += " · escaneo " + backendHealth.scan_cidr;
+      }
     } else if (tvApiEverConnected) {
       statusMessage = "API local desconectada · datos posiblemente antiguos";
     } else {
@@ -732,7 +784,7 @@
     byId("volume-meter-fill").style.width = (tvState.muted ? 0 : tvState.volume) + "%";
     byId("mute-button").setAttribute("aria-pressed", tvState.muted ? "true" : "false");
     byId("mute-button").classList.toggle("is-muted", tvState.muted);
-    byId("media-feedback").textContent = tvApiAvailable ? "TV conectada · controles listos." : "Demostración · no hay conexión con una TV real.";
+    byId("media-feedback").textContent = tvApiAvailable ? "TV conectada · controles listos." : (tvApiEverConnected ? "API desconectada · los comandos no se enviarán." : "Demostración · no hay conexión con una TV real.");
   }
 
   function getSelectedTvState() {
@@ -807,6 +859,7 @@
 
   function initialize() {
     initializeTabs();
+    initializeVersionReader();
     initializeControls();
     initializeCameraForm();
     renderTVs();
@@ -824,6 +877,7 @@
     byId("tv-refresh").addEventListener("click", requestTVs);
     requestTVs();
     window.setInterval(requestTVs, TV_CONFIG.refreshMs);
+    window.setInterval(checkBackendVersion, 60000);
   }
 
   if (document.readyState === "loading") {

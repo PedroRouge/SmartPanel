@@ -21,7 +21,9 @@ Configura el `root` de Nginx para apuntar a esta carpeta y abre `index.html` des
 
 ## Clima, TVs y cámaras
 
-Arranca `server.py` en la notebook Linux con `python3 server.py`; escucha en `0.0.0.0:5000`. La IP del panel y el puerto `5000` deben ser accesibles desde el iPad/PC. Si el router usa una subred particular, define `TV_SCAN_CIDR=192.168.1.0/24` (cambia el rango por el de tu LAN) antes de arrancar. El escaneo automático asume una red `/24` cuando no se configura. Si ejecutas `server.py` dentro de Docker con red bridge, configura `TV_SCAN_CIDR` con la LAN real y asegúrate de que el contenedor tenga ruta hacia esos dispositivos; para descubrimiento de red local suele ser más sencillo correrlo en el host o usar `network_mode: host` en Linux.
+Arranca `server.py` en la notebook Linux con `python3 server.py`; escucha en `0.0.0.0:5000`. La IP del panel y el puerto `5000` deben ser accesibles desde el iPad/PC. El endpoint `/api/health` informa la versión del backend; el encabezado del panel muestra por separado la versión UI y API. Si el navegador dice `API sin respuesta · IP:5000`, comprueba que el proceso esté activo y el puerto permitido por el firewall.
+
+Si el router usa una subred particular, define `TV_SCAN_CIDR=192.168.1.0/24` (cambia el rango por el de tu LAN) antes de arrancar. El escaneo automático asume una red `/24` cuando no se configura. Si ejecutas `server.py` dentro de Docker con red bridge, configura `TV_SCAN_CIDR` con la LAN real y asegúrate de que el contenedor tenga ruta hacia esos dispositivos; para descubrimiento de red local suele ser más sencillo correrlo en el host o usar `network_mode: host` en Linux.
 
 El clima usa Open-Meteo sin clave a través de `/api/weather` en `server.py`, con coordenadas de ejemplo de Buenos Aires. Ajusta `WEATHER_CONFIG` en `js/app.js` para tu ubicación. Muestra siete días en un carrusel y renueva los datos cada 30 minutos; tiene timeout, reintento manual y guarda la última respuesta válida en `localStorage`. Si muestra un error HTTP 502, mira `detail`: suele indicar que la notebook no tiene salida a Internet o que Open-Meteo no respondió.
 

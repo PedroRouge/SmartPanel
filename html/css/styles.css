@@ -31,6 +31,12 @@ a { color: inherit; text-decoration: none; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 650; letter-spacing: .2px; }
 .brand-mark { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid rgba(102, 214, 195, .45); border-radius: 10px; color: var(--teal); font-size: 15px; }
 .connection-state, .home-indicator { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.version-reader { max-width: 58%; display: inline-flex; align-items: center; overflow: hidden; color: var(--muted); font-size: 10px; white-space: nowrap; text-overflow: ellipsis; }
+.version-divider { margin: 0 6px; color: var(--quiet); }
+.version-reader .status-dot { margin-right: 7px; }
+.status-dot.is-checking { background: var(--amber); box-shadow: none; }
+.status-dot.is-error { background: var(--red); box-shadow: none; }
+.status-dot.is-online { background: var(--teal); }
 .status-dot { display: inline-block; width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 10px rgba(102, 214, 195, .3); }
 
 .tab-bar { position: sticky; z-index: 5; top: 0; display: flex; gap: 5px; overflow-x: auto; margin: 0 -14px; padding: 9px 14px; background: rgba(11, 15, 25, .94); border-bottom: 1px solid rgba(174, 194, 220, .08); -webkit-overflow-scrolling: touch; scrollbar-width: none; }

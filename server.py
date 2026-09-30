@@ -7,10 +7,12 @@ from urllib.request import Request, urlopen
 import json
 import os
 import socket
+import threading
 import time
 
 
 API_PORT = int(os.environ.get("SMART_PANEL_API_PORT", "5000"))
+API_VERSION = "2026.09.30.1"
 TV_SCAN_CIDR = os.environ.get("TV_SCAN_CIDR", "").strip()
 TV_SCAN_INTERVAL = 15
 TV_SCAN_TIMEOUT = 0.2
@@ -142,6 +144,14 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlsplit(self.path)
+        if parsed.path == "/api/health":
+            self.send_json(200, {
+                "ok": True,
+                "version": API_VERSION,
+                "port": API_PORT,
+                "scan_cidr": TV_SCAN_CIDR or "auto /24"
+            })
+            return
         if parsed.path == "/api/tvs":
             self.send_json(200, scan_local_tvs())
             return
