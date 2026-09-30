@@ -9,10 +9,10 @@
   <meta name="theme-color" content="#0b0f19">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="smart-panel-version" content="16">
+  <meta name="smart-panel-version" content="17">
   <title>Smart Panel</title>
-  <link rel="stylesheet" href="css/styles.css?v=16">
-  <script src="js/app.js?v=16" defer></script>
+  <link rel="stylesheet" href="css/styles.css?v=17">
+  <script src="js/app.js?v=17" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -21,7 +21,7 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v16</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v17</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
     </header>
 
     <nav class="tab-bar" role="tablist" aria-label="Secciones del panel">
@@ -103,8 +103,16 @@
           <div class="tv-list-empty panel-surface" id="tv-list-empty" hidden>No hay televisores reportados por la API local.</div>
         </section>
         <section class="tv-control panel-surface" id="tv-control" aria-labelledby="selected-tv-name" hidden>
-          <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV principal</h2><p class="tv-location" id="selected-tv-location">Living</p></div><div class="tv-heading-status"><span class="tv-status"><span class="status-dot" id="selected-tv-dot"></span><span id="selected-tv-power">Demo · API no conectada</span></span><button class="tv-power-button" id="tv-power-button" type="button" aria-label="Encendido/apagado no emparejado" title="Empareja Android TV para usar POWER" disabled><span aria-hidden="true">⏻</span></button></div></div>
-          <p class="tv-power-hint" id="tv-power-hint">Empareja el ONN una vez desde el servidor para habilitar encendido y apagado.</p>
+          <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV principal</h2><p class="tv-location" id="selected-tv-location">Living</p></div><div class="tv-heading-status"><span class="tv-status"><span class="status-dot" id="selected-tv-dot"></span><span id="selected-tv-power">Demo · API no conectada</span></span><button class="tv-power-button" id="tv-power-button" type="button" aria-label="Emparejar Android TV"><span aria-hidden="true">⏻</span><span id="tv-power-label">Emparejar</span></button></div></div>
+          <p class="tv-power-hint" id="tv-power-hint">Toca Emparejar y confirma en el ONN el código que aparecerá aquí.</p>
+          <div class="tv-pairing" id="tv-pairing-panel" hidden>
+            <p>Confirma el emparejamiento en el ONN e ingresa su código de seis caracteres.</p>
+            <form class="tv-pairing-form" id="tv-pairing-form">
+              <input class="tv-pairing-code" id="tv-pairing-code" type="text" inputmode="text" autocomplete="one-time-code" maxlength="6" aria-label="Código de emparejamiento" placeholder="Código">
+              <button class="tv-pairing-submit" type="submit">Vincular</button>
+              <button class="tv-pairing-cancel" id="tv-pairing-cancel" type="button">Cancelar</button>
+            </form>
+          </div>
           <div class="media-control-inner" aria-labelledby="volume-heading">
             <div class="section-heading"><div><p class="eyebrow">CONTROL DE AUDIO</p><h3 id="volume-heading">Volumen</h3></div><span class="volume-value" id="volume-value">35%</span></div>
             <div class="volume-controls">

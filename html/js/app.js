@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "16";
+  var APP_BUILD_VERSION = "17";
   var STORAGE_KEY = "smart-panel-state-v1";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -26,6 +26,7 @@
   var weatherRetryTimer = null;
   var weatherHasData = false;
   var volumeCommandTimer = null;
+  var tvPairingId = null;
 
   function readState() {
     var defaults = {
@@ -504,6 +505,50 @@
     try { request.send(null); } catch (error) { return; }
   }
 
+  function requestTVPairing(tv, action, payload, onSuccess) {
+    var request = new XMLHttpRequest();
+    request.open("POST", localApiUrl(TV_CONFIG.endpoint + "/" + encodeURIComponent(tv.id) + "/pairing/" + action), true);
+    request.timeout = 30000;
+    request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+    request.onreadystatechange = function () {
+      if (request.readyState !== 4) { return; }
+      var result = {};
+      try { result = JSON.parse(request.responseText); } catch (error) { result = {}; }
+      if (request.status >= 200 && request.status < 300) {
+        onSuccess(result);
+      } else {
+        byId("media-feedback").textContent = result.error || tv.name + " · no se pudo emparejar.";
+      }
+    };
+    request.onerror = function () { byId("media-feedback").textContent = tv.name + " · error al contactar la API local."; };
+    request.ontimeout = request.onerror;
+    try { request.send(JSON.stringify(payload || {})); } catch (error) { request.onerror(); }
+  }
+
+  function startTVPairing(tv) {
+    byId("media-feedback").textContent = "Iniciando emparejamiento; confirma la solicitud en el ONN...";
+    requestTVPairing(tv, "start", {}, function (result) {
+      if (result.paired) {
+        tv.powerControlReady = true;
+        renderTVs();
+        requestTVStatus(tv);
+        return;
+      }
+      tvPairingId = tv.id;
+      byId("tv-pairing-panel").hidden = false;
+      byId("tv-power-hint").hidden = true;
+      byId("media-feedback").textContent = "Código solicitado en el ONN. Escríbelo aquí para vincular el panel.";
+      byId("tv-pairing-code").focus();
+    });
+  }
+
+  function cancelTVPairing(tv) {
+    tvPairingId = null;
+    byId("tv-pairing-panel").hidden = true;
+    byId("tv-pairing-code").value = "";
+    requestTVPairing(tv, "cancel", {}, function () {});
+  }
+
   function sendTVCommand(action, value) {
     var tv = getSelectedTv();
     if (!tv) { return; }
@@ -643,10 +688,13 @@
       byId("selected-tv-dot").classList.toggle("is-unknown", selected.poweredOn !== true && selected.poweredOn !== false);
       var powerButton = byId("tv-power-button");
       var powerLabel = selected.poweredOn === true ? "Apagar " + selected.name : "Encender " + selected.name;
-      powerButton.disabled = selected.powerControlReady !== true;
-      powerButton.setAttribute("aria-label", selected.powerControlReady === true ? powerLabel : "Empareja Android TV para encender o apagar");
-      powerButton.title = selected.powerControlReady === true ? powerLabel : "Ejecuta python3 pair_android_tv.py en el servidor";
-      byId("tv-power-hint").hidden = selected.powerControlReady === true;
+      var powerReady = selected.powerControlReady === true;
+      powerButton.disabled = !tvApiAvailable;
+      byId("tv-power-label").textContent = powerReady ? (selected.poweredOn === true ? "Apagar" : "Encender") : "Emparejar";
+      powerButton.setAttribute("aria-label", tvApiAvailable ? (powerReady ? powerLabel : "Emparejar " + selected.name) : "API local no conectada");
+      powerButton.title = powerReady ? powerLabel : "Emparejar con el código del ONN";
+      byId("tv-pairing-panel").hidden = tvPairingId !== selected.id;
+      byId("tv-power-hint").hidden = powerReady || tvPairingId === selected.id;
     }
   }
 
@@ -926,7 +974,32 @@
       if (tvApiAvailable) { sendTvAction("set_volume", Number(this.value)); }
     });
     byId("tv-power-button").addEventListener("click", function () {
-      sendTvAction("power", null);
+      var tv = getSelectedTv();
+      if (!tv) { return; }
+      if (tv.powerControlReady === true) {
+        sendTvAction("power", null);
+      } else {
+        startTVPairing(tv);
+      }
+    });
+    byId("tv-pairing-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      var tv = getSelectedTv();
+      if (!tv) { return; }
+      var code = byId("tv-pairing-code").value.replace(/\s+/g, "").toUpperCase();
+      byId("media-feedback").textContent = "Verificando el código con el ONN...";
+      requestTVPairing(tv, "finish", { code: code }, function (result) {
+        tvPairingId = null;
+        tv.powerControlReady = result.powerControlReady === true;
+        byId("tv-pairing-code").value = "";
+        renderTVs();
+        requestTVStatus(tv);
+        byId("media-feedback").textContent = "ONN emparejado. Consultando su estado...";
+      });
+    });
+    byId("tv-pairing-cancel").addEventListener("click", function () {
+      var tv = getSelectedTv();
+      if (tv) { cancelTVPairing(tv); }
     });
     byId("mute-button").addEventListener("click", function () {
       if (tvApiAvailable) {

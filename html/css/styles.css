@@ -119,9 +119,18 @@ h3 { margin-bottom: 5px; font-size: 14px; font-weight: 620; }
 .tv-status .status-dot.is-off { background: var(--red); box-shadow: none; }
 .tv-status .status-dot.is-unknown { background: var(--amber); box-shadow: none; }
 .tv-heading-status { display: inline-flex; align-items: center; gap: 12px; }
-.tv-power-button { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--surface-border); border-radius: 50%; background: var(--surface-raised); color: var(--teal); font-size: 24px; cursor: pointer; }
+.tv-power-button { min-height: 44px; padding: 0 13px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--surface-border); border-radius: 12px; background: var(--surface-raised); color: var(--teal); font-size: 13px; font-weight: 650; white-space: nowrap; cursor: pointer; }
+.tv-power-button > span:first-child { font-size: 20px; }
 .tv-power-button:disabled { color: var(--quiet); cursor: not-allowed; opacity: .55; }
 .tv-power-hint { margin: 12px 0 0; color: var(--quiet); font-size: 11px; line-height: 1.45; }
+.tv-pairing { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--surface-border); }
+.tv-pairing > p { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
+.tv-pairing-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 9px; }
+.tv-pairing-code, .tv-pairing-submit, .tv-pairing-cancel { min-height: 44px; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--surface-raised); color: var(--text); }
+.tv-pairing-code { min-width: 0; padding: 0 12px; font-size: 16px; text-transform: uppercase; }
+.tv-pairing-submit, .tv-pairing-cancel { padding: 0 15px; font-size: 12px; font-weight: 650; cursor: pointer; }
+.tv-pairing-submit { border-color: rgba(102, 214, 195, .4); color: var(--teal); }
+.tv-pairing-cancel { color: var(--muted); }
 .media-control-inner { margin-top: 23px; padding-top: 19px; border-top: 1px solid var(--surface-border); }
 .media-control-inner h3, .media-apps h3 { margin: 0; font-size: 16px; }
 .media-apps { margin-top: 27px; }

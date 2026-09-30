@@ -11,7 +11,14 @@ import socket
 import threading
 import time
 from uuid import NAMESPACE_URL, UUID, uuid5
-from android_tv_power import power_control_ready, read_android_tv_power_state, toggle_android_tv_power
+from android_tv_power import (
+    cancel_android_tv_pairing,
+    finish_android_tv_pairing,
+    power_control_ready,
+    read_android_tv_power_state,
+    start_android_tv_pairing,
+    toggle_android_tv_power,
+)
 
 try:
     import pychromecast
@@ -25,7 +32,7 @@ except ImportError:
 
 
 API_PORT = int(os.environ.get("SMART_PANEL_API_PORT", "5000"))
-API_VERSION = "2026.09.30.9"
+API_VERSION = "2026.09.30.10"
 TV_SCAN_CIDR = os.environ.get("TV_SCAN_CIDR", "").strip()
 TV_SCAN_INTERVAL = 15
 TV_SCAN_TIMEOUT = 0.2
@@ -361,6 +368,8 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
                 android_tv_power = read_android_tv_power_state(device["ip"])
                 if isinstance(android_tv_power, bool):
                     status["poweredOn"] = android_tv_power
+                elif 6466 in device.get("openPorts", []):
+                    status["poweredOn"] = True
                 status["powerControlReady"] = power_control_ready(device["ip"])
                 self.send_json(200, status)
             except RuntimeError as error:
@@ -389,6 +398,44 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlsplit(self.path)
         path_parts = [unquote(part) for part in parsed.path.strip("/").split("/")]
+        if len(path_parts) == 5 and path_parts[:2] == ["api", "tvs"] and path_parts[3] == "pairing":
+            device = next((item for item in scan_local_tvs() if item["id"] == path_parts[2]), None)
+            if not device:
+                self.send_json(404, {"error": "No se encontró esa TV en la red; actualiza la lista"})
+                return
+            try:
+                if path_parts[4] == "start":
+                    if 6466 not in device.get("openPorts", []):
+                        self.send_json(422, {"error": "El dispositivo no ofrece Android TV Remote en el puerto 6466"})
+                        return
+                    self.send_json(200, start_android_tv_pairing(device["ip"]))
+                elif path_parts[4] == "finish":
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length <= 0 or content_length > 65536:
+                        self.send_json(400, {"error": "Falta el código de emparejamiento"})
+                        return
+                    pairing = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                    if not isinstance(pairing, dict):
+                        self.send_json(400, {"error": "JSON inválido"})
+                        return
+                    result = finish_android_tv_pairing(device["ip"], str(pairing.get("code", "")))
+                    result["powerControlReady"] = power_control_ready(device["ip"])
+                    self.send_json(200, result)
+                elif path_parts[4] == "cancel":
+                    cancel_android_tv_pairing(device["ip"])
+                    self.send_json(200, {"ok": True})
+                else:
+                    self.send_json(404, {"error": "Acción de emparejamiento no válida"})
+            except json.JSONDecodeError:
+                self.send_json(400, {"error": "JSON inválido"})
+            except ValueError as error:
+                self.send_json(400, {"error": str(error)})
+            except RuntimeError as error:
+                self.send_json(503, {"error": str(error)})
+            except Exception as error:
+                print("Error emparejando Android TV: {}".format(error))
+                self.send_json(502, {"error": "No se pudo emparejar Android TV", "detail": str(error)})
+            return
         if len(path_parts) == 4 and path_parts[0] == "api" and path_parts[1] == "tvs" and path_parts[3] == "command":
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
