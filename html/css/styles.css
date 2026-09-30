@@ -124,11 +124,14 @@ h3 { margin-bottom: 5px; font-size: 14px; font-weight: 620; }
 .media-apps .section-heading { margin-bottom: 14px; }
 .media-control { max-width: 700px; padding: 22px; }
 .volume-value { color: var(--teal); font-size: 20px; font-variant-numeric: tabular-nums; }
-.volume-meter { height: 8px; margin: 24px 0 17px; overflow: hidden; border-radius: 8px; background: #27313d; }
-.volume-meter span { display: block; width: 35%; height: 100%; border-radius: inherit; background: var(--teal); transition: width .18s ease; }
-.volume-controls { display: grid; grid-template-columns: 64px 1fr 64px; gap: 12px; }
-.icon-button, .mute-button { min-height: 60px; border: 1px solid var(--surface-border); border-radius: 14px; background: var(--surface-raised); cursor: pointer; }
-.icon-button { font-size: 27px; color: var(--text); }
+.volume-controls { display: grid; grid-template-columns: minmax(0, 1fr) 140px; align-items: center; gap: 16px; }
+.volume-slider { width: 100%; height: 44px; margin: 0; -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; touch-action: pan-y; }
+.volume-slider:focus-visible { outline: 2px solid var(--teal); outline-offset: 4px; border-radius: 8px; }
+.volume-slider::-webkit-slider-runnable-track { height: 8px; border-radius: 8px; background: linear-gradient(to right, var(--teal) 0%, var(--teal) var(--volume-level, 35%), #27313d var(--volume-level, 35%), #27313d 100%); }
+.volume-slider::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -7px; -webkit-appearance: none; appearance: none; border: 3px solid var(--surface-raised); border-radius: 50%; background: var(--teal); }
+.volume-slider::-moz-range-track { height: 8px; border-radius: 8px; background: linear-gradient(to right, var(--teal) 0%, var(--teal) var(--volume-level, 35%), #27313d var(--volume-level, 35%), #27313d 100%); }
+.volume-slider::-moz-range-thumb { width: 16px; height: 16px; border: 3px solid var(--surface-raised); border-radius: 50%; background: var(--teal); }
+.mute-button { min-height: 60px; border: 1px solid var(--surface-border); border-radius: 14px; background: var(--surface-raised); cursor: pointer; }
 .mute-button { font-size: 14px; font-weight: 600; }
 .mute-button span { margin-right: 8px; color: var(--teal); font-size: 19px; }
 .mute-button.is-muted { border-color: rgba(237, 121, 121, .35); color: var(--red); }

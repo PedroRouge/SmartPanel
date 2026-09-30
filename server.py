@@ -24,7 +24,7 @@ except ImportError:
 
 
 API_PORT = int(os.environ.get("SMART_PANEL_API_PORT", "5000"))
-API_VERSION = "2026.09.30.6"
+API_VERSION = "2026.09.30.7"
 TV_SCAN_CIDR = os.environ.get("TV_SCAN_CIDR", "").strip()
 TV_SCAN_INTERVAL = 15
 TV_SCAN_TIMEOUT = 0.2
@@ -175,11 +175,17 @@ def send_cast_command(ip, device_uuid, action, value):
             if not 0 <= volume <= 100:
                 raise ValueError("El volumen debe estar entre 0 y 100")
             cast.set_volume(volume / 100.0, timeout=CAST_COMMAND_TIMEOUT)
-            return {"ok": True, "action": action, "volume": round(volume)}
+            if volume > 0 and cast.status.volume_muted:
+                cast.set_volume_muted(False, timeout=CAST_COMMAND_TIMEOUT)
+            return {"ok": True, "action": action, "volume": round(volume), "muted": False if volume > 0 else bool(cast.status.volume_muted)}
         if action in ("volume_up", "volume_down"):
+            current_volume = cast.status.volume_level
+            if current_volume is None:
+                raise RuntimeError("El televisor no informó su volumen actual")
             delta = 0.05 if action == "volume_up" else -0.05
-            volume = cast.set_volume(cast.status.volume_level + delta, timeout=CAST_COMMAND_TIMEOUT)
-            return {"ok": True, "action": action, "volume": round(volume * 100)}
+            volume = max(0.0, min(1.0, current_volume + delta))
+            cast.set_volume(volume, timeout=CAST_COMMAND_TIMEOUT)
+            return {"ok": True, "action": action, "volume": round(volume * 100), "muted": cast.status.volume_muted}
         if action == "set_mute":
             if not isinstance(value, bool):
                 raise ValueError("Mute requiere un valor booleano")
@@ -197,6 +203,43 @@ def send_cast_command(ip, device_uuid, action, value):
             cast.start_app(app_id, force_launch=True, timeout=CAST_COMMAND_TIMEOUT)
             return {"ok": True, "action": action, "app": app_name}
         raise ValueError("Acción no admitida: {}".format(action))
+    finally:
+        cast.disconnect(timeout=1)
+
+
+def read_cast_status(ip, device_uuid):
+    if pychromecast is None:
+        raise RuntimeError("Falta instalar PyChromecast: ejecuta pip3 install -r requirements.txt")
+
+    try:
+        cast_uuid = UUID(str(device_uuid)) if device_uuid else uuid5(NAMESPACE_URL, "smart-panel-cast:" + ip)
+    except ValueError:
+        cast_uuid = uuid5(NAMESPACE_URL, "smart-panel-cast:" + ip)
+
+    cast_info = CastInfo(
+        {HostServiceInfo(ip, 8009)},
+        cast_uuid,
+        "Chromecast",
+        ip,
+        ip,
+        8009,
+        CAST_TYPE_CHROMECAST,
+        "Google Cast"
+    )
+    cast = pychromecast.Chromecast(cast_info=cast_info, tries=1, timeout=CAST_COMMAND_TIMEOUT)
+    try:
+        cast.wait(timeout=CAST_COMMAND_TIMEOUT)
+        status = cast.status
+        standby = getattr(status, "is_stand_by", None)
+        volume = getattr(status, "volume_level", None)
+        muted = getattr(status, "volume_muted", None)
+        return {
+            "ok": True,
+            "online": True,
+            "poweredOn": not standby if isinstance(standby, bool) else None,
+            "volume": round(volume * 100) if isinstance(volume, (int, float)) else None,
+            "muted": muted if isinstance(muted, bool) else None
+        }
     finally:
         cast.disconnect(timeout=1)
 
@@ -285,6 +328,7 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlsplit(self.path)
+        path_parts = [unquote(part) for part in parsed.path.strip("/").split("/")]
         if parsed.path == "/api/health":
             self.send_json(200, {
                 "ok": True,
@@ -296,6 +340,22 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/tvs":
             self.send_json(200, scan_local_tvs())
+            return
+        if len(path_parts) == 4 and path_parts[0] == "api" and path_parts[1] == "tvs" and path_parts[3] == "status":
+            device = next((item for item in scan_local_tvs() if item["id"] == path_parts[2]), None)
+            if not device:
+                self.send_json(404, {"error": "No se encontró esa TV en la red; actualiza la lista"})
+                return
+            if not device.get("supportsCast"):
+                self.send_json(422, {"error": "La TV no tiene abierto el puerto Cast 8009"})
+                return
+            try:
+                self.send_json(200, read_cast_status(device["ip"], device.get("deviceUuid")))
+            except RuntimeError as error:
+                self.send_json(503, {"error": str(error)})
+            except Exception as error:
+                print("Error leyendo estado TV: {}".format(error))
+                self.send_json(502, {"error": "No se pudo consultar el estado Cast", "detail": str(error)})
             return
         if parsed.path == "/api/weather":
             try:

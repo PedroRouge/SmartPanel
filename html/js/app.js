@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "14";
+  var APP_BUILD_VERSION = "15";
   var STORAGE_KEY = "smart-panel-state-v1";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -25,6 +25,7 @@
   var backendHealth = null;
   var weatherRetryTimer = null;
   var weatherHasData = false;
+  var volumeCommandTimer = null;
 
   function readState() {
     var defaults = {
@@ -448,6 +449,7 @@
       saveState();
       renderTVs();
       renderMedia();
+      TV_DEVICES.forEach(requestTVStatus);
     };
     request.onerror = function () {
       if (finished) { return; }
@@ -471,6 +473,33 @@
       if (TV_DEVICES[index].id === id) { return TV_DEVICES[index]; }
     }
     return null;
+  }
+
+  function requestTVStatus(tv) {
+    var request = new XMLHttpRequest();
+    request.open("GET", localApiUrl(TV_CONFIG.endpoint + "/" + encodeURIComponent(tv.id) + "/status"), true);
+    request.timeout = TV_CONFIG.timeoutMs;
+    request.onreadystatechange = function () {
+      if (request.readyState !== 4 || request.status < 200 || request.status >= 300) { return; }
+      var result;
+      try { result = JSON.parse(request.responseText); } catch (error) { return; }
+      var current = getTvById(tv.id);
+      if (!current) { return; }
+      var volumeIsBeingEdited = current.id === state.tvId && (volumeCommandTimer !== null || document.activeElement === byId("volume-slider"));
+      current.online = result.online === true;
+      current.poweredOn = typeof result.poweredOn === "boolean" ? result.poweredOn : null;
+      current.volume = typeof result.volume === "number" ? Math.max(0, Math.min(100, result.volume)) : null;
+      current.muted = typeof result.muted === "boolean" ? result.muted : null;
+      if (current.volume !== null && !volumeIsBeingEdited) {
+        if (!state.tvStates[current.id]) { state.tvStates[current.id] = { volume: current.volume, muted: current.muted === true }; }
+        state.tvStates[current.id].volume = current.volume;
+        if (current.muted !== null) { state.tvStates[current.id].muted = current.muted; }
+      }
+      saveState();
+      renderTVs();
+      renderMedia();
+    };
+    try { request.send(null); } catch (error) { return; }
   }
 
   function sendTVCommand(action, value) {
@@ -580,6 +609,10 @@
         button.appendChild(copy);
         button.appendChild(check);
         button.addEventListener("click", function () {
+          if (volumeCommandTimer !== null) {
+            window.clearTimeout(volumeCommandTimer);
+            volumeCommandTimer = null;
+          }
           if (!state.tvStates[tv.id]) {
             state.tvStates[tv.id] = { volume: 35, muted: false };
           }
@@ -805,7 +838,8 @@
   function renderMedia() {
     var tvState = getSelectedTvState();
     byId("volume-value").textContent = tvState.muted ? "--" : tvState.volume + "%";
-    byId("volume-meter-fill").style.width = (tvState.muted ? 0 : tvState.volume) + "%";
+    byId("volume-slider").value = String(tvState.volume);
+    byId("volume-slider").style.setProperty("--volume-level", tvState.volume + "%");
     byId("mute-button").setAttribute("aria-pressed", tvState.muted ? "true" : "false");
     byId("mute-button").classList.toggle("is-muted", tvState.muted);
     byId("media-feedback").textContent = tvApiAvailable ? "TV conectada · controles listos." : (tvApiEverConnected ? "API desconectada · los comandos no se enviarán." : "Demostración · no hay conexión con una TV real.");
@@ -855,21 +889,28 @@
         renderGate();
       }, 700);
     });
-    Array.prototype.forEach.call(document.querySelectorAll("[data-volume]"), function (button) {
-      button.addEventListener("click", function () {
-        var direction = button.getAttribute("data-volume");
-        if (tvApiAvailable) {
-          sendTvAction(direction === "up" ? "volume_up" : "volume_down", null);
-          return;
-        }
-        var tvState = getSelectedTvState();
-        tvState.volume = Math.max(0, Math.min(100, tvState.volume + (direction === "up" ? 5 : -5)));
-        state.volume = tvState.volume;
-        state.muted = false;
-        saveState();
-        renderMedia();
-        sendTvAction("volume_" + direction, null);
-      });
+    byId("volume-slider").addEventListener("input", function () {
+      var tvState = getSelectedTvState();
+      tvState.volume = Number(this.value);
+      tvState.muted = false;
+      state.volume = tvState.volume;
+      state.muted = false;
+      saveState();
+      renderMedia();
+      if (volumeCommandTimer !== null) { window.clearTimeout(volumeCommandTimer); }
+      if (tvApiAvailable) {
+        volumeCommandTimer = window.setTimeout(function () {
+          sendTvAction("set_volume", tvState.volume);
+          volumeCommandTimer = null;
+        }, 250);
+      }
+    });
+    byId("volume-slider").addEventListener("change", function () {
+      if (volumeCommandTimer !== null) {
+        window.clearTimeout(volumeCommandTimer);
+        volumeCommandTimer = null;
+      }
+      if (tvApiAvailable) { sendTvAction("set_volume", Number(this.value)); }
     });
     byId("mute-button").addEventListener("click", function () {
       if (tvApiAvailable) {

@@ -33,13 +33,13 @@ El porcentaje es la probabilidad máxima de precipitación prevista en algún mo
 
 El HTML no depende de un proxy adicional en Nginx para estas rutas: construye la URL del API con el host actual y el puerto `5000`. El servicio Python responde CORS para permitir que el panel estático servido por Nginx le consulte.
 
-La interfaz consulta `GET /api/tvs` en el mismo servidor cada 30 segundos. El backend intenta obtener el nombre registrado desde Eureka (`/setup/eureka_info`) o el descriptor SSDP (`friendlyName`, modelo y fabricante). Si ninguno responde, conserva una etiqueta basada en la IP. El JSON incluye `openPorts` y `supportsCast`; solo dispositivos con el puerto Cast 8009 accesible habilitan los comandos Cast. Un puerto 8008 por sí solo permite detectar/nombrar el televisor, no garantiza que admita control remoto.
+La interfaz consulta `GET /api/tvs` en el mismo servidor cada 30 segundos y luego obtiene el estado actual de cada receptor compatible mediante `GET /api/tvs/{id}/status`. El backend intenta obtener el nombre registrado desde Eureka (`/setup/eureka_info`) o el descriptor SSDP (`friendlyName`, modelo y fabricante). Si ninguno responde, conserva una etiqueta basada en la IP. El JSON de estado incluye el modo standby reportado por Cast, volumen y mute; el modo standby no garantiza el estado físico del panel de TV. El JSON de dispositivos incluye `openPorts` y `supportsCast`; solo dispositivos con el puerto Cast 8009 accesible habilitan los comandos Cast. Un puerto 8008 por sí solo permite detectar/nombrar el televisor, no garantiza que admita control remoto.
 
 ```json
 [{"id":"living-tv","name":"TV Living","room":"Living","model":"Smart TV","poweredOn":true,"volume":35,"muted":false}]
 ```
 
-Volumen, mute y apps envían `POST /api/tvs/{id}/command` con JSON `{ "action": "volume_up|volume_down|toggle_mute|launch_app", "value": null }`. PyChromecast implementa volumen relativo (pasos del 5%) y mute en base al estado real reportado. Los receptores Cast configurados son Netflix, YouTube, Disney+ y Spotify; Flow y Prime Video devuelven un error explícito hasta configurar/verificar sus IDs de receptor en esos modelos. Apps disponibles y soporte dependen del fabricante y del país.
+Volumen, mute y apps envían `POST /api/tvs/{id}/command` con JSON `{ "action": "set_volume|toggle_mute|launch_app", "value": 0-100 }` (mute y apps conservan su valor booleano/nombre). El control deslizante manda el volumen al soltarlo y limita los envíos durante el arrastre. Los receptores Cast configurados son Netflix, YouTube, Disney+ y Spotify; Flow y Prime Video devuelven un error explícito hasta configurar/verificar sus IDs de receptor en esos modelos. Apps disponibles y soporte dependen del fabricante y del país.
 
 Las cámaras guardan nombre y URL en `localStorage`, pero nunca usuario ni contraseña. Las credenciales solo viven en memoria hasta recargar. El preview directo está pensado para URLs HTTP/MJPEG sin autenticación; RTSP y cámaras con autenticación necesitan un proxy/gateway local que exponga un stream web compatible, como HLS o WebRTC. Safari no reproduce RTSP directamente.
 
