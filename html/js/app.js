@@ -2,12 +2,12 @@
   "use strict";
 
   var STORAGE_KEY = "smart-panel-state-v1";
-  var WEATHER_STORAGE_KEY = "smart-panel-weather-v1";
   var WEATHER_CONFIG = {
-    latitude: -34.6037,
-    longitude: -58.3816,
-    location: "Buenos Aires, Argentina"
+    latitude: -31.86519,
+    longitude: -60.57469,
+    location: "Colonia Ensayo, Entre Ríos"
   };
+  var WEATHER_STORAGE_KEY = "smart-panel-weather-v2-" + WEATHER_CONFIG.latitude + "-" + WEATHER_CONFIG.longitude;
   var TV_CONFIG = {
     endpoint: "/api/tvs",
     refreshMs: 30000,

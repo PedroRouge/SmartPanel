@@ -12,7 +12,7 @@ import time
 
 
 API_PORT = int(os.environ.get("SMART_PANEL_API_PORT", "5000"))
-API_VERSION = "2026.09.30.1"
+API_VERSION = "2026.09.30.2"
 TV_SCAN_CIDR = os.environ.get("TV_SCAN_CIDR", "").strip()
 TV_SCAN_INTERVAL = 15
 TV_SCAN_TIMEOUT = 0.2
@@ -95,8 +95,8 @@ def scan_local_tvs():
 
 
 def fetch_weather(query):
-    latitude = query.get("latitude", ["-34.6037"])[0]
-    longitude = query.get("longitude", ["-58.3816"])[0]
+    latitude = query.get("latitude", ["-31.86519"])[0]
+    longitude = query.get("longitude", ["-60.57469"])[0]
     try:
         lat = float(latitude)
         lon = float(longitude)
