@@ -1,6 +1,7 @@
 (function () {
   "use strict";
 
+  var APP_BUILD_VERSION = "11";
   var STORAGE_KEY = "smart-panel-state-v1";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -100,11 +101,8 @@
   function initializeVersionReader() {
     var versionTag = document.querySelector("meta[name='smart-panel-version']");
     var loadedVersion = versionTag ? versionTag.getAttribute("content") : "desconocida";
-    var appScript = document.querySelector("script[src*='app.js']");
-    var scriptSource = appScript ? appScript.getAttribute("src") : "";
-    var versionMatch = scriptSource.match(/[?&]v=([^&]+)/);
-    if (versionMatch) { loadedVersion = versionMatch[1]; }
-    byId("frontend-version").textContent = "UI v" + loadedVersion;
+    byId("frontend-version").textContent = "HTML v" + loadedVersion;
+    byId("script-build-version").textContent = "JS v" + APP_BUILD_VERSION;
     checkBackendVersion();
   }
 

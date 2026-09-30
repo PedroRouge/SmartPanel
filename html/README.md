@@ -19,6 +19,8 @@ html/
 
 Configura el `root` de Nginx para apuntar a esta carpeta y abre `index.html` desde el iPad. Por ejemplo, si el volumen Docker monta esta carpeta como `/usr/share/nginx/html`, Nginx servirá el panel en la raíz del sitio. Los cambios de archivos estáticos se aplican al recargar la página.
 
+Al actualizar, copia juntos `index.html`, `css/styles.css` y `js/app.js` a la carpeta que Nginx monta (no solo al workspace local). El encabezado muestra HTML y build real del JS por separado: `JS sin confirmar` significa que el `app.js` desplegado no es esta versión. Reinicia también `server.py` al actualizarlo; el número de API cambia en `/api/health`.
+
 ## Clima, TVs y cámaras
 
 Arranca `server.py` en la notebook Linux con `python3 server.py`; escucha en `0.0.0.0:5000`. La IP del panel y el puerto `5000` deben ser accesibles desde el iPad/PC. El endpoint `/api/health` informa la versión del backend; el encabezado del panel muestra por separado la versión UI y API. Si el navegador dice `API sin respuesta · IP:5000`, comprueba que el proceso esté activo y el puerto permitido por el firewall.
