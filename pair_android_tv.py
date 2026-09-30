@@ -4,7 +4,7 @@ import os
 import sys
 
 from android_tv_power import create_remote, credential_paths
-from server import scan_local_tvs
+from servidor import scan_local_tvs
 
 
 def select_tv(host):

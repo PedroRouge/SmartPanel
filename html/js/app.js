@@ -398,7 +398,7 @@
       byId("tv-refresh").disabled = false;
       if (request.status < 200 || request.status >= 300) {
         tvApiAvailable = false;
-        renderTvApiStatus(tvApiEverConnected ? "API local sin respuesta en " + localApiAddress() + "; datos posiblemente antiguos." : "No responde " + localApiAddress() + ". Inicia server.py; se muestran TVs demo.");
+        renderTvApiStatus(tvApiEverConnected ? "API local sin respuesta en " + localApiAddress() + "; datos posiblemente antiguos." : "No responde " + localApiAddress() + ". Inicia servidor.py; se muestran TVs demo.");
         renderMedia();
         return;
       }
@@ -458,7 +458,7 @@
       finished = true;
       byId("tv-refresh").disabled = false;
       tvApiAvailable = false;
-      renderTvApiStatus(tvApiEverConnected ? "API local desconectada en " + localApiAddress() : "No responde " + localApiAddress() + ". Inicia server.py; se muestran TVs demo.");
+      renderTvApiStatus(tvApiEverConnected ? "API local desconectada en " + localApiAddress() : "No responde " + localApiAddress() + ". Inicia servidor.py; se muestran TVs demo.");
       renderMedia();
     };
     request.ontimeout = request.onerror;
