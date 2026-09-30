@@ -19,13 +19,13 @@ html/
 
 Vercel sirve solamente el contenido estático de `html/`; `vercel.json` no define funciones ni reescrituras de API. También se puede configurar el `root` de Nginx para apuntar a esta carpeta.
 
-La API corre por separado en la notebook con `python servidor.py` y escucha en `0.0.0.0:5000`. Instala sus paquetes con `python -m pip install -r requirements.txt`. El HTML tiene `window.SMART_PANEL_API_URL` configurado a `http://localhost:5000`; cuando el navegador no corre en la notebook, cambia ese valor por una URL alcanzable desde el navegador.
+La API corre por separado en la notebook con `python servidor.py` y escucha en `0.0.0.0:5000`. Instala sus paquetes con `python -m pip install -r requirements.txt`. El frontend apunta al túnel actual `https://duke-expires-distribute-political.trycloudflare.com`. El túnel debe dirigir tráfico HTTPS al puerto `5000` de la notebook y seguir activo.
 
 ## Clima, TVs y cámaras
 
 El backend de Python sirve `/api/health`, `/api/tvs`, `/api/tvs/{id}/status`, `/api/tvs/{id}/command`, pairing y `/api/weather`.
 
-Como el frontend vive en Vercel y la API en la notebook, el navegador requiere conectividad hacia la notebook y CORS permitido. `servidor.py` responde CORS para `GET`, `POST`, `OPTIONS` y `Content-Type`. Desde la misma notebook se usa `http://localhost:5000`; desde otro dispositivo, `SMART_PANEL_API_URL` debe ser una URL alcanzable. Los navegadores pueden bloquear HTTP desde una página HTTPS; para acceso remoto se necesita una URL HTTPS segura hacia la notebook (por ejemplo, un túnel terminado en la notebook, no en la Onn Box).
+Como el frontend vive en Vercel y la API en la notebook, el navegador requiere conectividad al túnel y CORS permitido. `servidor.py` responde CORS para `GET`, `POST`, `OPTIONS` y `Content-Type`. Para cambiar la URL, define `window.SMART_PANEL_API_URL` en `index.html` antes de cargar `js/app.js`. Vercel no expone automáticamente variables de entorno al JavaScript de una web estática; también puede inyectarse ese valor durante un build si luego se incorpora uno.
 
 El clima consulta Open-Meteo a través de `/api/weather` en la API Python. Ajusta `WEATHER_CONFIG` en `js/app.js` para cambiar ubicación. Muestra siete días y renueva los datos cada 30 minutos; tiene timeout, reintento manual y guarda la última respuesta válida en `localStorage`.
 
