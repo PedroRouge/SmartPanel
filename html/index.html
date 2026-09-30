@@ -7,8 +7,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Smart Panel</title>
-  <link rel="stylesheet" href="css/styles.css?v=3">
-  <script src="js/app.js?v=3" defer></script>
+  <link rel="stylesheet" href="css/styles.css?v=4">
+  <script src="js/app.js?v=4" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -51,9 +51,9 @@
                 <p class="eyebrow" id="weather-location">AFUERA</p>
                 <h2 id="weather-heading">Clima</h2>
               </div>
-              <span class="weather-symbol" id="weather-symbol" aria-hidden="true">☁</span>
+              <button class="weather-refresh" id="weather-refresh" type="button" aria-label="Actualizar clima">↻</button>
             </div>
-            <div class="weather-reading"><span id="weather-temperature">--°</span><span class="weather-description" id="weather-description">Consultando Open-Meteo...</span></div>
+            <div class="weather-reading"><span class="weather-symbol" id="weather-symbol" aria-hidden="true">☁</span><span id="weather-temperature">--°</span><span class="weather-description" id="weather-description">Consultando Open-Meteo...</span></div>
             <div class="weather-details">
               <span>Máx. <strong id="weather-high">--°</strong></span>
               <span>Mín. <strong id="weather-low">--°</strong></span>
@@ -79,12 +79,12 @@
           <section class="forecast-panel panel-surface" aria-labelledby="forecast-heading">
             <div class="section-heading">
               <div>
-                <p class="eyebrow">PRÓXIMAS HORAS</p>
-                <h2 id="forecast-heading">Pronóstico</h2>
+                <p class="eyebrow">PRÓXIMOS 7 DÍAS</p>
+                <h2 id="forecast-heading">Pronóstico semanal</h2>
               </div>
             </div>
             <div class="forecast-list" id="forecast-list">
-              <div class="forecast-placeholder">Cargando temperatura actual y pronóstico...</div>
+              <div class="forecast-placeholder">Consultando clima y pronóstico semanal...</div>
             </div>
           </section>
         </div>

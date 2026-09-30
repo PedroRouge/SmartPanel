@@ -21,7 +21,9 @@ Configura el `root` de Nginx para apuntar a esta carpeta y abre `index.html` des
 
 ## Clima, TVs y cámaras
 
-El clima usa Open-Meteo sin clave y viene configurado con coordenadas de ejemplo de Buenos Aires. Ajusta `WEATHER_CONFIG` en `js/app.js` para tu ubicación; requiere conexión a Internet y se actualiza cada 30 minutos.
+El clima usa Open-Meteo sin clave y viene configurado con coordenadas de ejemplo de Buenos Aires. Ajusta `WEATHER_CONFIG` en `js/app.js` para tu ubicación. Muestra siete días en un carrusel y renueva los datos cada 30 minutos; tiene timeout de 12 segundos, reintento manual y guarda la última respuesta válida en `localStorage` para mostrarla mientras consulta o si se pierde Internet.
+
+Si aparece `Sin respuesta de red/CORS` en dispositivos de la LAN, comprueba que puedan navegar a `https://api.open-meteo.com`. Si la red bloquea el acceso externo, configura un proxy inverso de Nginx en el mismo origen y cambia la URL de la solicitud en `loadWeather()` para usar ese endpoint local. El timeout ahora hace visible el fallo en lugar de dejar “Consultando” indefinidamente.
 
 La lista `TV_DEVICES` de `js/app.js` es configurable. Volumen y mute se simulan y se guardan por TV; `sendTvAction()` es el punto de integración para una API local. Las apps son acciones simuladas, no abren servicios externos.
 

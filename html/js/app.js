@@ -2,6 +2,7 @@
   "use strict";
 
   var STORAGE_KEY = "smart-panel-state-v1";
+  var WEATHER_STORAGE_KEY = "smart-panel-weather-v1";
   var WEATHER_CONFIG = {
     latitude: -34.6037,
     longitude: -58.3816,
@@ -13,6 +14,8 @@
   ];
   var state = readState();
   var cameraCredentials = {};
+  var weatherRetryTimer = null;
+  var weatherHasData = false;
 
   function readState() {
     var defaults = {
@@ -167,54 +170,133 @@
       status.textContent = "Sin ubicación";
       return;
     }
-    if (!window.fetch) {
-      status.textContent = "API no disponible";
+    if (!window.XMLHttpRequest) {
+      showWeatherError("Navegador no compatible");
       return;
     }
     var url = "https://api.open-meteo.com/v1/forecast?latitude=" + WEATHER_CONFIG.latitude +
       "&longitude=" + WEATHER_CONFIG.longitude +
-      "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m" +
-      "&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto";
-    status.textContent = "Actualizando";
-    window.fetch(url).then(function (response) {
-      if (!response.ok) { throw new Error("Weather request failed"); }
-      return response.json();
-    }).then(function (data) {
-      var current = data.current;
-      var daily = data.daily;
-      var summary = weatherDescription(current.weather_code);
-      byId("weather-temperature").textContent = Math.round(current.temperature_2m) + "°";
-      byId("weather-description").textContent = summary[0];
-      byId("weather-symbol").textContent = summary[1];
-      byId("weather-high").textContent = Math.round(daily.temperature_2m_max[0]) + "°";
-      byId("weather-low").textContent = Math.round(daily.temperature_2m_min[0]) + "°";
-      status.textContent = "Actualizado";
-      renderForecast(daily, data);
-    }).catch(function () {
-      status.textContent = "Sin conexión";
-      byId("weather-description").textContent = "No se pudo actualizar";
-    });
+      "&current=temperature_2m,weather_code" +
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=7&timezone=auto";
+    var request = new XMLHttpRequest();
+    var finished = false;
+    status.textContent = "Consultando (máx. 12 s)";
+    byId("weather-refresh").disabled = true;
+
+    function fail(message) {
+      if (finished) { return; }
+      finished = true;
+      byId("weather-refresh").disabled = false;
+      showWeatherError(message);
+      scheduleWeatherRetry();
+    }
+
+    request.open("GET", url, true);
+    request.timeout = 12000;
+    request.onreadystatechange = function () {
+      if (request.readyState !== 4 || finished) { return; }
+      if (request.status < 200 || request.status >= 300) {
+        fail(request.status ? "Error HTTP " + request.status : "Sin respuesta de red/CORS");
+        return;
+      }
+      var data;
+      try {
+        data = JSON.parse(request.responseText);
+      } catch (error) {
+        fail("Respuesta inválida de Open-Meteo");
+        return;
+      }
+      if (!data.current || !data.daily || !data.daily.time || data.daily.time.length < 7) {
+        fail(data.reason || "Open-Meteo no devolvió 7 días");
+        return;
+      }
+      finished = true;
+      applyWeatherData(data, "Actualizado");
+      try {
+        window.localStorage.setItem(WEATHER_STORAGE_KEY, JSON.stringify(data));
+      } catch (error) {
+        // The live weather display does not depend on local storage.
+      }
+      if (weatherRetryTimer) {
+        window.clearTimeout(weatherRetryTimer);
+        weatherRetryTimer = null;
+      }
+      byId("weather-refresh").disabled = false;
+    };
+    request.onerror = function () { fail("Error de red o CORS"); };
+    request.ontimeout = function () { fail("Tiempo agotado (12 s)"); };
+    request.onabort = function () { fail("Solicitud cancelada"); };
+    try {
+      request.send(null);
+    } catch (error) {
+      fail("No se pudo iniciar la solicitud");
+    }
   }
 
-  function renderForecast(daily, data) {
+  function showWeatherError(message) {
+    byId("weather-refresh").disabled = false;
+    byId("weather-status").textContent = message;
+    if (!weatherHasData) {
+      byId("weather-description").textContent = "Comprueba la conexión a Internet";
+      byId("forecast-list").innerHTML = "";
+      byId("forecast-list").appendChild(createTextElement("div", "forecast-placeholder", "No se pudo conectar con Open-Meteo. Pulsa ↻ para volver a intentar."));
+    } else {
+      byId("weather-description").textContent = "Últimos datos guardados";
+    }
+  }
+
+  function scheduleWeatherRetry() {
+    if (weatherRetryTimer) { return; }
+    weatherRetryTimer = window.setTimeout(function () {
+      weatherRetryTimer = null;
+      loadWeather();
+    }, 2 * 60 * 1000);
+  }
+
+  function applyWeatherData(data, statusText) {
+    var current = data.current;
+    var daily = data.daily;
+    var summary = weatherDescription(current.weather_code);
+    weatherHasData = true;
+    byId("weather-temperature").textContent = Math.round(current.temperature_2m) + "°";
+    byId("weather-description").textContent = summary[0];
+    byId("weather-symbol").textContent = summary[1];
+    byId("weather-high").textContent = Math.round(daily.temperature_2m_max[0]) + "°";
+    byId("weather-low").textContent = Math.round(daily.temperature_2m_min[0]) + "°";
+    byId("weather-status").textContent = statusText;
+    renderForecast(daily, current);
+  }
+
+  function loadCachedWeather() {
+    try {
+      var cached = window.localStorage.getItem(WEATHER_STORAGE_KEY);
+      if (cached) {
+        var data = JSON.parse(cached);
+        if (data.current && data.daily && data.daily.time && data.daily.time.length >= 7) {
+          applyWeatherData(data, "Datos guardados");
+        }
+      }
+    } catch (error) {
+      // Ignore invalid or unavailable cached weather.
+    }
+  }
+
+  function renderForecast(daily, current) {
     var list = byId("forecast-list");
-    var item = document.createElement("div");
-    var summary = weatherDescription(daily.weather_code[0]);
-    item.className = "forecast-item";
-    item.innerHTML = "<span class=\"forecast-time\">Hoy</span><span class=\"forecast-icon\" aria-hidden=\"true\"></span><span class=\"forecast-temperature\"></span>";
-    item.querySelector(".forecast-icon").textContent = summary[1];
-    item.querySelector(".forecast-temperature").textContent = Math.round(daily.temperature_2m_max[0]) + "° / " + Math.round(daily.temperature_2m_min[0]) + "°";
-    list.innerHTML = "";
-    list.appendChild(item);
-    if (data.current && data.current.time) {
-      var timeItem = document.createElement("div");
-      timeItem.className = "forecast-item";
-      timeItem.innerHTML = "<span class=\"forecast-time\"></span><span class=\"forecast-icon\" aria-hidden=\"true\">◷</span><span class=\"forecast-temperature\"></span>";
-      timeItem.querySelector(".forecast-time").textContent = "Ahora";
-      timeItem.querySelector(".forecast-temperature").textContent = Math.round(data.current.temperature_2m) + "°";
-      list.appendChild(timeItem);
-      timeItem.setAttribute("aria-label", "Temperatura actual " + Math.round(data.current.temperature_2m) + " grados");
-      item.setAttribute("aria-label", "Pronóstico de hoy, " + summary[0] + ", máxima " + Math.round(daily.temperature_2m_max[0]) + " grados");
+    var index;
+    while (list.firstChild) { list.removeChild(list.firstChild); }
+    for (index = 0; index < 7; index += 1) {
+      var date = new Date(daily.time[index] + "T12:00:00");
+      var dayName = index === 0 ? "Hoy" : date.toLocaleDateString("es-AR", { weekday: "short" });
+      var summary = weatherDescription(daily.weather_code[index]);
+      var item = document.createElement("div");
+      item.className = "forecast-item";
+      item.appendChild(createTextElement("span", "forecast-time", dayName));
+      item.appendChild(createTextElement("span", "forecast-icon", summary[1]));
+      item.lastChild.setAttribute("aria-hidden", "true");
+      item.appendChild(createTextElement("span", "forecast-temperature", Math.round(daily.temperature_2m_max[index]) + "° / " + Math.round(daily.temperature_2m_min[index]) + "°"));
+      item.setAttribute("aria-label", dayName + ": " + summary[0] + ", máxima " + Math.round(daily.temperature_2m_max[index]) + " grados, mínima " + Math.round(daily.temperature_2m_min[index]) + " grados");
+      list.appendChild(item);
     }
   }
 
@@ -569,6 +651,8 @@
     renderMedia();
     updateClock();
     window.setInterval(updateClock, 1000);
+    loadCachedWeather();
+    byId("weather-refresh").addEventListener("click", loadWeather);
     loadWeather();
     window.setInterval(loadWeather, 30 * 60 * 1000);
   }
