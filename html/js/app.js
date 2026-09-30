@@ -11,7 +11,7 @@
   var TV_CONFIG = {
     endpoint: "/api/tvs",
     refreshMs: 30000,
-    timeoutMs: 5000
+    timeoutMs: 15000
   };
   var TV_DEVICES = [
     { id: "tv-principal", name: "TV principal", room: "Living", model: "Smart TV" },
@@ -83,6 +83,13 @@
 
   function byId(id) {
     return document.getElementById(id);
+  }
+
+  function localApiUrl(path) {
+    if (window.location.protocol === "file:") {
+      return "http://localhost:5000" + path;
+    }
+    return window.location.protocol + "//" + window.location.hostname + ":5000" + path;
   }
 
   function initializeTabs() {
@@ -181,10 +188,7 @@
       showWeatherError("Navegador no compatible");
       return;
     }
-    var url = "https://api.open-meteo.com/v1/forecast?latitude=" + WEATHER_CONFIG.latitude +
-      "&longitude=" + WEATHER_CONFIG.longitude +
-      "&current=temperature_2m,weather_code" +
-      "&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=7&timezone=auto";
+    var url = localApiUrl("/api/weather?latitude=" + WEATHER_CONFIG.latitude + "&longitude=" + WEATHER_CONFIG.longitude);
     var request = new XMLHttpRequest();
     var finished = false;
     status.textContent = "Consultando (máx. 12 s)";
@@ -203,7 +207,14 @@
     request.onreadystatechange = function () {
       if (request.readyState !== 4 || finished) { return; }
       if (request.status < 200 || request.status >= 300) {
-        fail(request.status ? "Error HTTP " + request.status : "Sin respuesta de red/CORS");
+        var errorMessage = request.status ? "Error HTTP " + request.status : "Sin respuesta de red/CORS";
+        try {
+          var errorPayload = JSON.parse(request.responseText);
+          if (errorPayload.detail) { errorMessage += ": " + errorPayload.detail; }
+        } catch (error) {
+          // Keep the HTTP status when the server response is not JSON.
+        }
+        fail(errorMessage);
         return;
       }
       var data;
@@ -326,7 +337,7 @@
     var request = new XMLHttpRequest();
     var finished = false;
     byId("tv-refresh").disabled = true;
-    request.open("GET", TV_CONFIG.endpoint, true);
+    request.open("GET", localApiUrl(TV_CONFIG.endpoint), true);
     request.timeout = TV_CONFIG.timeoutMs;
     request.onreadystatechange = function () {
       if (request.readyState !== 4 || finished) { return; }
@@ -363,6 +374,7 @@
           room: device.room || device.location || "Ubicación no indicada",
           model: device.model || device.brand || "TV",
           poweredOn: typeof device.poweredOn === "boolean" ? device.poweredOn : (device.state === "on" ? true : (device.state === "off" ? false : null)),
+          online: device.online === true,
           volume: typeof device.volume === "number" ? Math.max(0, Math.min(100, device.volume)) : null,
           muted: typeof device.muted === "boolean" ? device.muted : null
         };
@@ -416,7 +428,7 @@
       return;
     }
     var request = new XMLHttpRequest();
-    request.open("POST", TV_CONFIG.endpoint + "/" + encodeURIComponent(tv.id) + "/command", true);
+    request.open("POST", localApiUrl(TV_CONFIG.endpoint + "/" + encodeURIComponent(tv.id) + "/command"), true);
     request.timeout = TV_CONFIG.timeoutMs;
     request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
     request.onreadystatechange = function () {
@@ -479,7 +491,7 @@
           power.textContent = "Apagada";
           power.classList.add("is-off");
         } else {
-          power.textContent = tvApiAvailable ? "Estado no reportado" : "Sin conexión real";
+          power.textContent = tv.online ? "En red · encendido desconocido" : (tvApiAvailable ? "Estado no reportado" : "Sin conexión real");
           power.classList.add("is-unknown");
         }
         copy.appendChild(name);
@@ -509,7 +521,7 @@
     if (selected) {
       byId("selected-tv-name").textContent = selected.name;
       byId("selected-tv-location").textContent = selected.room + " · " + selected.model;
-      var powerText = selected.poweredOn === true ? "Encendida" : (selected.poweredOn === false ? "Apagada" : (tvApiAvailable ? "Estado no reportado" : "Demo · API no conectada"));
+      var powerText = selected.poweredOn === true ? "Encendida" : (selected.poweredOn === false ? "Apagada" : (selected.online ? "En red · encendido desconocido" : (tvApiAvailable ? "Estado no reportado" : "Demo · API no conectada")));
       byId("selected-tv-power").textContent = powerText;
       byId("selected-tv-dot").classList.toggle("is-off", selected.poweredOn === false);
       byId("selected-tv-dot").classList.toggle("is-unknown", selected.poweredOn !== true && selected.poweredOn !== false);
