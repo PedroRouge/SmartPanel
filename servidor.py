@@ -5,12 +5,14 @@ from ipaddress import IPv4Network, ip_network
 from urllib.error import URLError
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 from urllib.request import Request, urlopen
+import base64
 import hashlib
 import hmac
 import xml.etree.ElementTree as ET
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import socket
 import sqlite3
@@ -39,12 +41,12 @@ except ImportError:
 
 
 API_PORT = int(os.environ.get("SMART_PANEL_API_PORT", "5000"))
-API_VERSION = "2026.09.30.11"
+API_VERSION = "2026.09.30.12"
 API_DATA_DIR = Path(os.environ.get("SMART_PANEL_DATA_DIR", str(Path.home() / ".smart-panel")))
-API_PASSWORD_FILE = Path(os.environ.get("SMART_PANEL_API_PASSWORD_FILE", str(API_DATA_DIR / "api_password.txt")))
+API_USERS_FILE = Path(os.environ.get("SMART_PANEL_USERS_FILE", str(API_DATA_DIR / "users.json")))
+LEGACY_API_PASSWORD_FILE = Path(os.environ.get("SMART_PANEL_API_PASSWORD_FILE", str(API_DATA_DIR / "api_password.txt")))
 API_SIGNING_KEY_FILE = API_DATA_DIR / "session_signing_key"
 API_SESSION_TTL = 12 * 60 * 60
-API_PASSWORD_FROM_ENV = bool(os.environ.get("SMART_PANEL_API_PASSWORD", "").strip())
 EVENTS_DB_PATH = Path(os.environ.get("SMART_PANEL_EVENTS_DB", str(API_DATA_DIR / "events.sqlite3")))
 TV_SCAN_CIDR = os.environ.get("TV_SCAN_CIDR", "").strip()
 TV_SCAN_INTERVAL = 15
@@ -65,6 +67,11 @@ _scan_cache = {"time": 0, "devices": []}
 _scan_lock = threading.Lock()
 _active_sessions = {}
 _active_sessions_lock = threading.Lock()
+_user_store_lock = threading.RLock()
+_login_failures = {}
+_login_failures_lock = threading.Lock()
+LOGIN_FAILURE_WINDOW = 15 * 60
+MAX_LOGIN_FAILURES = 6
 
 
 def _load_or_create_secret(path, length):
@@ -82,10 +89,118 @@ def _load_or_create_secret(path, length):
     return secret
 
 
-API_PASSWORD = os.environ.get("SMART_PANEL_API_PASSWORD", "").strip() or _load_or_create_secret(API_PASSWORD_FILE, 32)
-if len(API_PASSWORD) < 16:
-    raise RuntimeError("SMART_PANEL_API_PASSWORD debe tener al menos 16 caracteres")
 API_SIGNING_KEY = _load_or_create_secret(API_SIGNING_KEY_FILE, 48).encode("utf-8")
+
+
+def normalize_username(username):
+    normalized = str(username or "").strip().lower()
+    if len(normalized) < 3 or len(normalized) > 32 or not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", normalized):
+        raise ValueError("El usuario debe tener 3-32 caracteres: letras, números, punto, guion o guion bajo")
+    return normalized
+
+
+def hash_password(password):
+    if not isinstance(password, str) or len(password) < 14 or len(password) > 128:
+        raise ValueError("La contraseña debe tener entre 14 y 128 caracteres")
+    salt = secrets.token_bytes(16)
+    digest = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2 ** 14, r=8, p=1, maxmem=64 * 1024 * 1024, dklen=32)
+    return {
+        "salt": base64.urlsafe_b64encode(salt).decode("ascii"),
+        "hash": base64.urlsafe_b64encode(digest).decode("ascii"),
+        "algorithm": "scrypt"
+    }
+
+
+def load_user_records():
+    if not API_USERS_FILE.is_file():
+        return {}
+    try:
+        data = json.loads(API_USERS_FILE.read_text(encoding="utf-8"))
+        users = data.get("users", {}) if isinstance(data, dict) else None
+        if not isinstance(users, dict):
+            raise ValueError("users debe ser un objeto")
+        return users
+    except (OSError, json.JSONDecodeError, ValueError) as error:
+        raise RuntimeError("No se pudo leer el almacén privado de usuarios: {}".format(error)) from error
+
+
+def save_user_records(users):
+    API_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        API_DATA_DIR.chmod(0o700)
+    except OSError:
+        pass
+    temporary_path = API_USERS_FILE.with_name(API_USERS_FILE.name + "." + secrets.token_hex(6) + ".tmp")
+    try:
+        temporary_path.write_text(json.dumps({"users": users}, separators=(",", ":")) + "\n", encoding="utf-8")
+        try:
+            temporary_path.chmod(0o600)
+        except OSError:
+            pass
+        os.replace(str(temporary_path), str(API_USERS_FILE))
+        try:
+            API_USERS_FILE.chmod(0o600)
+        except OSError:
+            pass
+    finally:
+        try:
+            temporary_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def set_user_credentials(username, password):
+    normalized = normalize_username(username)
+    record = hash_password(password)
+    with _user_store_lock:
+        save_user_records({normalized: record})
+    with _active_sessions_lock:
+        _active_sessions.clear()
+
+    try:
+        LEGACY_API_PASSWORD_FILE.unlink()
+    except FileNotFoundError:
+        pass
+    return normalized
+
+
+def verify_user_credentials(username, password):
+    try:
+        normalized = normalize_username(username)
+    except ValueError:
+        normalized = ""
+    if not isinstance(password, str) or len(password) > 128:
+        return False
+    with _user_store_lock:
+        record = load_user_records().get(normalized)
+    if not isinstance(record, dict) or record.get("algorithm") != "scrypt":
+        hashlib.scrypt(password.encode("utf-8"), salt=b"SmartPanelDummySalt", n=2 ** 14, r=8, p=1, maxmem=64 * 1024 * 1024, dklen=32)
+        return False
+    try:
+        salt = base64.urlsafe_b64decode(record["salt"].encode("ascii"))
+        expected = base64.urlsafe_b64decode(record["hash"].encode("ascii"))
+        actual = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2 ** 14, r=8, p=1, maxmem=64 * 1024 * 1024, dklen=32)
+        return hmac.compare_digest(actual, expected)
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def login_is_rate_limited(client_key):
+    now = time.time()
+    with _login_failures_lock:
+        attempts = [timestamp for timestamp in _login_failures.get(client_key, []) if now - timestamp < LOGIN_FAILURE_WINDOW]
+        _login_failures[client_key] = attempts
+        return len(attempts) >= MAX_LOGIN_FAILURES
+
+
+def record_login_failure(client_key):
+    with _login_failures_lock:
+        _login_failures.setdefault(client_key, []).append(time.time())
+
+
+def clear_login_failures(client_key):
+    with _login_failures_lock:
+        _login_failures.pop(client_key, None)
 
 
 def create_session_token():
@@ -489,15 +604,22 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
         return False
 
     def login(self):
+        client_key = self.headers.get("CF-Connecting-IP", self.client_address[0])
+        if login_is_rate_limited(client_key):
+            self.send_json(429, {"error": "Demasiados intentos. Espera 15 minutos."})
+            return
         try:
             payload = self.read_json_body()
         except ValueError as error:
             self.send_json(400, {"error": str(error)})
             return
+        username = payload.get("username")
         password = payload.get("password")
-        if not isinstance(password, str) or not hmac.compare_digest(password.encode("utf-8"), API_PASSWORD.encode("utf-8")):
-            self.send_json(401, {"error": "Contraseña incorrecta"})
+        if not verify_user_credentials(username, password):
+            record_login_failure(client_key)
+            self.send_json(401, {"error": "Usuario o contraseña incorrectos"})
             return
+        clear_login_failures(client_key)
         self.send_json(200, {"token": create_session_token(), "expires_in": API_SESSION_TTL})
 
     def list_events(self, query):
@@ -792,14 +914,14 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
 
 
 def run(port=API_PORT):
+    users = load_user_records()
+    if not users:
+        raise RuntimeError("No hay usuarios configurados. Ejecuta 'python manage_users.py set' antes de iniciar la API.")
     initialize_events_db()
     server = ThreadingHTTPServer(("0.0.0.0", port), SmartPanelHandler)
     print("Smart Panel API en 0.0.0.0:{}".format(port))
     print("Subred de escaneo: {}".format(TV_SCAN_CIDR or "automática (/24 del servidor)"))
-    if API_PASSWORD_FROM_ENV:
-        print("Autenticación API: SMART_PANEL_API_PASSWORD")
-    else:
-        print("Autenticación API: clave privada en {}".format(API_PASSWORD_FILE))
+    print("Usuarios persistentes en {}".format(API_USERS_FILE))
     server.serve_forever()
 
 

@@ -1,10 +1,11 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "27";
+  var APP_BUILD_VERSION = "28";
   var STORAGE_KEY = "smart-panel-state-v1";
   var API_BASE_URL = (window.SMART_PANEL_API_URL || "https://open-cost-levy-ignored.trycloudflare.com").replace(/\/+$/, "");
   var API_TOKEN_KEY = "smart-panel-api-session-v1";
+  var API_USERNAME_KEY = "smart-panel-api-username-v1";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
     longitude: -60.57469,
@@ -122,7 +123,7 @@
     remoteDataInitialized = false;
     apiToken = null;
     try { window.sessionStorage.removeItem(API_TOKEN_KEY); } catch (error) { }
-    showAuthGate("La sesión venció. Vuelve a ingresar la clave API.");
+    showAuthGate("La sesión venció. Vuelve a iniciar sesión.");
     return true;
   }
 
@@ -131,7 +132,8 @@
     byId("api-logout").hidden = true;
     byId("auth-error").textContent = message || "";
     byId("auth-error").hidden = !message;
-    if (!byId("auth-password").value) { byId("auth-password").focus(); }
+    if (!byId("auth-username").value) { byId("auth-username").focus(); }
+    else if (!byId("auth-password").value) { byId("auth-password").focus(); }
   }
 
   function acceptSession(token) {
@@ -171,6 +173,7 @@
   }
 
   function initializeAuthentication() {
+    try { byId("auth-username").value = window.localStorage.getItem(API_USERNAME_KEY) || ""; } catch (error) { }
     byId("auth-form").addEventListener("submit", function (event) {
       event.preventDefault();
       var submit = byId("auth-submit");
@@ -186,6 +189,7 @@
         var result = {};
         try { result = JSON.parse(request.responseText); } catch (error) { }
         if (request.status >= 200 && request.status < 300 && result.token) {
+          try { window.localStorage.setItem(API_USERNAME_KEY, byId("auth-username").value.trim()); } catch (error) { }
           acceptSession(result.token);
         } else {
           byId("auth-error").textContent = result.error || "No se pudo iniciar sesión.";
@@ -198,7 +202,12 @@
         byId("auth-error").hidden = false;
       };
       request.ontimeout = request.onerror;
-      try { request.send(JSON.stringify({ password: byId("auth-password").value })); } catch (error) { request.onerror(); }
+      try {
+        request.send(JSON.stringify({
+          username: byId("auth-username").value,
+          password: byId("auth-password").value
+        }));
+      } catch (error) { request.onerror(); }
     });
     byId("api-logout").addEventListener("click", function () {
       var request = new XMLHttpRequest();
@@ -270,7 +279,7 @@
       }
       hasController = true;
     });
-    window.navigator.serviceWorker.register("/service-worker.js?v=27").then(function (registration) {
+    window.navigator.serviceWorker.register("/service-worker.js?v=28").then(function (registration) {
       registration.update().catch(function () {});
     }).catch(function () {});
   }
