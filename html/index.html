@@ -9,11 +9,16 @@
   <meta name="theme-color" content="#0b0f19">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="smart-panel-version" content="25">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Smart Panel">
+  <meta name="smart-panel-version" content="26">
   <title>Smart Panel</title>
-  <link rel="stylesheet" href="css/styles.css?v=25">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css?v=26">
   <script>window.SMART_PANEL_API_URL = window.SMART_PANEL_API_URL || "https://open-cost-levy-ignored.trycloudflare.com";</script>
-  <script src="js/app.js?v=25" defer></script>
+  <script src="js/app.js?v=26" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -22,7 +27,8 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v25</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v26</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
+      <button class="pwa-install-button" id="pwa-install" type="button" aria-label="Instalar Smart Panel" title="Instalar Smart Panel" hidden><span aria-hidden="true">⇩</span><span>Instalar</span></button>
       <button class="api-logout" id="api-logout" type="button" hidden>Cerrar sesión</button>
     </header>
 
@@ -267,6 +273,15 @@
             <button class="primary-button" id="event-submit" type="submit">Guardar evento</button>
           </div>
         </form>
+      </section>
+    </div>
+
+    <div class="pwa-install-dialog" id="pwa-install-dialog" hidden>
+      <div class="pwa-install-backdrop" data-close-pwa-install></div>
+      <section class="pwa-install-content panel-surface" role="dialog" aria-modal="true" aria-labelledby="pwa-install-title">
+        <div class="section-heading"><div><p class="eyebrow">SMART PANEL</p><h2 id="pwa-install-title">Añadir a inicio</h2></div><button class="modal-close" type="button" aria-label="Cerrar" data-close-pwa-install>×</button></div>
+        <p>En Safari, toca <strong>Compartir</strong> y elige <strong>Añadir a pantalla de inicio</strong>. Abre siempre la app desde ese icono para recibir las actualizaciones.</p>
+        <button class="primary-button pwa-install-close" type="button" data-close-pwa-install>Entendido</button>
       </section>
     </div>
 

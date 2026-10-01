@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "25";
+  var APP_BUILD_VERSION = "26";
   var STORAGE_KEY = "smart-panel-state-v1";
   var API_BASE_URL = (window.SMART_PANEL_API_URL || "https://open-cost-levy-ignored.trycloudflare.com").replace(/\/+$/, "");
   var API_TOKEN_KEY = "smart-panel-api-session-v1";
@@ -38,6 +38,8 @@
   var calendarEvents = [];
   var eventEditingId = null;
   var lastTvRefresh = null;
+  var deferredInstallPrompt = null;
+  var pwaRefreshing = false;
 
   function readState() {
     var defaults = {
@@ -226,6 +228,49 @@
     byId("frontend-version").textContent = "HTML v" + loadedVersion;
     byId("script-build-version").textContent = "JS v" + APP_BUILD_VERSION;
     byId("backend-version").textContent = "API · inicia sesión";
+  }
+
+  function initializePWA() {
+    var installButton = byId("pwa-install");
+    var isStandalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+    installButton.hidden = isStandalone;
+    window.addEventListener("beforeinstallprompt", function (event) {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      installButton.hidden = false;
+    });
+    window.addEventListener("appinstalled", function () {
+      deferredInstallPrompt = null;
+      installButton.hidden = true;
+    });
+    installButton.addEventListener("click", function () {
+      if (!deferredInstallPrompt) {
+        byId("pwa-install-dialog").hidden = false;
+        return;
+      }
+      deferredInstallPrompt.prompt();
+      deferredInstallPrompt.userChoice.then(function () {
+        deferredInstallPrompt = null;
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-close-pwa-install]"), function (button) {
+      button.addEventListener("click", function () { byId("pwa-install-dialog").hidden = true; });
+    });
+    byId("pwa-install-dialog").addEventListener("keydown", function (event) {
+      if (event.key === "Escape" || event.keyCode === 27) { byId("pwa-install-dialog").hidden = true; }
+    });
+    if (!("serviceWorker" in window.navigator) || window.location.protocol !== "https:") { return; }
+    var hasController = !!window.navigator.serviceWorker.controller;
+    window.navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (hasController && !pwaRefreshing) {
+        pwaRefreshing = true;
+        window.location.reload();
+      }
+      hasController = true;
+    });
+    window.navigator.serviceWorker.register("/service-worker.js?v=26").then(function (registration) {
+      registration.update().catch(function () {});
+    }).catch(function () {});
   }
 
   function checkBackendVersion() {
@@ -1482,6 +1527,7 @@
   function initialize() {
     initializeTabs();
     initializeVersionReader();
+    initializePWA();
     initializeAuthentication();
     initializeControls();
     initializeCameraForm();

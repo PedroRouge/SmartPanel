@@ -19,6 +19,10 @@ html/
 
 Vercel sirve solamente el contenido estático de `html/`; `vercel.json` no define funciones ni reescrituras de API. También se puede configurar el `root` de Nginx para apuntar a esta carpeta.
 
+## PWA en iPad
+
+En Safari abre Smart Panel, toca Compartir y elige “Añadir a pantalla de inicio”. El manifiesto y el icono Apple permiten abrirla como app. El Service Worker instala el shell estático versionado, comprueba actualizaciones al abrir la app y recarga cuando activa una versión nueva. No almacena respuestas `/api`, sesiones ni eventos. En Safari 12, cierra y vuelve a abrir la app desde el icono para aplicar una actualización desplegada; si el icono se creó antes de esta versión, elimínalo y añádelo de nuevo una sola vez.
+
 La API corre por separado en la notebook con `python servidor.py` y escucha en `0.0.0.0:5000`. Instala sus paquetes con `python -m pip install -r requirements.txt`. El frontend apunta al Quick Tunnel actual `https://open-cost-levy-ignored.trycloudflare.com`. El túnel temporal debe seguir activo y dirigir tráfico HTTPS al puerto `5000` de esta notebook; su URL puede cambiar al reiniciarlo.
 
 ## Clima, TVs y cámaras

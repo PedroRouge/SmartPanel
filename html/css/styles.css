@@ -34,6 +34,9 @@ a { color: inherit; text-decoration: none; }
 .version-reader { max-width: 58%; display: inline-flex; align-items: center; overflow: hidden; color: var(--muted); font-size: 10px; white-space: nowrap; text-overflow: ellipsis; }
 .version-divider { margin: 0 6px; color: var(--quiet); }
 .version-reader .status-dot { margin-right: 7px; }
+.pwa-install-button { min-height: 40px; margin-left: 10px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid rgba(102, 214, 195, .28); border-radius: 8px; background: var(--teal-soft); color: var(--teal); font-size: 11px; font-weight: 650; white-space: nowrap; cursor: pointer; }
+.pwa-install-button > span:first-child { font-size: 17px; }
+.pwa-install-button[hidden] { display: none; }
 .status-dot.is-checking { background: var(--amber); box-shadow: none; }
 .status-dot.is-error { background: var(--red); box-shadow: none; }
 .status-dot.is-online { background: var(--teal); }
@@ -319,6 +322,12 @@ h3 { margin-bottom: 5px; font-size: 14px; font-weight: 620; }
 .auth-gate .form-field input { font-size: 16px; }
 .auth-gate:before { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: rgba(4, 7, 12, .84); content: ""; }
 .event-modal-backdrop { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: rgba(4, 7, 12, .84); }
+.pwa-install-dialog { position: fixed; z-index: 35; top: 0; right: 0; bottom: 0; left: 0; padding: 16px; display: flex; align-items: center; justify-content: center; }
+.pwa-install-backdrop { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: rgba(4, 7, 12, .84); }
+.pwa-install-content { position: relative; z-index: 1; width: min(100%, 420px); padding: 22px; }
+.pwa-install-content > p { margin: 16px 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.pwa-install-content strong { color: var(--text); }
+.pwa-install-close { width: 100%; }
 .api-logout { min-height: 34px; margin-left: 10px; padding: 0 9px; border: 1px solid var(--surface-border); border-radius: 7px; background: transparent; color: var(--muted); font-size: 10px; cursor: pointer; }
 .app-footer { min-height: 42px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(174, 194, 220, .08); color: var(--quiet); font-size: 9px; font-weight: 700; letter-spacing: .8px; }
 
@@ -358,8 +367,10 @@ h3 { margin-bottom: 5px; font-size: 14px; font-weight: 620; }
 }
 
 @media (max-width: 440px) {
-  .version-reader { max-width: 48%; font-size: 9px; }
+  .version-reader { max-width: 42%; font-size: 8px; }
   .api-logout { margin-left: 6px; padding: 0 7px; }
+  .pwa-install-button { width: 40px; flex: 0 0 40px; margin-left: 6px; padding: 0; }
+  .pwa-install-button > span:last-child { display: none; }
   .agenda-page-heading { align-items: flex-start; flex-direction: column; }
   .calendar-panel { padding: 12px; }
   .calendar-toolbar { grid-template-columns: 38px minmax(0, 1fr) 38px auto; gap: 5px; }
