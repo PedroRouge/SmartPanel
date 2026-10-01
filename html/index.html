@@ -9,11 +9,11 @@
   <meta name="theme-color" content="#0b0f19">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="smart-panel-version" content="23">
+  <meta name="smart-panel-version" content="24">
   <title>Smart Panel</title>
-  <link rel="stylesheet" href="css/styles.css?v=23">
-  <script>window.SMART_PANEL_API_URL = window.SMART_PANEL_API_URL || "https://munich-princeton-designated-aka.trycloudflare.com";</script>
-  <script src="js/app.js?v=23" defer></script>
+  <link rel="stylesheet" href="css/styles.css?v=24">
+  <script>window.SMART_PANEL_API_URL = window.SMART_PANEL_API_URL || "https://open-cost-levy-ignored.trycloudflare.com";</script>
+  <script src="js/app.js?v=24" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -22,7 +22,7 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v23</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v24</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
       <button class="api-logout" id="api-logout" type="button" hidden>Cerrar sesión</button>
     </header>
 
@@ -94,15 +94,15 @@
               <div class="forecast-placeholder">Consultando clima y pronóstico semanal...</div>
             </div>
           </section>
+          <section class="today-agenda panel-surface" aria-labelledby="today-agenda-heading">
+            <div class="section-heading">
+              <div><p class="eyebrow">AGENDA</p><h2 id="today-agenda-heading">Hoy</h2></div>
+              <button class="secondary-button" type="button" data-open-agenda>Ver agenda</button>
+            </div>
+            <p class="agenda-status" id="today-agenda-status">Inicia sesión para ver tus eventos.</p>
+            <div class="event-list" id="today-events"></div>
+          </section>
         </div>
-        <section class="today-agenda panel-surface" aria-labelledby="today-agenda-heading">
-          <div class="section-heading">
-            <div><p class="eyebrow">AGENDA</p><h2 id="today-agenda-heading">Hoy</h2></div>
-            <button class="secondary-button" type="button" data-open-agenda>Ver agenda</button>
-          </div>
-          <p class="agenda-status" id="today-agenda-status">Inicia sesión para ver tus eventos.</p>
-          <div class="event-list" id="today-events"></div>
-        </section>
       </section>
 
       <section class="view" id="panel-agenda" role="tabpanel" aria-labelledby="tab-agenda" data-panel="agenda" hidden>

@@ -92,7 +92,7 @@ h3 { margin-bottom: 5px; font-size: 14px; font-weight: 620; }
 .forecast-temperature { font-size: 13px; font-weight: 600; }
 .forecast-rain { margin-top: 9px; padding-top: 7px; border-top: 1px solid rgba(115, 188, 224, .12); color: #73bce0; font-size: 10px; white-space: nowrap; }
 
-.today-agenda { margin-top: 13px; padding: 20px; }
+.today-agenda { min-width: 0; padding: 20px; }
 .today-agenda > .section-heading { margin-bottom: 10px; }
 .agenda-status { margin: 0 0 9px; color: var(--quiet); font-size: 11px; }
 .agenda-page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 15px; }
