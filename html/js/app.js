@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "24";
+  var APP_BUILD_VERSION = "25";
   var STORAGE_KEY = "smart-panel-state-v1";
   var API_BASE_URL = (window.SMART_PANEL_API_URL || "https://open-cost-levy-ignored.trycloudflare.com").replace(/\/+$/, "");
   var API_TOKEN_KEY = "smart-panel-api-session-v1";
