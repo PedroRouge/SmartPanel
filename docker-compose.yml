@@ -1,0 +1,20 @@
+services:
+  smart-panel-backend:
+    build: .
+    container_name: smart-panel-backend
+    restart: unless-stopped
+    # Use network_mode: host on Linux so that Android TV and Chromecast local discovery works
+    network_mode: host
+    environment:
+      - SMART_PANEL_API_PORT=5000
+      - SMART_PANEL_DATA_DIR=/data
+      - SMART_PANEL_ADMIN_USER=admin
+      # Puedes definir una contraseña fija aquí si deseas autoconfigurarla:
+      # - SMART_PANEL_ADMIN_PASSWORD=tu_clave_secreta
+      # - TV_SCAN_CIDR=192.168.1.0/24
+    volumes:
+      - smart-panel-data:/data
+
+volumes:
+  smart-panel-data:
+    name: smart-panel-data

@@ -23,13 +23,37 @@ Vercel sirve solamente el contenido estático de `html/`; `vercel.json` no defin
 
 En Safari abre Smart Panel, toca Compartir y elige “Añadir a pantalla de inicio”. El manifiesto y el icono Apple permiten abrirla como app. El Service Worker instala el shell estático versionado, comprueba actualizaciones al abrir la app y recarga cuando activa una versión nueva. No almacena respuestas `/api`, sesiones ni eventos. En Safari 12, cierra y vuelve a abrir la app desde el icono para aplicar una actualización desplegada; si el icono se creó antes de esta versión, elimínalo y añádelo de nuevo una sola vez.
 
-La API corre por separado en la notebook con `python servidor.py` y escucha en `0.0.0.0:5000`. Instala sus paquetes con `python -m pip install -r requirements.txt`. El frontend apunta al Quick Tunnel actual `https://open-cost-levy-ignored.trycloudflare.com`. El túnel temporal debe seguir activo y dirigir tráfico HTTPS al puerto `5000` de esta notebook; su URL puede cambiar al reiniciarlo.
+La API corre por separado en la notebook con `python servidor.py` (o mediante Docker con `docker compose up -d`) y escucha en `0.0.0.0:5000`. Instala sus paquetes con `python -m pip install -r requirements.txt`. El frontend apunta al Quick Tunnel actual `https://open-cost-levy-ignored.trycloudflare.com`. El túnel temporal debe seguir activo y dirigir tráfico HTTPS al puerto `5000` de esta notebook; su URL puede cambiar al reiniciarlo.
 
 ## Clima, TVs y cámaras
 
 El backend de Python sirve `/api/health`, `/api/tvs`, `/api/tvs/{id}/status`, `/api/tvs/{id}/command`, pairing, `/api/weather` y CRUD de `/api/events`.
 
-Al actualizar la notebook Linux, detén el servidor Python viejo, ejecuta `git pull origin main` y crea la cuenta una sola vez con `python3 manage_users.py set`. El comando pide usuario y contraseña dos veces, sin mostrar la contraseña; guarda únicamente un hash scrypt en `~/.smart-panel/users.json`, fuera del repositorio, y elimina la antigua clave API en texto plano. Luego inicia con `python3 servidor.py`; `cloudflared` puede seguir funcionando mientras reinicias el servidor. Para cambiar usuario/contraseña después, ejecuta `python3 manage_users.py set nuevo_usuario`; para listar usuarios, `python3 manage_users.py list`. Un `git pull` no modifica ni regenera estas cuentas. Ingresa el mismo usuario y contraseña en tus dispositivos. El token firmado dura 12 horas y “Cerrar sesión” lo revoca.
+### Autenticación con Usuario y Contraseña
+
+El sistema utiliza usuarios con contraseñas hasheadas mediante `scrypt`, almacenadas de forma segura fuera del repositorio en `~/.smart-panel/users.json` (o el volumen `/data` en Docker).
+
+- **Migración automática**: Si ya tenías una clave API en `api_password.txt`, al iniciar `servidor.py` se crea automáticamente el usuario `admin` con esa misma clave, sin interrumpir tu acceso.
+- **Crear o cambiar usuarios interactivamente**:
+  ```bash
+  python manage_users.py set [usuario]
+  ```
+- **Crear usuarios de forma no interactiva (o en scripts/Docker)**:
+  ```bash
+  python manage_users.py set admin --password "tu_contraseña_segura"
+  ```
+- **Listar o eliminar usuarios**:
+  ```bash
+  python manage_users.py list
+  python manage_users.py remove otro_usuario
+  ```
+- **Ejecución con Docker**:
+  ```bash
+  docker compose up -d --build
+  ```
+  Los datos persisten en el volumen `smart-panel-data`. Puedes configurar `SMART_PANEL_ADMIN_USER` y `SMART_PANEL_ADMIN_PASSWORD` en el archivo de entorno o compose.
+
+El token de sesión dura 12 horas y revocar la sesión borra el acceso de inmediato. Se incluye protección contra ataques de fuerza bruta (rate limiting tras varios intentos fallidos por IP).
 
 Como el frontend vive en Vercel y la API en la notebook, el navegador requiere conectividad al túnel y CORS permitido. `servidor.py` responde CORS para `GET`, `POST`, `PUT`, `DELETE`, `OPTIONS` y los encabezados `Authorization` y `Content-Type`. Para cambiar la URL, define `window.SMART_PANEL_API_URL` en `index.html` antes de cargar `js/app.js`. Vercel no expone automáticamente variables de entorno al JavaScript de una web estática; también puede inyectarse ese valor durante un build si luego se incorpora uno.
 
