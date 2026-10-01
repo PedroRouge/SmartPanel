@@ -11,6 +11,17 @@ except ImportError:
 
 
 REMOTE_CLIENT_NAME = "Smart Panel"
+REMOTE_KEY_CODES = {
+    "UP": "KEYCODE_DPAD_UP",
+    "DOWN": "KEYCODE_DPAD_DOWN",
+    "LEFT": "KEYCODE_DPAD_LEFT",
+    "RIGHT": "KEYCODE_DPAD_RIGHT",
+    "OK": "KEYCODE_DPAD_CENTER",
+    "BACK": "KEYCODE_BACK",
+    "HOME": "KEYCODE_HOME",
+    "MENU": "KEYCODE_MENU",
+    "PLAY_PAUSE": "KEYCODE_MEDIA_PLAY_PAUSE"
+}
 _pairing_sessions = {}
 _pairing_lock = threading.Lock()
 
@@ -180,3 +191,27 @@ def toggle_android_tv_power(host):
         return asyncio.run(_toggle_power(host))
     except InvalidAuth as error:
         raise RuntimeError("El emparejamiento Android TV venció; vuelve a ejecutar pair_android_tv.py.") from error
+
+
+async def _send_android_tv_key(host, key_code):
+    remote = create_remote(host)
+    try:
+        await remote.async_connect()
+        remote.send_key_command(key_code)
+        await asyncio.sleep(0.1)
+    finally:
+        remote.disconnect()
+
+
+def send_android_tv_key(host, key):
+    key_code = REMOTE_KEY_CODES.get(str(key).upper())
+    if not key_code:
+        raise ValueError("Tecla remota no permitida")
+    if not power_control_ready(host):
+        raise RuntimeError("Empareja este Android TV antes de usar el control remoto")
+    try:
+        asyncio.run(_send_android_tv_key(host, key_code))
+    except InvalidAuth as error:
+        raise RuntimeError("El emparejamiento Android TV venció; vuelve a emparejarlo.") from error
+    except (CannotConnect, ConnectionClosed, OSError, asyncio.TimeoutError) as error:
+        raise RuntimeError("No se pudo conectar con Android TV para enviar la tecla") from error

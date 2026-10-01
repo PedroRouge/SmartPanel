@@ -9,11 +9,11 @@
   <meta name="theme-color" content="#0b0f19">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="smart-panel-version" content="22">
+  <meta name="smart-panel-version" content="23">
   <title>Smart Panel</title>
-  <link rel="stylesheet" href="css/styles.css?v=22">
+  <link rel="stylesheet" href="css/styles.css?v=23">
   <script>window.SMART_PANEL_API_URL = window.SMART_PANEL_API_URL || "https://munich-princeton-designated-aka.trycloudflare.com";</script>
-  <script src="js/app.js?v=22" defer></script>
+  <script src="js/app.js?v=23" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -22,11 +22,13 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v22</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v23</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
+      <button class="api-logout" id="api-logout" type="button" hidden>Cerrar sesión</button>
     </header>
 
     <nav class="tab-bar" role="tablist" aria-label="Secciones del panel">
       <button class="tab-button is-active" type="button" role="tab" id="tab-inicio" aria-controls="panel-inicio" aria-selected="true" data-tab="inicio"><span aria-hidden="true">⌂</span> Inicio</button>
+      <button class="tab-button" type="button" role="tab" id="tab-agenda" aria-controls="panel-agenda" aria-selected="false" data-tab="agenda" tabindex="-1"><span aria-hidden="true">▦</span> Agenda</button>
       <button class="tab-button" type="button" role="tab" id="tab-multimedia" aria-controls="panel-multimedia" aria-selected="false" data-tab="multimedia" tabindex="-1"><span aria-hidden="true">▣</span> Multimedia</button>
       <button class="tab-button" type="button" role="tab" id="tab-hogar" aria-controls="panel-hogar" aria-selected="false" data-tab="hogar" tabindex="-1"><span aria-hidden="true">⌂</span> Hogar</button>
       <button class="tab-button" type="button" role="tab" id="tab-pileta" aria-controls="panel-pileta" aria-selected="false" data-tab="pileta" tabindex="-1"><span aria-hidden="true">≈</span> Pileta</button>
@@ -93,6 +95,41 @@
             </div>
           </section>
         </div>
+        <section class="today-agenda panel-surface" aria-labelledby="today-agenda-heading">
+          <div class="section-heading">
+            <div><p class="eyebrow">AGENDA</p><h2 id="today-agenda-heading">Hoy</h2></div>
+            <button class="secondary-button" type="button" data-open-agenda>Ver agenda</button>
+          </div>
+          <p class="agenda-status" id="today-agenda-status">Inicia sesión para ver tus eventos.</p>
+          <div class="event-list" id="today-events"></div>
+        </section>
+      </section>
+
+      <section class="view" id="panel-agenda" role="tabpanel" aria-labelledby="tab-agenda" data-panel="agenda" hidden>
+        <div class="page-heading agenda-page-heading">
+          <div><p class="eyebrow">PLANIFICACIÓN</p><h1>Agenda</h1><p>Eventos guardados en la notebook.</p></div>
+          <button class="primary-button" type="button" id="new-event-button"><span aria-hidden="true">＋</span> Nuevo evento</button>
+        </div>
+        <div class="agenda-layout">
+          <section class="calendar-panel panel-surface" aria-label="Calendario mensual">
+            <div class="calendar-toolbar">
+              <button class="calendar-nav" id="calendar-previous" type="button" aria-label="Mes anterior">‹</button>
+              <h2 id="calendar-month">Mes</h2>
+              <button class="calendar-nav" id="calendar-next" type="button" aria-label="Mes siguiente">›</button>
+              <button class="calendar-today" id="calendar-today" type="button">Hoy</button>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div>
+            <div class="calendar-grid" id="calendar-grid" role="grid" aria-label="Días del mes"></div>
+          </section>
+          <section class="agenda-day-panel" aria-labelledby="agenda-day-heading">
+            <div class="section-heading">
+              <div><p class="eyebrow">DÍA SELECCIONADO</p><h2 id="agenda-day-heading">Eventos</h2></div>
+              <button class="icon-button" id="new-event-for-day" type="button" aria-label="Crear evento para este día" title="Crear evento">＋</button>
+            </div>
+            <p class="agenda-status" id="agenda-day-status">Selecciona una fecha.</p>
+            <div class="event-list" id="agenda-day-events"></div>
+          </section>
+        </div>
       </section>
 
       <section class="view" id="panel-multimedia" role="tabpanel" aria-labelledby="tab-multimedia" data-panel="multimedia" hidden>
@@ -122,6 +159,21 @@
             </div>
             <p class="control-feedback" id="media-feedback" aria-live="polite">Volumen listo para controlar.</p>
           </div>
+          <section class="remote-control" aria-labelledby="remote-heading">
+            <div class="section-heading"><div><p class="eyebrow">NAVEGACIÓN</p><h3 id="remote-heading">Control remoto</h3></div></div>
+            <div class="remote-pad" role="group" aria-label="Navegación del televisor">
+              <button class="remote-key" type="button" data-remote-key="HOME" aria-label="Inicio" title="Inicio" disabled>⌂</button>
+              <button class="remote-key" type="button" data-remote-key="UP" aria-label="Arriba" title="Arriba" disabled>↑</button>
+              <button class="remote-key" type="button" data-remote-key="MENU" aria-label="Menú" title="Menú" disabled>⋯</button>
+              <button class="remote-key" type="button" data-remote-key="LEFT" aria-label="Izquierda" title="Izquierda" disabled>←</button>
+              <button class="remote-key remote-key-center" type="button" data-remote-key="OK" aria-label="Aceptar" title="Aceptar" disabled>OK</button>
+              <button class="remote-key" type="button" data-remote-key="RIGHT" aria-label="Derecha" title="Derecha" disabled>→</button>
+              <button class="remote-key" type="button" data-remote-key="BACK" aria-label="Volver" title="Volver" disabled>↶</button>
+              <button class="remote-key" type="button" data-remote-key="DOWN" aria-label="Abajo" title="Abajo" disabled>↓</button>
+              <button class="remote-key" type="button" data-remote-key="PLAY_PAUSE" aria-label="Reproducir o pausar" title="Reproducir o pausar" disabled>▶/Ⅱ</button>
+            </div>
+            <p class="remote-key-hint" id="remote-key-hint">Empareja este Android TV para habilitar la navegación.</p>
+          </section>
           <section class="media-apps" aria-labelledby="apps-heading">
             <div class="section-heading"><div><p class="eyebrow">ACCESOS DIRECTOS</p><h3 id="apps-heading">Abrir una app</h3></div></div>
             <div class="app-grid">
@@ -180,6 +232,43 @@
         <div class="camera-grid" id="camera-grid"></div>
       </section>
     </main>
+
+    <div class="auth-gate" id="auth-gate" hidden>
+      <section class="auth-dialog panel-surface" role="dialog" aria-modal="true" aria-labelledby="auth-heading">
+        <div class="auth-mark" aria-hidden="true">S</div>
+        <p class="eyebrow">SESIÓN SEGURA</p>
+        <h2 id="auth-heading">Conectar con Smart Panel</h2>
+        <p class="auth-copy">Ingresa la clave API configurada en la notebook.</p>
+        <form id="auth-form">
+          <label class="form-field"><span>Clave API</span><input id="auth-password" name="password" type="password" autocomplete="current-password" required></label>
+          <p class="form-error" id="auth-error" role="alert" hidden></p>
+          <button class="primary-button auth-submit" id="auth-submit" type="submit">Iniciar sesión</button>
+        </form>
+      </section>
+    </div>
+
+    <div class="event-modal" id="event-modal" hidden>
+      <div class="event-modal-backdrop" data-close-event></div>
+      <section class="event-dialog panel-surface" role="dialog" aria-modal="true" aria-labelledby="event-form-title">
+        <div class="section-heading"><div><p class="eyebrow">AGENDA</p><h2 id="event-form-title">Nuevo evento</h2></div><button class="modal-close" type="button" aria-label="Cerrar evento" data-close-event>×</button></div>
+        <form id="event-form" novalidate>
+          <label class="form-field"><span>Título</span><input type="text" name="title" maxlength="120" required></label>
+          <label class="form-field"><span>Fecha</span><input type="date" name="date" required></label>
+          <label class="all-day-toggle"><input type="checkbox" name="all_day"><span>Todo el día</span></label>
+          <div class="form-row event-time-row" id="event-time-row">
+            <label class="form-field"><span>Desde</span><input type="time" name="start_time" required></label>
+            <label class="form-field"><span>Hasta</span><input type="time" name="end_time"></label>
+          </div>
+          <label class="form-field"><span>Nota (opcional)</span><textarea name="notes" rows="3" maxlength="2000"></textarea></label>
+          <p class="form-error" id="event-form-error" role="alert" hidden></p>
+          <div class="form-actions event-form-actions">
+            <button class="event-delete-button" id="event-delete" type="button" hidden>Eliminar</button>
+            <button class="secondary-button" type="button" data-close-event>Cancelar</button>
+            <button class="primary-button" id="event-submit" type="submit">Guardar evento</button>
+          </div>
+        </form>
+      </section>
+    </div>
 
     <div class="camera-modal" id="camera-modal" hidden>
       <div class="camera-modal-backdrop" data-close-camera-form></div>

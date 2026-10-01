@@ -1,13 +1,19 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ipaddress import IPv4Network, ip_network
 from urllib.error import URLError
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 from urllib.request import Request, urlopen
+import hashlib
+import hmac
 import xml.etree.ElementTree as ET
 import json
 import os
+from pathlib import Path
+import secrets
 import socket
+import sqlite3
 import threading
 import time
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -16,6 +22,7 @@ from android_tv_power import (
     finish_android_tv_pairing,
     power_control_ready,
     read_android_tv_power_state,
+    send_android_tv_key,
     start_android_tv_pairing,
     toggle_android_tv_power,
 )
@@ -32,7 +39,13 @@ except ImportError:
 
 
 API_PORT = int(os.environ.get("SMART_PANEL_API_PORT", "5000"))
-API_VERSION = "2026.09.30.10"
+API_VERSION = "2026.09.30.11"
+API_DATA_DIR = Path(os.environ.get("SMART_PANEL_DATA_DIR", str(Path.home() / ".smart-panel")))
+API_PASSWORD_FILE = Path(os.environ.get("SMART_PANEL_API_PASSWORD_FILE", str(API_DATA_DIR / "api_password.txt")))
+API_SIGNING_KEY_FILE = API_DATA_DIR / "session_signing_key"
+API_SESSION_TTL = 12 * 60 * 60
+API_PASSWORD_FROM_ENV = bool(os.environ.get("SMART_PANEL_API_PASSWORD", "").strip())
+EVENTS_DB_PATH = Path(os.environ.get("SMART_PANEL_EVENTS_DB", str(API_DATA_DIR / "events.sqlite3")))
 TV_SCAN_CIDR = os.environ.get("TV_SCAN_CIDR", "").strip()
 TV_SCAN_INTERVAL = 15
 TV_SCAN_TIMEOUT = 0.2
@@ -50,6 +63,125 @@ CAST_APP_IDS = {
 
 _scan_cache = {"time": 0, "devices": []}
 _scan_lock = threading.Lock()
+_active_sessions = {}
+_active_sessions_lock = threading.Lock()
+
+
+def _load_or_create_secret(path, length):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_file():
+        secret = path.read_text(encoding="utf-8").strip()
+        if secret:
+            return secret
+    secret = secrets.token_urlsafe(length)
+    path.write_text(secret + "\n", encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    return secret
+
+
+API_PASSWORD = os.environ.get("SMART_PANEL_API_PASSWORD", "").strip() or _load_or_create_secret(API_PASSWORD_FILE, 32)
+if len(API_PASSWORD) < 16:
+    raise RuntimeError("SMART_PANEL_API_PASSWORD debe tener al menos 16 caracteres")
+API_SIGNING_KEY = _load_or_create_secret(API_SIGNING_KEY_FILE, 48).encode("utf-8")
+
+
+def create_session_token():
+    expires_at = str(int(time.time()) + API_SESSION_TTL)
+    payload = expires_at + "." + secrets.token_urlsafe(18)
+    signature = hmac.new(API_SIGNING_KEY, payload.encode("ascii"), hashlib.sha256).hexdigest()
+    token = payload + "." + signature
+    with _active_sessions_lock:
+        now = int(time.time())
+        for active_token, expiry in list(_active_sessions.items()):
+            if expiry < now:
+                del _active_sessions[active_token]
+        _active_sessions[token] = int(expires_at)
+    return token
+
+
+def verify_session_token(token):
+    try:
+        expires_at, nonce, signature = token.split(".", 2)
+        if int(expires_at) < int(time.time()):
+            return False
+        payload = expires_at + "." + nonce
+        expected = hmac.new(API_SIGNING_KEY, payload.encode("ascii"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return False
+        with _active_sessions_lock:
+            return _active_sessions.get(token) == int(expires_at)
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
+def revoke_session_token(token):
+    with _active_sessions_lock:
+        _active_sessions.pop(token, None)
+
+
+def initialize_events_db():
+    EVENTS_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(EVENTS_DB_PATH, timeout=10)
+    try:
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                event_date TEXT NOT NULL,
+                start_time TEXT,
+                end_time TEXT,
+                all_day INTEGER NOT NULL DEFAULT 0,
+                notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        connection.execute("CREATE INDEX IF NOT EXISTS events_date_idx ON events(event_date, start_time)")
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def validate_event(data):
+    if not isinstance(data, dict):
+        raise ValueError("El evento debe ser un objeto JSON")
+    title = str(data.get("title", "")).strip()
+    if not title or len(title) > 120:
+        raise ValueError("El título es obligatorio y admite hasta 120 caracteres")
+    try:
+        event_date = date.fromisoformat(str(data.get("date", ""))).isoformat()
+    except ValueError:
+        raise ValueError("La fecha debe usar el formato AAAA-MM-DD")
+    all_day = data.get("all_day", False)
+    if not isinstance(all_day, bool):
+        raise ValueError("all_day debe ser booleano")
+    start_time = None if all_day else str(data.get("start_time") or "").strip()
+    end_time = None if all_day else str(data.get("end_time") or "").strip()
+    if not all_day:
+        if not start_time:
+            raise ValueError("Indica una hora de inicio o marca Todo el día")
+        try:
+            datetime.strptime(start_time, "%H:%M")
+            if end_time:
+                datetime.strptime(end_time, "%H:%M")
+        except ValueError:
+            raise ValueError("Las horas deben usar el formato HH:MM")
+        if end_time and end_time <= start_time:
+            raise ValueError("La hora de fin debe ser posterior a la de inicio")
+    notes = str(data.get("notes", "")).strip()
+    if len(notes) > 2000:
+        raise ValueError("La nota admite hasta 2000 caracteres")
+    return {
+        "title": title,
+        "date": event_date,
+        "start_time": start_time or None,
+        "end_time": end_time or None,
+        "all_day": all_day,
+        "notes": notes
+    }
 
 
 def get_scan_network():
@@ -328,33 +460,164 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
         self.end_headers()
         self.wfile.write(body)
+
+    def read_json_body(self):
+        content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length <= 0 or content_length > 65536:
+            raise ValueError("El cuerpo JSON está vacío o es demasiado grande")
+        try:
+            payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+        except json.JSONDecodeError as error:
+            raise ValueError("JSON inválido") from error
+        if not isinstance(payload, dict):
+            raise ValueError("El cuerpo JSON debe ser un objeto")
+        return payload
+
+    def is_authenticated(self):
+        authorization = self.headers.get("Authorization", "")
+        scheme, separator, token = authorization.partition(" ")
+        return separator == " " and scheme.lower() == "bearer" and verify_session_token(token)
+
+    def require_authentication(self):
+        if self.is_authenticated():
+            return True
+        self.send_json(401, {"error": "Inicia sesión para usar la API"})
+        return False
+
+    def login(self):
+        try:
+            payload = self.read_json_body()
+        except ValueError as error:
+            self.send_json(400, {"error": str(error)})
+            return
+        password = payload.get("password")
+        if not isinstance(password, str) or not hmac.compare_digest(password.encode("utf-8"), API_PASSWORD.encode("utf-8")):
+            self.send_json(401, {"error": "Contraseña incorrecta"})
+            return
+        self.send_json(200, {"token": create_session_token(), "expires_in": API_SESSION_TTL})
+
+    def list_events(self, query):
+        try:
+            start_date = date.fromisoformat(query.get("from", [date.today().isoformat()])[0]).isoformat()
+            end_date = date.fromisoformat(query.get("to", [start_date])[0]).isoformat()
+        except ValueError:
+            self.send_json(400, {"error": "El rango debe usar fechas AAAA-MM-DD"})
+            return
+        if end_date < start_date:
+            self.send_json(400, {"error": "La fecha final no puede ser anterior a la inicial"})
+            return
+        connection = sqlite3.connect(EVENTS_DB_PATH, timeout=10)
+        connection.row_factory = sqlite3.Row
+        try:
+            rows = connection.execute(
+                "SELECT id, title, event_date, start_time, end_time, all_day, notes FROM events WHERE event_date BETWEEN ? AND ? ORDER BY event_date, all_day DESC, start_time, id",
+                (start_date, end_date)
+            ).fetchall()
+            self.send_json(200, [self.event_payload(row) for row in rows])
+        finally:
+            connection.close()
+
+    @staticmethod
+    def event_payload(row):
+        return {
+            "id": row["id"],
+            "title": row["title"],
+            "date": row["event_date"],
+            "start_time": row["start_time"],
+            "end_time": row["end_time"],
+            "all_day": bool(row["all_day"]),
+            "notes": row["notes"]
+        }
+
+    def create_event(self):
+        try:
+            event = validate_event(self.read_json_body())
+        except ValueError as error:
+            self.send_json(400, {"error": str(error)})
+            return
+        now = datetime.now().isoformat(timespec="seconds")
+        connection = sqlite3.connect(EVENTS_DB_PATH, timeout=10)
+        connection.row_factory = sqlite3.Row
+        try:
+            cursor = connection.execute(
+                "INSERT INTO events (title, event_date, start_time, end_time, all_day, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (event["title"], event["date"], event["start_time"], event["end_time"], int(event["all_day"]), event["notes"], now, now)
+            )
+            connection.commit()
+            row = connection.execute("SELECT id, title, event_date, start_time, end_time, all_day, notes FROM events WHERE id = ?", (cursor.lastrowid,)).fetchone()
+            self.send_json(201, self.event_payload(row))
+        finally:
+            connection.close()
+
+    def update_event(self, event_id):
+        try:
+            event = validate_event(self.read_json_body())
+        except ValueError as error:
+            self.send_json(400, {"error": str(error)})
+            return
+        connection = sqlite3.connect(EVENTS_DB_PATH, timeout=10)
+        connection.row_factory = sqlite3.Row
+        try:
+            cursor = connection.execute(
+                "UPDATE events SET title = ?, event_date = ?, start_time = ?, end_time = ?, all_day = ?, notes = ?, updated_at = ? WHERE id = ?",
+                (event["title"], event["date"], event["start_time"], event["end_time"], int(event["all_day"]), event["notes"], datetime.now().isoformat(timespec="seconds"), event_id)
+            )
+            connection.commit()
+            if not cursor.rowcount:
+                self.send_json(404, {"error": "No se encontró el evento"})
+                return
+            row = connection.execute("SELECT id, title, event_date, start_time, end_time, all_day, notes FROM events WHERE id = ?", (event_id,)).fetchone()
+            self.send_json(200, self.event_payload(row))
+        finally:
+            connection.close()
+
+    def delete_event(self, event_id):
+        connection = sqlite3.connect(EVENTS_DB_PATH, timeout=10)
+        try:
+            cursor = connection.execute("DELETE FROM events WHERE id = ?", (event_id,))
+            connection.commit()
+            if not cursor.rowcount:
+                self.send_json(404, {"error": "No se encontró el evento"})
+                return
+            self.send_json(200, {"ok": True, "id": event_id})
+        finally:
+            connection.close()
 
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
         self.send_header("Access-Control-Max-Age", "600")
         self.end_headers()
 
     def do_GET(self):
         parsed = urlsplit(self.path)
         path_parts = [unquote(part) for part in parsed.path.strip("/").split("/")]
+        if parsed.path == "/api/auth/status":
+            self.send_json(200, {"required": True, "authenticated": self.is_authenticated(), "expires_in": API_SESSION_TTL})
+            return
+        if not self.require_authentication():
+            return
         if parsed.path == "/api/health":
             self.send_json(200, {
                 "ok": True,
                 "version": API_VERSION,
                 "port": API_PORT,
                 "scan_cidr": TV_SCAN_CIDR or "auto /24",
-                "cast_control": pychromecast is not None
+                "cast_control": pychromecast is not None,
+                "auth_required": True
             })
             return
         if parsed.path == "/api/tvs":
             self.send_json(200, scan_local_tvs())
+            return
+        if parsed.path == "/api/events":
+            self.list_events(parse_qs(parsed.query))
             return
         if len(path_parts) == 4 and path_parts[0] == "api" and path_parts[1] == "tvs" and path_parts[3] == "status":
             device = next((item for item in scan_local_tvs() if item["id"] == path_parts[2]), None)
@@ -398,6 +661,20 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlsplit(self.path)
         path_parts = [unquote(part) for part in parsed.path.strip("/").split("/")]
+        if parsed.path == "/api/auth/login":
+            self.login()
+            return
+        if not self.require_authentication():
+            return
+        if parsed.path == "/api/events":
+            self.create_event()
+            return
+        if parsed.path == "/api/auth/logout":
+            authorization = self.headers.get("Authorization", "")
+            _, _, token = authorization.partition(" ")
+            revoke_session_token(token)
+            self.send_json(200, {"ok": True})
+            return
         if len(path_parts) == 5 and path_parts[:2] == ["api", "tvs"] and path_parts[3] == "pairing":
             device = next((item for item in scan_local_tvs() if item["id"] == path_parts[2]), None)
             if not device:
@@ -454,6 +731,11 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
                 if action == "power":
                     self.send_json(200, {"ok": True, "action": action, "poweredOn": toggle_android_tv_power(device["ip"])})
                     return
+                if action == "remote_key":
+                    key = command.get("value")
+                    send_android_tv_key(device["ip"], key)
+                    self.send_json(200, {"ok": True, "action": action, "key": str(key).upper()})
+                    return
                 if not device.get("supportsCast"):
                     self.send_json(422, {"error": "La TV está detectada por los puertos {}, pero no tiene abierto el puerto Cast 8009".format(", ".join(str(port) for port in device.get("openPorts", [])))})
                     return
@@ -473,14 +755,51 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
             return
         self.send_json(404, {"error": "Ruta no encontrada"})
 
+    def do_PUT(self):
+        if not self.require_authentication():
+            return
+        path_parts = [unquote(part) for part in urlsplit(self.path).path.strip("/").split("/")]
+        if len(path_parts) == 3 and path_parts[:2] == ["api", "events"]:
+            try:
+                event_id = int(path_parts[2])
+                if event_id <= 0:
+                    raise ValueError
+            except ValueError:
+                self.send_json(400, {"error": "ID de evento inválido"})
+                return
+            self.update_event(event_id)
+            return
+        self.send_json(404, {"error": "Ruta no encontrada"})
+
+    def do_DELETE(self):
+        if not self.require_authentication():
+            return
+        path_parts = [unquote(part) for part in urlsplit(self.path).path.strip("/").split("/")]
+        if len(path_parts) == 3 and path_parts[:2] == ["api", "events"]:
+            try:
+                event_id = int(path_parts[2])
+                if event_id <= 0:
+                    raise ValueError
+            except ValueError:
+                self.send_json(400, {"error": "ID de evento inválido"})
+                return
+            self.delete_event(event_id)
+            return
+        self.send_json(404, {"error": "Ruta no encontrada"})
+
     def log_message(self, format_string, *args):
         print("{} - {}".format(self.address_string(), format_string % args))
 
 
 def run(port=API_PORT):
+    initialize_events_db()
     server = ThreadingHTTPServer(("0.0.0.0", port), SmartPanelHandler)
     print("Smart Panel API en 0.0.0.0:{}".format(port))
     print("Subred de escaneo: {}".format(TV_SCAN_CIDR or "automática (/24 del servidor)"))
+    if API_PASSWORD_FROM_ENV:
+        print("Autenticación API: SMART_PANEL_API_PASSWORD")
+    else:
+        print("Autenticación API: clave privada en {}".format(API_PASSWORD_FILE))
     server.serve_forever()
 
 

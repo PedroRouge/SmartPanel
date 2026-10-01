@@ -1,9 +1,10 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "22";
+  var APP_BUILD_VERSION = "23";
   var STORAGE_KEY = "smart-panel-state-v1";
   var API_BASE_URL = (window.SMART_PANEL_API_URL || "https://munich-princeton-designated-aka.trycloudflare.com").replace(/\/+$/, "");
+  var API_TOKEN_KEY = "smart-panel-api-session-v1";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
     longitude: -60.57469,
@@ -24,10 +25,19 @@
   var tvApiAvailable = false;
   var tvApiEverConnected = false;
   var backendHealth = null;
+  var apiToken = null;
+  var apiAuthenticated = false;
+  var remoteDataInitialized = false;
+  var remotePollingStarted = false;
   var weatherRetryTimer = null;
   var weatherHasData = false;
   var volumeCommandTimer = null;
   var tvPairingId = null;
+  var calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  var selectedAgendaDate = formatDateISO(new Date());
+  var calendarEvents = [];
+  var eventEditingId = null;
+  var lastTvRefresh = null;
 
   function readState() {
     var defaults = {
@@ -98,25 +108,142 @@
     return API_BASE_URL;
   }
 
+  function setAuthorizationHeader(request) {
+    if (apiToken) {
+      request.setRequestHeader("Authorization", "Bearer " + apiToken);
+    }
+  }
+
+  function handleUnauthorized(request) {
+    if (request.status !== 401) { return false; }
+    apiAuthenticated = false;
+    remoteDataInitialized = false;
+    apiToken = null;
+    try { window.sessionStorage.removeItem(API_TOKEN_KEY); } catch (error) { }
+    showAuthGate("La sesión venció. Vuelve a ingresar la clave API.");
+    return true;
+  }
+
+  function showAuthGate(message) {
+    byId("auth-gate").hidden = false;
+    byId("api-logout").hidden = true;
+    byId("auth-error").textContent = message || "";
+    byId("auth-error").hidden = !message;
+    if (!byId("auth-password").value) { byId("auth-password").focus(); }
+  }
+
+  function acceptSession(token) {
+    apiToken = token;
+    apiAuthenticated = true;
+    try { window.sessionStorage.setItem(API_TOKEN_KEY, token); } catch (error) { }
+    byId("auth-gate").hidden = true;
+    byId("api-logout").hidden = false;
+    byId("auth-password").value = "";
+    byId("auth-error").hidden = true;
+    initializeRemoteData();
+  }
+
+  function checkAuthentication() {
+    try { apiToken = window.sessionStorage.getItem(API_TOKEN_KEY); } catch (error) { apiToken = null; }
+    var request = new XMLHttpRequest();
+    request.open("GET", localApiUrl("/api/auth/status"), true);
+    setAuthorizationHeader(request);
+    request.timeout = 8000;
+    request.onreadystatechange = function () {
+      if (request.readyState !== 4) { return; }
+      var result = {};
+      try { result = JSON.parse(request.responseText); } catch (error) { }
+      if (request.status >= 200 && request.status < 300 && result.authenticated && apiToken) {
+        acceptSession(apiToken);
+      } else if (request.status >= 200 && request.status < 300) {
+        apiToken = null;
+        try { window.sessionStorage.removeItem(API_TOKEN_KEY); } catch (error) { }
+        showAuthGate();
+      } else {
+        showAuthGate("No se pudo validar la sesión. Revisa el túnel y vuelve a intentar.");
+      }
+    };
+    request.onerror = function () { showAuthGate("No se pudo conectar con la API de la notebook."); };
+    request.ontimeout = request.onerror;
+    try { request.send(null); } catch (error) { request.onerror(); }
+  }
+
+  function initializeAuthentication() {
+    byId("auth-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      var submit = byId("auth-submit");
+      var request = new XMLHttpRequest();
+      submit.disabled = true;
+      byId("auth-error").hidden = true;
+      request.open("POST", localApiUrl("/api/auth/login"), true);
+      request.timeout = 10000;
+      request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+      request.onreadystatechange = function () {
+        if (request.readyState !== 4) { return; }
+        submit.disabled = false;
+        var result = {};
+        try { result = JSON.parse(request.responseText); } catch (error) { }
+        if (request.status >= 200 && request.status < 300 && result.token) {
+          acceptSession(result.token);
+        } else {
+          byId("auth-error").textContent = result.error || "No se pudo iniciar sesión.";
+          byId("auth-error").hidden = false;
+        }
+      };
+      request.onerror = function () {
+        submit.disabled = false;
+        byId("auth-error").textContent = "Sin conexión con la API de la notebook.";
+        byId("auth-error").hidden = false;
+      };
+      request.ontimeout = request.onerror;
+      try { request.send(JSON.stringify({ password: byId("auth-password").value })); } catch (error) { request.onerror(); }
+    });
+    byId("api-logout").addEventListener("click", function () {
+      var request = new XMLHttpRequest();
+      request.open("POST", localApiUrl("/api/auth/logout"), true);
+      setAuthorizationHeader(request);
+      request.timeout = 5000;
+      request.onreadystatechange = function () {
+        if (request.readyState === 4) { finishLogout(); }
+      };
+      request.onerror = finishLogout;
+      request.ontimeout = finishLogout;
+      try { request.send(null); } catch (error) { finishLogout(); }
+    });
+  }
+
+  function finishLogout() {
+      apiAuthenticated = false;
+      apiToken = null;
+      try { window.sessionStorage.removeItem(API_TOKEN_KEY); } catch (error) { }
+      remoteDataInitialized = false;
+      showAuthGate("Sesión cerrada.");
+  }
+
   function initializeVersionReader() {
     var versionTag = document.querySelector("meta[name='smart-panel-version']");
     var loadedVersion = versionTag ? versionTag.getAttribute("content") : "desconocida";
     byId("frontend-version").textContent = "HTML v" + loadedVersion;
     byId("script-build-version").textContent = "JS v" + APP_BUILD_VERSION;
-    checkBackendVersion();
+    byId("backend-version").textContent = "API · inicia sesión";
   }
 
   function checkBackendVersion() {
+    if (!apiAuthenticated) { return; }
     var request = new XMLHttpRequest();
     var dot = byId("backend-health-dot");
+    var startedAt = new Date().getTime();
     request.open("GET", localApiUrl("/api/health"), true);
+    setAuthorizationHeader(request);
     request.timeout = 4000;
     request.onreadystatechange = function () {
       if (request.readyState !== 4) { return; }
+      if (handleUnauthorized(request)) { return; }
       if (request.status >= 200 && request.status < 300) {
         try {
           backendHealth = JSON.parse(request.responseText);
-          byId("backend-version").textContent = "API v" + (backendHealth.version || "?");
+          var latency = new Date().getTime() - startedAt;
+          byId("backend-version").textContent = "API v" + (backendHealth.version || "?") + " · " + latency + " ms";
           dot.classList.remove("is-checking", "is-error");
           dot.classList.add("is-online");
           return;
@@ -223,6 +350,7 @@
   }
 
   function loadWeather() {
+    if (!apiAuthenticated) { return; }
     var status = byId("weather-status");
     byId("weather-location").textContent = WEATHER_CONFIG.location.toUpperCase();
     if (typeof WEATHER_CONFIG.latitude !== "number" || typeof WEATHER_CONFIG.longitude !== "number") {
@@ -248,9 +376,14 @@
     }
 
     request.open("GET", url, true);
+    setAuthorizationHeader(request);
     request.timeout = 12000;
     request.onreadystatechange = function () {
       if (request.readyState !== 4 || finished) { return; }
+      if (handleUnauthorized(request)) {
+        fail("Inicia sesión para consultar el clima.");
+        return;
+      }
       if (request.status < 200 || request.status >= 300) {
         var errorMessage = request.status ? "Error HTTP " + request.status : "Sin respuesta de red/CORS";
         try {
@@ -367,6 +500,323 @@
     }
   }
 
+  function formatDateISO(dateValue) {
+    var year = dateValue.getFullYear();
+    var month = String(dateValue.getMonth() + 1);
+    var day = String(dateValue.getDate());
+    if (month.length < 2) { month = "0" + month; }
+    if (day.length < 2) { day = "0" + day; }
+    return year + "-" + month + "-" + day;
+  }
+
+  function parseISODate(value) {
+    var parts = value.split("-");
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  }
+
+  function formatAgendaDate(value, options) {
+    return parseISODate(value).toLocaleDateString("es-AR", options || { weekday: "long", day: "numeric", month: "long" });
+  }
+
+  function getCalendarRange() {
+    var firstDay = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+    var mondayOffset = (firstDay.getDay() + 6) % 7;
+    var start = new Date(firstDay);
+    start.setDate(firstDay.getDate() - mondayOffset);
+    var end = new Date(start);
+    end.setDate(start.getDate() + 41);
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (today < start) { start = today; }
+    if (today > end) { end = today; }
+    return { from: formatDateISO(start), to: formatDateISO(end) };
+  }
+
+  function loadEvents() {
+    if (!apiAuthenticated) { return; }
+    var range = getCalendarRange();
+    var request = new XMLHttpRequest();
+    request.open("GET", localApiUrl("/api/events?from=" + range.from + "&to=" + range.to), true);
+    request.timeout = 10000;
+    setAuthorizationHeader(request);
+    request.onreadystatechange = function () {
+      if (request.readyState !== 4) { return; }
+      if (handleUnauthorized(request)) { return; }
+      if (request.status < 200 || request.status >= 300) {
+        byId("agenda-day-status").textContent = "No se pudieron cargar los eventos (HTTP " + request.status + ").";
+        byId("today-agenda-status").textContent = "No se pudieron cargar los eventos.";
+        return;
+      }
+      try {
+        calendarEvents = JSON.parse(request.responseText);
+      } catch (error) {
+        calendarEvents = [];
+        byId("agenda-day-status").textContent = "La API devolvió una respuesta inválida.";
+        return;
+      }
+      renderCalendar();
+      renderAgendaDay();
+      renderTodayEvents();
+    };
+    request.onerror = function () {
+      byId("agenda-day-status").textContent = "Sin conexión con la agenda de la notebook.";
+      byId("today-agenda-status").textContent = "Sin conexión con la agenda de la notebook.";
+    };
+    request.ontimeout = request.onerror;
+    try { request.send(null); } catch (error) { request.onerror(); }
+  }
+
+  function eventsForDate(dateValue) {
+    return calendarEvents.filter(function (event) { return event.date === dateValue; }).sort(function (first, second) {
+      if (first.all_day !== second.all_day) { return first.all_day ? -1 : 1; }
+      return String(first.start_time || "").localeCompare(String(second.start_time || ""));
+    });
+  }
+
+  function renderCalendar() {
+    var heading = byId("calendar-month");
+    var grid = byId("calendar-grid");
+    var firstDay = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+    var offset = (firstDay.getDay() + 6) % 7;
+    var start = new Date(firstDay);
+    start.setDate(firstDay.getDate() - offset);
+    var today = formatDateISO(new Date());
+    var index;
+    heading.textContent = calendarMonth.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+    while (grid.firstChild) { grid.removeChild(grid.firstChild); }
+    for (index = 0; index < 42; index += 1) {
+      var day = new Date(start);
+      day.setDate(start.getDate() + index);
+      var dayISO = formatDateISO(day);
+      var events = eventsForDate(dayISO);
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "calendar-day";
+      if (day.getMonth() !== calendarMonth.getMonth()) { button.classList.add("is-outside"); }
+      if (dayISO === today) { button.classList.add("is-today"); }
+      if (dayISO === selectedAgendaDate) { button.classList.add("is-selected"); }
+      if (events.length) { button.classList.add("has-events"); }
+      button.textContent = String(day.getDate());
+      button.setAttribute("aria-label", formatAgendaDate(dayISO) + (events.length ? ", " + events.length + (events.length === 1 ? " evento" : " eventos") : ""));
+      button.setAttribute("aria-pressed", dayISO === selectedAgendaDate ? "true" : "false");
+      button.addEventListener("click", function (dateString) {
+        return function () {
+          selectedAgendaDate = dateString;
+          var selectedDate = parseISODate(dateString);
+          if (selectedDate.getMonth() !== calendarMonth.getMonth() || selectedDate.getFullYear() !== calendarMonth.getFullYear()) {
+            calendarMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+            loadEvents();
+          } else {
+            renderCalendar();
+            renderAgendaDay();
+          }
+        };
+      }(dayISO));
+      grid.appendChild(button);
+    }
+  }
+
+  function renderEventList(dateValue, listId, statusId, includeActions) {
+    var list = byId(listId);
+    var status = byId(statusId);
+    var events = eventsForDate(dateValue);
+    var index;
+    while (list.firstChild) { list.removeChild(list.firstChild); }
+    status.textContent = formatAgendaDate(dateValue, { weekday: "long", day: "numeric", month: "long" });
+    if (!events.length) {
+      list.appendChild(createTextElement("p", "event-empty", "No hay eventos para esta fecha."));
+      return;
+    }
+    status.textContent += " · " + events.length + (events.length === 1 ? " evento" : " eventos");
+    for (index = 0; index < events.length; index += 1) {
+      (function (event) {
+        var row = document.createElement("article");
+        var time = createTextElement("span", "event-time", event.all_day ? "Todo el día" : (event.start_time || ""));
+        var copy = document.createElement("div");
+        var title = document.createElement("button");
+        row.className = "event-row";
+        copy.className = "event-copy";
+        title.type = "button";
+        title.className = "event-title";
+        title.textContent = event.title;
+        title.addEventListener("click", function () { openEventForm(event); });
+        copy.appendChild(title);
+        if (event.end_time) { copy.appendChild(createTextElement("span", "event-end-time", "Hasta " + event.end_time)); }
+        if (event.notes) { copy.appendChild(createTextElement("p", "", event.notes)); }
+        row.appendChild(time);
+        row.appendChild(copy);
+        if (includeActions) {
+          var actions = document.createElement("div");
+          var remove = document.createElement("button");
+          actions.className = "event-actions";
+          var edit = document.createElement("button");
+          edit.type = "button";
+          edit.className = "event-action";
+          edit.setAttribute("aria-label", "Editar " + event.title);
+          edit.title = "Editar evento";
+          edit.textContent = "✎";
+          edit.addEventListener("click", function () { openEventForm(event); });
+          remove.type = "button";
+          remove.className = "event-action is-delete";
+          remove.setAttribute("aria-label", "Eliminar " + event.title);
+          remove.title = "Eliminar evento";
+          remove.textContent = "×";
+          remove.addEventListener("click", function () { deleteCalendarEvent(event); });
+          actions.appendChild(edit);
+          actions.appendChild(remove);
+          row.appendChild(actions);
+        }
+        list.appendChild(row);
+      }(events[index]));
+    }
+  }
+
+  function renderAgendaDay() {
+    renderEventList(selectedAgendaDate, "agenda-day-events", "agenda-day-status", true);
+    byId("agenda-day-heading").textContent = formatAgendaDate(selectedAgendaDate, { weekday: "long", day: "numeric", month: "long" });
+  }
+
+  function renderTodayEvents() {
+    var today = formatDateISO(new Date());
+    renderEventList(today, "today-events", "today-agenda-status", false);
+  }
+
+  function openAgenda(dateValue) {
+    selectedAgendaDate = dateValue || formatDateISO(new Date());
+    var selectedDate = parseISODate(selectedAgendaDate);
+    calendarMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+    renderCalendar();
+    renderAgendaDay();
+    var tab = document.querySelector("[data-tab='agenda']");
+    if (tab) { tab.click(); }
+  }
+
+  function shiftCalendarMonth(offset) {
+    var previousDay = parseISODate(selectedAgendaDate).getDate();
+    calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + offset, 1);
+    var lastDay = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate();
+    selectedAgendaDate = formatDateISO(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), Math.min(previousDay, lastDay)));
+    loadEvents();
+  }
+
+  function openEventForm(eventData) {
+    var form = byId("event-form");
+    eventEditingId = eventData ? eventData.id : null;
+    byId("event-form-title").textContent = eventData ? "Editar evento" : "Nuevo evento";
+    byId("event-submit").textContent = eventData ? "Guardar cambios" : "Guardar evento";
+    byId("event-delete").hidden = !eventData;
+    byId("event-form-error").hidden = true;
+    form.elements.title.value = eventData ? eventData.title : "";
+    form.elements.date.value = eventData ? eventData.date : selectedAgendaDate;
+    form.elements.all_day.checked = eventData ? eventData.all_day : false;
+    form.elements.start_time.value = eventData ? (eventData.start_time || "") : "09:00";
+    form.elements.end_time.value = eventData ? (eventData.end_time || "") : "";
+    form.elements.notes.value = eventData ? eventData.notes : "";
+    byId("event-time-row").hidden = form.elements.all_day.checked;
+    byId("event-modal").hidden = false;
+    form.elements.title.focus();
+  }
+
+  function closeEventForm() {
+    byId("event-modal").hidden = true;
+    byId("event-form").reset();
+    byId("event-form-error").hidden = true;
+    eventEditingId = null;
+  }
+
+  function saveCalendarEvent(event) {
+    event.preventDefault();
+    if (!apiAuthenticated) { showAuthGate("Inicia sesión para guardar eventos."); return; }
+    var form = byId("event-form");
+    var payload = {
+      title: form.elements.title.value,
+      date: form.elements.date.value,
+      all_day: form.elements.all_day.checked,
+      start_time: form.elements.all_day.checked ? null : form.elements.start_time.value,
+      end_time: form.elements.all_day.checked ? null : form.elements.end_time.value,
+      notes: form.elements.notes.value
+    };
+    var request = new XMLHttpRequest();
+    var submit = byId("event-submit");
+    submit.disabled = true;
+    request.open(eventEditingId ? "PUT" : "POST", localApiUrl("/api/events" + (eventEditingId ? "/" + encodeURIComponent(eventEditingId) : "")), true);
+    request.timeout = 10000;
+    request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+    setAuthorizationHeader(request);
+    request.onreadystatechange = function () {
+      if (request.readyState !== 4) { return; }
+      submit.disabled = false;
+      if (handleUnauthorized(request)) { return; }
+      if (request.status >= 200 && request.status < 300) {
+        selectedAgendaDate = payload.date;
+        calendarMonth = new Date(parseISODate(payload.date).getFullYear(), parseISODate(payload.date).getMonth(), 1);
+        closeEventForm();
+        loadEvents();
+      } else {
+        var result = {};
+        try { result = JSON.parse(request.responseText); } catch (error) { }
+        byId("event-form-error").textContent = result.error || "No se pudo guardar el evento.";
+        byId("event-form-error").hidden = false;
+      }
+    };
+    request.onerror = function () {
+      submit.disabled = false;
+      byId("event-form-error").textContent = "Sin conexión con la agenda de la notebook.";
+      byId("event-form-error").hidden = false;
+    };
+    request.ontimeout = request.onerror;
+    try { request.send(JSON.stringify(payload)); } catch (error) { request.onerror(); }
+  }
+
+  function deleteCalendarEvent(eventData) {
+    if (!apiAuthenticated || !window.confirm("¿Eliminar el evento \"" + eventData.title + "\"?")) { return; }
+    var request = new XMLHttpRequest();
+    request.open("DELETE", localApiUrl("/api/events/" + encodeURIComponent(eventData.id)), true);
+    setAuthorizationHeader(request);
+    request.onreadystatechange = function () {
+      if (request.readyState !== 4) { return; }
+      if (handleUnauthorized(request)) { return; }
+      if (request.status >= 200 && request.status < 300) { loadEvents(); }
+    };
+    request.onerror = function () { byId("agenda-day-status").textContent = "No se pudo eliminar el evento."; };
+    try { request.send(null); } catch (error) { request.onerror(); }
+  }
+
+  function initializeAgenda() {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-open-agenda]"), function (button) {
+      button.addEventListener("click", function () { openAgenda(formatDateISO(new Date())); });
+    });
+    byId("new-event-button").addEventListener("click", function () { openEventForm(null); });
+    byId("new-event-for-day").addEventListener("click", function () { openEventForm(null); });
+    byId("calendar-previous").addEventListener("click", function () {
+      shiftCalendarMonth(-1);
+    });
+    byId("calendar-next").addEventListener("click", function () {
+      shiftCalendarMonth(1);
+    });
+    byId("calendar-today").addEventListener("click", function () { openAgenda(formatDateISO(new Date())); });
+    byId("event-form").addEventListener("submit", saveCalendarEvent);
+    byId("event-form").elements.all_day.addEventListener("change", function () {
+      byId("event-time-row").hidden = this.checked;
+    });
+    byId("event-delete").addEventListener("click", function () {
+      var eventData = calendarEvents.filter(function (item) { return item.id === eventEditingId; })[0];
+      if (eventData) {
+        closeEventForm();
+        deleteCalendarEvent(eventData);
+      }
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-close-event]"), function (button) {
+      button.addEventListener("click", closeEventForm);
+    });
+    byId("event-modal").addEventListener("keydown", function (event) {
+      if (event.key === "Escape" || event.keyCode === 27) { closeEventForm(); }
+    });
+    renderCalendar();
+    renderAgendaDay();
+    renderTodayEvents();
+  }
+
   function getSelectedTv() {
     var index;
     for (index = 0; index < TV_DEVICES.length; index += 1) {
@@ -383,17 +833,21 @@
   }
 
   function requestTVs() {
+    if (!apiAuthenticated) { return; }
     var request = new XMLHttpRequest();
     var finished = false;
     byId("tv-refresh").disabled = true;
     request.open("GET", localApiUrl(TV_CONFIG.endpoint), true);
+    setAuthorizationHeader(request);
     request.timeout = TV_CONFIG.timeoutMs;
     request.onreadystatechange = function () {
       if (request.readyState !== 4 || finished) { return; }
       finished = true;
       byId("tv-refresh").disabled = false;
+      if (handleUnauthorized(request)) { return; }
       if (request.status < 200 || request.status >= 300) {
         tvApiAvailable = false;
+        lastTvRefresh = new Date();
         renderTvApiStatus(tvApiEverConnected ? "API local sin respuesta en " + localApiAddress() + "; datos posiblemente antiguos." : "No responde " + localApiAddress() + ". Inicia servidor.py; se muestran TVs demo.");
         renderMedia();
         return;
@@ -433,6 +887,7 @@
       });
       tvApiAvailable = true;
       tvApiEverConnected = true;
+      lastTvRefresh = new Date();
       if (TV_DEVICES.length && !getTvById(state.tvId)) { state.tvId = TV_DEVICES[0].id; }
       TV_DEVICES.forEach(function (device) {
         if (!state.tvStates[device.id]) {
@@ -452,6 +907,7 @@
       finished = true;
       byId("tv-refresh").disabled = false;
       tvApiAvailable = false;
+      lastTvRefresh = new Date();
       renderTvApiStatus(tvApiEverConnected ? "API local desconectada en " + localApiAddress() : "No responde " + localApiAddress() + ". Inicia servidor.py; se muestran TVs demo.");
       renderMedia();
     };
@@ -470,8 +926,10 @@
   function requestTVStatus(tv) {
     var request = new XMLHttpRequest();
     request.open("GET", localApiUrl(TV_CONFIG.endpoint + "/" + encodeURIComponent(tv.id) + "/status"), true);
+    setAuthorizationHeader(request);
     request.timeout = TV_CONFIG.timeoutMs;
     request.onreadystatechange = function () {
+      if (request.readyState === 4 && handleUnauthorized(request)) { return; }
       if (request.readyState !== 4 || request.status < 200 || request.status >= 300) { return; }
       var result;
       try { result = JSON.parse(request.responseText); } catch (error) { return; }
@@ -500,8 +958,10 @@
     request.open("POST", localApiUrl(TV_CONFIG.endpoint + "/" + encodeURIComponent(tv.id) + "/pairing/" + action), true);
     request.timeout = 30000;
     request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+    setAuthorizationHeader(request);
     request.onreadystatechange = function () {
       if (request.readyState !== 4) { return; }
+      if (handleUnauthorized(request)) { return; }
       var result = {};
       try { result = JSON.parse(request.responseText); } catch (error) { result = {}; }
       if (request.status >= 200 && request.status < 300) {
@@ -550,8 +1010,10 @@
     request.open("POST", localApiUrl(TV_CONFIG.endpoint + "/" + encodeURIComponent(tv.id) + "/command"), true);
     request.timeout = TV_CONFIG.timeoutMs;
     request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+    setAuthorizationHeader(request);
     request.onreadystatechange = function () {
       if (request.readyState !== 4) { return; }
+      if (handleUnauthorized(request)) { return; }
       if (request.status >= 200 && request.status < 300) {
         var result = {};
         try { result = JSON.parse(request.responseText); } catch (error) { result = {}; }
@@ -597,6 +1059,7 @@
     if (tvApiAvailable) {
       statusMessage = "API de notebook conectada · " + TV_DEVICES.length + (TV_DEVICES.length === 1 ? " TV" : " TVs");
       if (!TV_DEVICES.length && backendHealth && backendHealth.scan_cidr) { statusMessage += " · escaneo " + backendHealth.scan_cidr; }
+      if (lastTvRefresh) { statusMessage += " · actualizado " + lastTvRefresh.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }); }
     } else if (tvApiEverConnected) {
       statusMessage = "API de notebook desconectada · datos posiblemente antiguos";
     } else {
@@ -677,6 +1140,10 @@
       powerButton.title = powerReady ? powerLabel : "Emparejar con el código del ONN";
       byId("tv-pairing-panel").hidden = tvPairingId !== selected.id;
       byId("tv-power-hint").hidden = powerReady || tvPairingId === selected.id;
+      Array.prototype.forEach.call(document.querySelectorAll("[data-remote-key]"), function (button) {
+        button.disabled = !tvApiAvailable || !powerReady;
+      });
+      byId("remote-key-hint").textContent = powerReady ? "Navegación enviada mediante Android TV Remote." : "Toca Emparejar para vincular este Android TV y habilitar la navegación.";
     }
   }
 
@@ -1000,13 +1467,25 @@
         sendTvAction("launch_app", button.getAttribute("data-app"));
       });
     });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-remote-key]"), function (button) {
+      button.addEventListener("click", function () {
+        var tv = getSelectedTv();
+        if (!tv || !tv.powerControlReady) {
+          byId("media-feedback").textContent = "Empareja primero este Android TV desde el botón de energía.";
+          return;
+        }
+        sendTvAction("remote_key", button.getAttribute("data-remote-key"));
+      });
+    });
   }
 
   function initialize() {
     initializeTabs();
     initializeVersionReader();
+    initializeAuthentication();
     initializeControls();
     initializeCameraForm();
+    initializeAgenda();
     renderTVs();
     renderCameras();
     renderLights();
@@ -1017,12 +1496,24 @@
     window.setInterval(updateClock, 1000);
     loadCachedWeather();
     byId("weather-refresh").addEventListener("click", loadWeather);
-    loadWeather();
-    window.setInterval(loadWeather, 30 * 60 * 1000);
     byId("tv-refresh").addEventListener("click", requestTVs);
+    checkAuthentication();
+  }
+
+  function initializeRemoteData() {
+    if (!apiAuthenticated || remoteDataInitialized) { return; }
+    remoteDataInitialized = true;
+    checkBackendVersion();
+    loadWeather();
     requestTVs();
-    window.setInterval(requestTVs, TV_CONFIG.refreshMs);
-    window.setInterval(checkBackendVersion, 60000);
+    loadEvents();
+    if (!remotePollingStarted) {
+      remotePollingStarted = true;
+      window.setInterval(loadWeather, 30 * 60 * 1000);
+      window.setInterval(requestTVs, TV_CONFIG.refreshMs);
+      window.setInterval(loadEvents, 60 * 1000);
+      window.setInterval(checkBackendVersion, 60 * 1000);
+    }
   }
 
   if (document.readyState === "loading") {
