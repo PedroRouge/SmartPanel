@@ -1,15 +1,15 @@
 "use strict";
 
 var CACHE_PREFIX = "smart-panel-shell-";
-var CACHE_NAME = CACHE_PREFIX + "26";
+var CACHE_NAME = CACHE_PREFIX + "27";
 var STATIC_FILES = [
   "/",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
-  "/css/styles.css?v=26",
-  "/js/app.js?v=26"
+  "/css/styles.css?v=27",
+  "/js/app.js?v=27"
 ];
 
 self.addEventListener("install", function (event) {

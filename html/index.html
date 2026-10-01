@@ -11,14 +11,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="26">
+  <meta name="smart-panel-version" content="27">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=26">
+  <link rel="stylesheet" href="css/styles.css?v=27">
   <script>window.SMART_PANEL_API_URL = window.SMART_PANEL_API_URL || "https://open-cost-levy-ignored.trycloudflare.com";</script>
-  <script src="js/app.js?v=26" defer></script>
+  <script src="js/app.js?v=27" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -27,7 +27,7 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v26</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v27</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
       <button class="pwa-install-button" id="pwa-install" type="button" aria-label="Instalar Smart Panel" title="Instalar Smart Panel" hidden><span aria-hidden="true">⇩</span><span>Instalar</span></button>
       <button class="api-logout" id="api-logout" type="button" hidden>Cerrar sesión</button>
     </header>
@@ -249,6 +249,7 @@
           <label class="form-field"><span>Clave API</span><input id="auth-password" name="password" type="password" autocomplete="current-password" required></label>
           <p class="form-error" id="auth-error" role="alert" hidden></p>
           <button class="primary-button auth-submit" id="auth-submit" type="submit">Iniciar sesión</button>
+          <button class="auth-install-link" id="pwa-install-auth" type="button">Instalar app en este iPad</button>
         </form>
       </section>
     </div>

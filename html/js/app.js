@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "26";
+  var APP_BUILD_VERSION = "27";
   var STORAGE_KEY = "smart-panel-state-v1";
   var API_BASE_URL = (window.SMART_PANEL_API_URL || "https://open-cost-levy-ignored.trycloudflare.com").replace(/\/+$/, "");
   var API_TOKEN_KEY = "smart-panel-api-session-v1";
@@ -243,7 +243,7 @@
       deferredInstallPrompt = null;
       installButton.hidden = true;
     });
-    installButton.addEventListener("click", function () {
+    function showInstallOption() {
       if (!deferredInstallPrompt) {
         byId("pwa-install-dialog").hidden = false;
         return;
@@ -252,7 +252,9 @@
       deferredInstallPrompt.userChoice.then(function () {
         deferredInstallPrompt = null;
       });
-    });
+    }
+    installButton.addEventListener("click", showInstallOption);
+    byId("pwa-install-auth").addEventListener("click", showInstallOption);
     Array.prototype.forEach.call(document.querySelectorAll("[data-close-pwa-install]"), function (button) {
       button.addEventListener("click", function () { byId("pwa-install-dialog").hidden = true; });
     });
@@ -268,7 +270,7 @@
       }
       hasController = true;
     });
-    window.navigator.serviceWorker.register("/service-worker.js?v=26").then(function (registration) {
+    window.navigator.serviceWorker.register("/service-worker.js?v=27").then(function (registration) {
       registration.update().catch(function () {});
     }).catch(function () {});
   }
