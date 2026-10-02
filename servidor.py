@@ -41,7 +41,7 @@ except ImportError:
 
 
 API_PORT = int(os.environ.get("SMART_PANEL_API_PORT", "5000"))
-API_VERSION = "2026.09.30.12"
+API_VERSION = "2026.09.30.29"
 API_DATA_DIR = Path(os.environ.get("SMART_PANEL_DATA_DIR", str(Path.home() / ".smart-panel")))
 API_USERS_FILE = Path(os.environ.get("SMART_PANEL_USERS_FILE", str(API_DATA_DIR / "users.json")))
 LEGACY_API_PASSWORD_FILE = Path(os.environ.get("SMART_PANEL_API_PASSWORD_FILE", str(API_DATA_DIR / "api_password.txt")))
@@ -100,8 +100,8 @@ def normalize_username(username):
 
 
 def hash_password(password):
-    if not isinstance(password, str) or len(password) < 14 or len(password) > 128:
-        raise ValueError("La contraseña debe tener entre 14 y 128 caracteres")
+    if not isinstance(password, str) or len(password) < 8 or len(password) > 128:
+        raise ValueError("La contraseña debe tener entre 8 y 128 caracteres")
     salt = secrets.token_bytes(16)
     digest = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2 ** 14, r=8, p=1, maxmem=64 * 1024 * 1024, dklen=32)
     return {
@@ -153,7 +153,9 @@ def set_user_credentials(username, password):
     normalized = normalize_username(username)
     record = hash_password(password)
     with _user_store_lock:
-        save_user_records({normalized: record})
+        users = load_user_records()
+        users[normalized] = record
+        save_user_records(users)
     with _active_sessions_lock:
         _active_sessions.clear()
 
@@ -203,17 +205,18 @@ def clear_login_failures(client_key):
         _login_failures.pop(client_key, None)
 
 
-def create_session_token():
+def create_session_token(username="admin"):
     expires_at = str(int(time.time()) + API_SESSION_TTL)
     payload = expires_at + "." + secrets.token_urlsafe(18)
     signature = hmac.new(API_SIGNING_KEY, payload.encode("ascii"), hashlib.sha256).hexdigest()
     token = payload + "." + signature
     with _active_sessions_lock:
         now = int(time.time())
-        for active_token, expiry in list(_active_sessions.items()):
+        for active_token, session_data in list(_active_sessions.items()):
+            expiry = session_data if isinstance(session_data, int) else session_data.get("expires_at", 0)
             if expiry < now:
                 del _active_sessions[active_token]
-        _active_sessions[token] = int(expires_at)
+        _active_sessions[token] = {"expires_at": int(expires_at), "username": username}
     return token
 
 
@@ -227,14 +230,64 @@ def verify_session_token(token):
         if not hmac.compare_digest(signature, expected):
             return False
         with _active_sessions_lock:
-            return _active_sessions.get(token) == int(expires_at)
+            session_data = _active_sessions.get(token)
+            if isinstance(session_data, dict):
+                return session_data.get("expires_at") == int(expires_at)
+            return session_data == int(expires_at)
     except (AttributeError, TypeError, ValueError):
         return False
+
+
+def get_session_username(token):
+    with _active_sessions_lock:
+        session_data = _active_sessions.get(token)
+        if isinstance(session_data, dict):
+            return session_data.get("username", "")
+        return ""
 
 
 def revoke_session_token(token):
     with _active_sessions_lock:
         _active_sessions.pop(token, None)
+
+
+def ensure_default_users():
+    users = load_user_records()
+    if users:
+        return users
+
+    # 1. Configured via environment variables
+    env_user = os.environ.get("SMART_PANEL_ADMIN_USER", "").strip() or "admin"
+    env_password = os.environ.get("SMART_PANEL_ADMIN_PASSWORD", "").strip()
+    if env_password:
+        normalized = set_user_credentials(env_user, env_password)
+        print("Usuario '{}' configurado desde variables de entorno.".format(normalized))
+        return load_user_records()
+
+    # 2. Legacy API password file or env migration
+    legacy_password = os.environ.get("SMART_PANEL_API_PASSWORD", "").strip()
+    if not legacy_password and LEGACY_API_PASSWORD_FILE.is_file():
+        try:
+            legacy_password = LEGACY_API_PASSWORD_FILE.read_text(encoding="utf-8").strip()
+        except OSError:
+            pass
+
+    if legacy_password and len(legacy_password) >= 8:
+        normalized = set_user_credentials("admin", legacy_password)
+        print("Migración automática: Se creó la cuenta de usuario 'admin' a partir de la clave previa.")
+        return load_user_records()
+
+    # 3. Fresh installation bootstrap
+    generated_password = secrets.token_urlsafe(16)
+    normalized = set_user_credentials("admin", generated_password)
+    print("=" * 60)
+    print("SMART PANEL - CUENTA INICIAL CREADA AUTOMÁTICAMENTE")
+    print("Usuario:    {}".format(normalized))
+    print("Contraseña: {}".format(generated_password))
+    print("Guarda estas credenciales o cámbialas ejecutando:")
+    print("  python manage_users.py set {}".format(normalized))
+    print("=" * 60)
+    return load_user_records()
 
 
 def initialize_events_db():
@@ -592,10 +645,16 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
             raise ValueError("El cuerpo JSON debe ser un objeto")
         return payload
 
-    def is_authenticated(self):
+    def get_bearer_token(self):
         authorization = self.headers.get("Authorization", "")
         scheme, separator, token = authorization.partition(" ")
-        return separator == " " and scheme.lower() == "bearer" and verify_session_token(token)
+        if separator == " " and scheme.lower() == "bearer":
+            return token
+        return None
+
+    def is_authenticated(self):
+        token = self.get_bearer_token()
+        return bool(token and verify_session_token(token))
 
     def require_authentication(self):
         if self.is_authenticated():
@@ -604,7 +663,7 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
         return False
 
     def login(self):
-        client_key = self.headers.get("CF-Connecting-IP", self.client_address[0])
+        client_key = self.headers.get("CF-Connecting-IP") or self.client_address[0]
         if login_is_rate_limited(client_key):
             self.send_json(429, {"error": "Demasiados intentos. Espera 15 minutos."})
             return
@@ -615,12 +674,29 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
             return
         username = payload.get("username")
         password = payload.get("password")
-        if not verify_user_credentials(username, password):
+        if not username and isinstance(password, str):
+            users = load_user_records()
+            if "admin" in users and verify_user_credentials("admin", password):
+                username = "admin"
+            elif len(users) == 1:
+                single_user = next(iter(users))
+                if verify_user_credentials(single_user, password):
+                    username = single_user
+        if not username or not verify_user_credentials(username, password):
             record_login_failure(client_key)
             self.send_json(401, {"error": "Usuario o contraseña incorrectos"})
             return
         clear_login_failures(client_key)
-        self.send_json(200, {"token": create_session_token(), "expires_in": API_SESSION_TTL})
+        try:
+            normalized = normalize_username(username)
+        except ValueError:
+            normalized = str(username).strip().lower()
+        token = create_session_token(normalized)
+        self.send_json(200, {
+            "token": token,
+            "username": normalized,
+            "expires_in": API_SESSION_TTL
+        })
 
     def list_events(self, query):
         try:
@@ -721,7 +797,15 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         path_parts = [unquote(part) for part in parsed.path.strip("/").split("/")]
         if parsed.path == "/api/auth/status":
-            self.send_json(200, {"required": True, "authenticated": self.is_authenticated(), "expires_in": API_SESSION_TTL})
+            token = self.get_bearer_token()
+            authenticated = bool(token and verify_session_token(token))
+            username = get_session_username(token) if authenticated else ""
+            self.send_json(200, {
+                "required": True,
+                "authenticated": authenticated,
+                "username": username,
+                "expires_in": API_SESSION_TTL
+            })
             return
         if not self.require_authentication():
             return
@@ -914,14 +998,12 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
 
 
 def run(port=API_PORT):
-    users = load_user_records()
-    if not users:
-        raise RuntimeError("No hay usuarios configurados. Ejecuta 'python manage_users.py set' antes de iniciar la API.")
+    users = ensure_default_users()
     initialize_events_db()
     server = ThreadingHTTPServer(("0.0.0.0", port), SmartPanelHandler)
     print("Smart Panel API en 0.0.0.0:{}".format(port))
     print("Subred de escaneo: {}".format(TV_SCAN_CIDR or "automática (/24 del servidor)"))
-    print("Usuarios persistentes en {}".format(API_USERS_FILE))
+    print("Usuarios persistentes en {} (cuentas activas: {})".format(API_USERS_FILE, ", ".join(sorted(users.keys()))))
     server.serve_forever()
 
 

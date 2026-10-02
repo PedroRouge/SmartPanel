@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "28";
+  var APP_BUILD_VERSION = "29";
   var STORAGE_KEY = "smart-panel-state-v1";
   var API_BASE_URL = (window.SMART_PANEL_API_URL || "https://open-cost-levy-ignored.trycloudflare.com").replace(/\/+$/, "");
   var API_TOKEN_KEY = "smart-panel-api-session-v1";
@@ -123,27 +123,54 @@
     remoteDataInitialized = false;
     apiToken = null;
     try { window.sessionStorage.removeItem(API_TOKEN_KEY); } catch (error) { }
+    updateSessionUser("");
     showAuthGate("La sesión venció. Vuelve a iniciar sesión.");
     return true;
+  }
+
+  function updateSessionUser(username) {
+    var userEl = byId("session-user");
+    if (!userEl) { return; }
+    var name = username || "";
+    if (!name) {
+      try { name = window.localStorage.getItem(API_USERNAME_KEY) || ""; } catch (error) { }
+    }
+    if (name) {
+      userEl.textContent = name;
+      userEl.hidden = false;
+    } else {
+      userEl.hidden = true;
+    }
   }
 
   function showAuthGate(message) {
     byId("auth-gate").hidden = false;
     byId("api-logout").hidden = true;
+    updateSessionUser("");
     byId("auth-error").textContent = message || "";
     byId("auth-error").hidden = !message;
+    var passwordInput = byId("auth-password");
+    if (passwordInput) {
+      passwordInput.type = "password";
+      var icon = byId("password-toggle-icon");
+      if (icon) { icon.textContent = "👁"; }
+    }
     if (!byId("auth-username").value) { byId("auth-username").focus(); }
-    else if (!byId("auth-password").value) { byId("auth-password").focus(); }
+    else if (passwordInput && !passwordInput.value) { passwordInput.focus(); }
   }
 
-  function acceptSession(token) {
+  function acceptSession(token, username) {
     apiToken = token;
     apiAuthenticated = true;
     try { window.sessionStorage.setItem(API_TOKEN_KEY, token); } catch (error) { }
+    if (username) {
+      try { window.localStorage.setItem(API_USERNAME_KEY, username); } catch (error) { }
+    }
     byId("auth-gate").hidden = true;
     byId("api-logout").hidden = false;
     byId("auth-password").value = "";
     byId("auth-error").hidden = true;
+    updateSessionUser(username);
     initializeRemoteData();
   }
 
@@ -158,7 +185,7 @@
       var result = {};
       try { result = JSON.parse(request.responseText); } catch (error) { }
       if (request.status >= 200 && request.status < 300 && result.authenticated && apiToken) {
-        acceptSession(apiToken);
+        acceptSession(apiToken, result.username);
       } else if (request.status >= 200 && request.status < 300) {
         apiToken = null;
         try { window.sessionStorage.removeItem(API_TOKEN_KEY); } catch (error) { }
@@ -174,11 +201,51 @@
 
   function initializeAuthentication() {
     try { byId("auth-username").value = window.localStorage.getItem(API_USERNAME_KEY) || ""; } catch (error) { }
+
+    var toggleBtn = byId("auth-password-toggle");
+    if (toggleBtn) {
+      toggleBtn.addEventListener("click", function () {
+        var passwordInput = byId("auth-password");
+        var icon = byId("password-toggle-icon");
+        if (!passwordInput) { return; }
+        if (passwordInput.type === "password") {
+          passwordInput.type = "text";
+          toggleBtn.setAttribute("aria-label", "Ocultar contraseña");
+          toggleBtn.setAttribute("title", "Ocultar contraseña");
+          if (icon) { icon.textContent = "🙈"; }
+        } else {
+          passwordInput.type = "password";
+          toggleBtn.setAttribute("aria-label", "Mostrar contraseña");
+          toggleBtn.setAttribute("title", "Mostrar contraseña");
+          if (icon) { icon.textContent = "👁"; }
+        }
+      });
+    }
+
     byId("auth-form").addEventListener("submit", function (event) {
       event.preventDefault();
       var submit = byId("auth-submit");
+      var usernameInput = byId("auth-username");
+      var passwordInput = byId("auth-password");
+      var username = (usernameInput.value || "").trim();
+      var password = passwordInput.value || "";
+
+      if (!username) {
+        byId("auth-error").textContent = "Ingresa tu usuario.";
+        byId("auth-error").hidden = false;
+        usernameInput.focus();
+        return;
+      }
+      if (!password) {
+        byId("auth-error").textContent = "Ingresa tu contraseña.";
+        byId("auth-error").hidden = false;
+        passwordInput.focus();
+        return;
+      }
+
       var request = new XMLHttpRequest();
       submit.disabled = true;
+      submit.textContent = "Iniciando sesión...";
       byId("auth-error").hidden = true;
       request.open("POST", localApiUrl("/api/auth/login"), true);
       request.timeout = 10000;
@@ -186,26 +253,29 @@
       request.onreadystatechange = function () {
         if (request.readyState !== 4) { return; }
         submit.disabled = false;
+        submit.textContent = "Iniciar sesión";
         var result = {};
         try { result = JSON.parse(request.responseText); } catch (error) { }
         if (request.status >= 200 && request.status < 300 && result.token) {
-          try { window.localStorage.setItem(API_USERNAME_KEY, byId("auth-username").value.trim()); } catch (error) { }
-          acceptSession(result.token);
+          try { window.localStorage.setItem(API_USERNAME_KEY, username); } catch (error) { }
+          acceptSession(result.token, result.username || username);
         } else {
-          byId("auth-error").textContent = result.error || "No se pudo iniciar sesión.";
+          byId("auth-error").textContent = result.error || "Usuario o contraseña incorrectos.";
           byId("auth-error").hidden = false;
+          passwordInput.focus();
         }
       };
       request.onerror = function () {
         submit.disabled = false;
+        submit.textContent = "Iniciar sesión";
         byId("auth-error").textContent = "Sin conexión con la API de la notebook.";
         byId("auth-error").hidden = false;
       };
       request.ontimeout = request.onerror;
       try {
         request.send(JSON.stringify({
-          username: byId("auth-username").value,
-          password: byId("auth-password").value
+          username: username,
+          password: password
         }));
       } catch (error) { request.onerror(); }
     });
@@ -227,6 +297,7 @@
       apiAuthenticated = false;
       apiToken = null;
       try { window.sessionStorage.removeItem(API_TOKEN_KEY); } catch (error) { }
+      updateSessionUser("");
       remoteDataInitialized = false;
       showAuthGate("Sesión cerrada.");
   }
@@ -279,7 +350,7 @@
       }
       hasController = true;
     });
-    window.navigator.serviceWorker.register("/service-worker.js?v=28").then(function (registration) {
+    window.navigator.serviceWorker.register("/service-worker.js?v=29").then(function (registration) {
       registration.update().catch(function () {});
     }).catch(function () {});
   }

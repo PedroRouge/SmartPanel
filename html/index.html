@@ -11,14 +11,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="28">
+  <meta name="smart-panel-version" content="29">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=28">
+  <link rel="stylesheet" href="css/styles.css?v=29">
   <script>window.SMART_PANEL_API_URL = window.SMART_PANEL_API_URL || "https://open-cost-levy-ignored.trycloudflare.com";</script>
-  <script src="js/app.js?v=28" defer></script>
+  <script src="js/app.js?v=29" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -27,8 +27,9 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v28</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v29</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
       <button class="pwa-install-button" id="pwa-install" type="button" aria-label="Instalar Smart Panel" title="Instalar Smart Panel" hidden><span aria-hidden="true">⇩</span><span>Instalar</span></button>
+      <span class="session-user" id="session-user" hidden></span>
       <button class="api-logout" id="api-logout" type="button" hidden>Cerrar sesión</button>
     </header>
 
@@ -245,9 +246,17 @@
         <p class="eyebrow">SESIÓN SEGURA</p>
         <h2 id="auth-heading">Conectar con Smart Panel</h2>
         <p class="auth-copy">Inicia sesión con tu usuario y contraseña de Smart Panel.</p>
-        <form id="auth-form">
-          <label class="form-field"><span>Usuario</span><input id="auth-username" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" required></label>
-          <label class="form-field"><span>Contraseña</span><input id="auth-password" name="password" type="password" autocomplete="current-password" required></label>
+        <form id="auth-form" autocomplete="on">
+          <label class="form-field"><span>Usuario</span><input id="auth-username" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="ej. admin" required></label>
+          <label class="form-field auth-password-field">
+            <span>Contraseña</span>
+            <div class="password-wrapper">
+              <input id="auth-password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
+              <button class="password-toggle-btn" id="auth-password-toggle" type="button" aria-label="Mostrar u ocultar contraseña" title="Mostrar u ocultar contraseña" tabindex="-1">
+                <span id="password-toggle-icon" aria-hidden="true">👁</span>
+              </button>
+            </div>
+          </label>
           <p class="form-error" id="auth-error" role="alert" hidden></p>
           <button class="primary-button auth-submit" id="auth-submit" type="submit">Iniciar sesión</button>
           <button class="auth-install-link" id="pwa-install-auth" type="button">Instalar app en este iPad</button>
