@@ -11,18 +11,18 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="32">
+  <meta name="smart-panel-version" content="33">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=32">
-  <!-- Firebase SDK (v10 compat) -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=32"></script>
-  <script src="js/app.js?v=32" defer></script>
+  <link rel="stylesheet" href="css/styles.css?v=33">
+  <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" defer></script>
+  <script src="js/firebase-config.js?v=33" defer></script>
+  <script src="js/app.js?v=33" defer></script>
 </head>
 <body>
   <script>
@@ -37,7 +37,7 @@
     if ('caches' in window) {
       caches.keys().then(function(keys) {
         keys.forEach(function(key) {
-          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-31') {
+          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-33') {
             caches.delete(key);
           }
         });
@@ -50,7 +50,7 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v29</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v33</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
       <button class="pwa-install-button" id="pwa-install" type="button" aria-label="Instalar Smart Panel" title="Instalar Smart Panel" hidden><span aria-hidden="true">⇩</span><span>Instalar</span></button>
       <span class="session-user" id="session-user" hidden></span>
       <button class="api-logout" id="api-logout" type="button" hidden>Cerrar sesión</button>
@@ -70,7 +70,7 @@
         <div class="welcome-row">
           <div>
             <p class="eyebrow">TU CASA, DE UN VISTAZO</p>
-            <h1>Buen día</h1>
+            <h1 id="greeting-text">Buen día</h1>
           </div>
           <div class="home-indicator"><span class="status-dot"></span> Todo en calma</div>
         </div>
@@ -228,10 +228,10 @@
         <section class="devices-section" aria-labelledby="lights-heading">
           <div class="section-heading"><div><p class="eyebrow">ILUMINACIÓN</p><h2 id="lights-heading">Luces</h2></div><span class="section-count" id="lights-count">0 encendidas</span></div>
           <div class="device-grid">
-            <article class="device-card panel-surface" data-device="living"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Living</h3><p>Techo</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz del living"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state">Apagada</span></button></article>
-            <article class="device-card panel-surface" data-device="kitchen"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Cocina</h3><p>Mesada</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz de la cocina"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state">Apagada</span></button></article>
-            <article class="device-card panel-surface" data-device="bedroom"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Dormitorio</h3><p>Principal</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz del dormitorio"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state">Apagada</span></button></article>
-            <article class="device-card panel-surface" data-device="garden"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Exterior</h3><p>Jardín</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz exterior"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state">Apagada</span></button></article>
+            <article class="device-card panel-surface" data-device="living"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Living</h3><p>Techo</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz del living" aria-describedby="desc-light-living"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-living">Apagada</span></button></article>
+            <article class="device-card panel-surface" data-device="kitchen"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Cocina</h3><p>Mesada</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz de la cocina" aria-describedby="desc-light-kitchen"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-kitchen">Apagada</span></button></article>
+            <article class="device-card panel-surface" data-device="bedroom"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Dormitorio</h3><p>Principal</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz del dormitorio" aria-describedby="desc-light-bedroom"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-bedroom">Apagada</span></button></article>
+            <article class="device-card panel-surface" data-device="garden"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Exterior</h3><p>Jardín</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz exterior" aria-describedby="desc-light-garden"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-garden">Apagada</span></button></article>
           </div>
         </section>
       </section>
@@ -244,7 +244,7 @@
             <p class="eyebrow">SISTEMA DE CIRCULACIÓN</p>
             <h2>Motor de pileta</h2>
             <p class="device-description" id="pool-description">El motor está apagado.</p>
-            <button class="pool-toggle state-switch" id="pool-toggle" type="button" role="switch" aria-checked="false" aria-label="Motor de pileta"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state">Apagado</span></button>
+            <button class="pool-toggle state-switch" id="pool-toggle" type="button" role="switch" aria-checked="false" aria-label="Motor de pileta" aria-describedby="desc-pool-state"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-pool-state">Apagado</span></button>
           </article>
           <article class="water-temperature panel-surface">
             <p class="eyebrow">TEMPERATURA DEL AGUA</p>
@@ -257,7 +257,7 @@
       </section>
 
       <section class="view" id="panel-camaras" role="tabpanel" aria-labelledby="tab-camaras" data-panel="camaras" hidden>
-        <div class="page-heading camera-page-heading"><div><p class="eyebrow">SEGURIDAD</p><h1>Cámaras</h1><p>Administra tus cámaras IP Wi-Fi.</p></div><button class="primary-button" type="button" id="add-camera-button"><span aria-hidden="true">＋</span> Añadir cámara</button></div>
+        <div class="page-heading camera-page-heading"><div><p class="eyebrow">SEGURIDAD</p><h1>Cámaras</h1><p>Administra tus cámaras IP Wi-Fi.</p></div><button class="primary-button" type="button" id="add-camera-button" data-open-camera-form><span aria-hidden="true">＋</span> Añadir cámara</button></div>
         <div class="camera-empty panel-surface" id="camera-empty" hidden><span class="empty-camera-icon" aria-hidden="true">▧</span><h2>No hay cámaras añadidas</h2><p>Añade la dirección de una cámara para organizarla en este panel.</p><button class="secondary-button" type="button" data-open-camera-form>Añadir primera cámara</button></div>
         <div class="camera-grid" id="camera-grid"></div>
       </section>
@@ -282,7 +282,7 @@
           </label>
           <p class="form-error" id="auth-error" role="alert" hidden></p>
           <button class="primary-button auth-submit" id="auth-submit" type="submit">Iniciar sesión</button>
-          <button class="auth-install-link" id="pwa-install-auth" type="button">Instalar app en este iPad</button>
+          <button class="auth-install-link" id="pwa-install-auth" type="button">Añadir a pantalla de inicio</button>
         </form>
       </section>
     </div>

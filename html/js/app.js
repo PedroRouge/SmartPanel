@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "32";
+  var APP_BUILD_VERSION = "33";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -17,16 +17,31 @@
   var apiAuthenticated = false;
   var currentUsername = "";
   var cameraCredentials = {};
-  var weatherRetryTimer = null;
   var weatherHasData = false;
   var volumeCommandTimer = null;
-  var tvPairingId = null;
+  function formatDateISO(dateValue) {
+    var y = dateValue.getFullYear();
+    var m = String(dateValue.getMonth() + 1).padStart(2, "0");
+    var d = String(dateValue.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + d;
+  }
+
+  function parseISODate(value) {
+    var parts = value.split("-");
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  }
+
+  function formatAgendaDate(value, options) {
+    return parseISODate(value).toLocaleDateString("es-AR", options || { weekday: "long", day: "numeric", month: "long" });
+  }
+
   var calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   var selectedAgendaDate = formatDateISO(new Date());
   var calendarEvents = [];
   var eventEditingId = null;
   var deferredInstallPrompt = null;
   var listenersAttached = false;
+  var lastRenderedDay = ""; // PERF-03: sólo actualizar date-line cuando cambia el día
 
   var TV_DEVICES = [
     { id: "tv-living", name: "TV Living", room: "Living", model: "Smart TV", ip: "192.168.0.52", online: true, poweredOn: false, powerControlReady: true, volume: 35, muted: false },
@@ -234,6 +249,10 @@
 
   // --- ENVIAR COMANDOS HACIA FIREBASE (El ESP32 los ejecuta vía Wi-Fi) ---
   function sendLightCommand(lightName, targetState) {
+    // BUG-07: Advertir si Firebase está desconectado
+    if (db && !firebaseConnected) {
+      console.warn("[" + lightName + "] Firebase desconectado. El comando puede llegar tarde.");
+    }
     // Estado optimista local para feedback inmediato
     var prevState = state.lights[lightName];
     state.lights[lightName] = targetState;
@@ -251,33 +270,48 @@
         console.error("Error enviando comando luz:", err);
         // Rollback inmediato si falla Firebase
         state.lights[lightName] = prevState;
+        saveState();
         if (card) { card.classList.remove("is-pending"); }
         renderLights();
       });
 
-      // Timeout de rollback: si el ESP32 no confirma en 5s, revertir
+      // BUG-03 FIX: Timeout de rollback que restaura estado Y animación
       var rollbackTimer = setTimeout(function () {
         if (card && card.classList.contains("is-pending")) {
           card.classList.remove("is-pending");
-          console.warn("[" + lightName + "] Sin confirmación del ESP32 en 5s — sin cambio en red local.");
+          // Restaurar el estado real desde Firebase
+          state.lights[lightName] = prevState;
+          saveState();
+          renderLights();
+          console.warn("[" + lightName + "] Sin confirmación del ESP32 en 5s — enchufe sin respuesta.");
         }
       }, 5000);
 
       // Escuchar confirmación real del ESP32 en /home/state/lights/{name}
-      db.ref("home/state/lights/" + lightName).once("value").then(function () {
+      db.ref("home/state/lights/" + lightName).once("value").then(function (snap) {
         clearTimeout(rollbackTimer);
         if (card) { card.classList.remove("is-pending"); }
+        // Aplicar el estado confirmado por el hardware
+        state.lights[lightName] = snap.val() === true;
+        saveState();
+        renderLights();
       });
     } else {
       if (card) { card.classList.remove("is-pending"); }
+      if (!apiAuthenticated) {
+        state.lights[lightName] = prevState;
+        renderLights();
+      }
     }
   }
 
   function sendPoolCommand(targetState) {
+    if (db && !firebaseConnected) {
+      console.warn("[Pileta] Firebase desconectado. El comando puede llegar tarde.");
+    }
     var prevState = state.poolOn;
     state.poolOn = targetState;
     saveState();
-    // Marcar pileta como pendiente
     var toggle = byId("pool-toggle");
     if (toggle) { toggle.classList.add("is-pending"); }
     renderPool();
@@ -289,32 +323,56 @@
       db.ref().update(updates).catch(function (err) {
         console.error("Error enviando comando pileta:", err);
         state.poolOn = prevState;
+        saveState();
         if (toggle) { toggle.classList.remove("is-pending"); }
         renderPool();
       });
 
-      // Rollback si no hay confirmación en 6s (pileta puede tardar más)
       var poolTimer = setTimeout(function () {
         if (toggle && toggle.classList.contains("is-pending")) {
           toggle.classList.remove("is-pending");
+          state.poolOn = prevState;
+          saveState();
+          renderPool();
           console.warn("[Pileta] Sin confirmación del ESP32 en 6s.");
         }
       }, 6000);
 
-      db.ref("home/state/poolOn").once("value").then(function () {
+      db.ref("home/state/poolOn").once("value").then(function (snap) {
         clearTimeout(poolTimer);
         if (toggle) { toggle.classList.remove("is-pending"); }
+        state.poolOn = snap.val() === true;
+        saveState();
+        renderPool();
       });
     } else {
       if (toggle) { toggle.classList.remove("is-pending"); }
+      if (!apiAuthenticated) {
+        state.poolOn = prevState;
+        renderPool();
+      }
     }
   }
 
+  // BUG-09: Gate con rollback completo + auto-clear del mensaje (UX-03)
   function sendGateCommand(targetState) {
     var button = byId("gate-button");
+    var feedbackEl = byId("gate-feedback");
+    var prevState = state.gateOpen;
     button.disabled = true;
-    byId("gate-feedback").textContent = targetState ? "Enviando apertura vía Wi-Fi..." : "Enviando cierre vía Wi-Fi...";
+    feedbackEl.textContent = targetState ? "Enviando apertura vía Wi-Fi..." : "Enviando cierre vía Wi-Fi...";
 
+    if (!apiAuthenticated) {
+      button.disabled = false;
+      feedbackEl.textContent = "Inicia sesión para controlar el portón.";
+      return;
+    }
+
+    if (db && !firebaseConnected) {
+      feedbackEl.textContent = "Advertencia: Firebase desconectado. Reintentando...";
+    }
+
+    // Optimista local para feedback inmediato
     state.gateOpen = targetState;
     saveState();
     renderGate();
@@ -323,19 +381,45 @@
       var updates = {};
       updates["home/commands/gateOpen"] = targetState;
       updates["home/commands/gateTrigger"] = Date.now();
-      updates["home/state/gateOpen"] = targetState;
+      updates["home/commands/timestamp"] = Date.now();
       db.ref().update(updates).then(function () {
-        byId("gate-feedback").textContent = "Comando Wi-Fi enviado al ESP32.";
+        feedbackEl.textContent = "Comando enviado. Esperando confirmación del ESP32...";
+
+        // Timeout de rollback: si el ESP32 no confirma en 8s
+        var gateTimer = setTimeout(function () {
+          state.gateOpen = prevState;
+          saveState();
+          renderGate();
+          feedbackEl.textContent = "Sin confirmación del ESP32. Verifica la conexión Wi-Fi local.";
+          button.disabled = false;
+        }, 8000);
+
+        // Esperar confirmación real desde Firebase (ESP32 escribe el estado)
+        db.ref("home/state/gateOpen").once("value").then(function (snap) {
+          clearTimeout(gateTimer);
+          state.gateOpen = snap.val() === true;
+          saveState();
+          renderGate();
+          feedbackEl.textContent = "Portón accionado correctamente.";
+          button.disabled = false;
+          // UX-03: Auto-limpiar el mensaje tras 4 segundos
+          setTimeout(function () { feedbackEl.textContent = ""; }, 4000);
+        });
       }).catch(function (err) {
-        byId("gate-feedback").textContent = "Error: " + err.message;
-      }).finally(function () {
+        state.gateOpen = prevState;
+        saveState();
+        renderGate();
+        feedbackEl.textContent = "Error: " + err.message;
         button.disabled = false;
       });
     } else {
       setTimeout(function () {
+        state.gateOpen = prevState;
+        saveState();
+        renderGate();
         button.disabled = false;
-        byId("gate-feedback").textContent = "Estado actualizado localmente.";
-      }, 500);
+        feedbackEl.textContent = "Inicia sesión para controlar el portón.";
+      }, 400);
     }
   }
 
@@ -534,8 +618,8 @@
     // Activar listeners protegidos
     attachFirebaseListeners();
 
-    // Cargar clima
-    loadWeather();
+    // PERF-02: Solo cargar clima si aún no hay datos (evita doble petición al inicio)
+    if (!weatherHasData) { loadWeather(); }
   }
 
   function showAuthGate(msg) {
@@ -1047,7 +1131,7 @@
     var caption = document.createElement("div");
     caption.className = "camera-caption";
     var copy = document.createElement("div");
-    copy.appendChild(createTextElement("h2", "", camera.name));
+    copy.appendChild(createTextElement("h3", "", camera.name));
     copy.appendChild(createTextElement("p", "", camera.streamUrl.replace(/^https?:\/\//i, "").split("/")[0]));
     copy.appendChild(createTextElement("span", "camera-type-tag", "Stream Wi-Fi / LAN"));
     caption.appendChild(copy);
@@ -1102,12 +1186,18 @@
       e.preventDefault();
       var name = form.elements.cameraName.value.trim();
       var url = form.elements.cameraUrl.value.trim();
+      var user = form.elements.cameraUser ? form.elements.cameraUser.value.trim() : "";
+      var pass = form.elements.cameraPassword ? form.elements.cameraPassword.value : "";
       if (!name || !url) {
         byId("camera-form-error").textContent = "Completa el nombre y la dirección del stream.";
         byId("camera-form-error").hidden = false;
         return;
       }
-      state.cameras.push({ id: "cam-" + Date.now(), name: name, streamUrl: url });
+      var camId = "cam-" + Date.now();
+      if (user || pass) {
+        cameraCredentials[camId] = { user: user, pass: pass };
+      }
+      state.cameras.push({ id: camId, name: name, streamUrl: url });
       saveState();
       renderCameras();
       byId("camera-modal").hidden = true;
@@ -1182,17 +1272,58 @@
         sendTVCommand("remote_key", this.getAttribute("data-remote-key"));
       });
     });
+
+    // BUG-04: Pairing TV
+    var pairingForm = byId("tv-pairing-form");
+    if (pairingForm) {
+      pairingForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var code = (byId("tv-pairing-code").value || "").trim().toUpperCase();
+        if (code.length === 6) {
+          sendTVCommand("pair", code);
+          byId("tv-pairing-panel").hidden = true;
+          byId("tv-pairing-code").value = "";
+          byId("media-feedback").textContent = "Código de vinculación enviado al televisor.";
+        } else {
+          alert("Ingresa un código de emparejamiento válido de 6 caracteres.");
+        }
+      });
+    }
+    var pairingCancel = byId("tv-pairing-cancel");
+    if (pairingCancel) {
+      pairingCancel.addEventListener("click", function () {
+        byId("tv-pairing-panel").hidden = true;
+      });
+    }
+
+    // A11Y-02: Cerrar modales con tecla Escape
+    window.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        var cameraModal = byId("camera-modal");
+        var eventModal = byId("event-modal");
+        if (cameraModal && !cameraModal.hidden) {
+          cameraModal.hidden = true;
+          byId("camera-form").reset();
+        }
+        if (eventModal && !eventModal.hidden) {
+          eventModal.hidden = true;
+          byId("event-form").reset();
+        }
+      }
+    });
   }
 
   function initializeTabs() {
     var tabs = document.querySelectorAll("[data-tab]");
     var panels = document.querySelectorAll("[data-panel]");
+    var tabArray = Array.prototype.slice.call(tabs);
 
     function activate(name) {
       for (var i = 0; i < tabs.length; i += 1) {
         var act = tabs[i].getAttribute("data-tab") === name;
         tabs[i].classList.toggle("is-active", act);
         tabs[i].setAttribute("aria-selected", act ? "true" : "false");
+        tabs[i].setAttribute("tabindex", act ? "0" : "-1");
       }
       for (var j = 0; j < panels.length; j += 1) {
         var vis = panels[j].getAttribute("data-panel") === name;
@@ -1207,13 +1338,40 @@
     Array.prototype.forEach.call(tabs, function (tab) {
       tab.addEventListener("click", function () {
         activate(this.getAttribute("data-tab"));
+        this.focus();
       });
     });
+
+    // A11Y-01: Navegación por flechas de teclado (ARIA Tabs pattern)
+    var tabBar = document.querySelector(".tab-bar");
+    if (tabBar) {
+      tabBar.addEventListener("keydown", function (e) {
+        var idx = tabArray.indexOf(document.activeElement);
+        if (idx === -1) { return; }
+        var next = -1;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+          next = (idx + 1) % tabArray.length;
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          next = (idx - 1 + tabArray.length) % tabArray.length;
+        } else if (e.key === "Home") {
+          next = 0;
+        } else if (e.key === "End") {
+          next = tabArray.length - 1;
+        }
+        if (next !== -1) {
+          e.preventDefault();
+          tabArray[next].focus();
+          activate(tabArray[next].getAttribute("data-tab"));
+        }
+      });
+    }
 
     var hash = (window.location.hash || "").replace("#", "");
     activate(hash || "inicio");
   }
 
+  // PERF-03: Actualizar reloj cada segundo; date-line solo cuando cambia el día
+  // UX-02: Saludo dinámico según la hora del día
   function updateClock() {
     var now = new Date();
     var h = String(now.getHours()).padStart(2, "0");
@@ -1221,26 +1379,24 @@
     var timeStr = h + ":" + m;
     byId("clock").textContent = timeStr;
     byId("footer-time").textContent = timeStr;
-    byId("date-line").textContent = now.toLocaleDateString("es-AR", {
-      weekday: "long", day: "numeric", month: "long", year: "numeric"
-    });
+
+    var todayISO = formatDateISO(now);
+    if (todayISO !== lastRenderedDay) {
+      lastRenderedDay = todayISO;
+      byId("date-line").textContent = now.toLocaleDateString("es-AR", {
+        weekday: "long", day: "numeric", month: "long", year: "numeric"
+      });
+    }
+
+    // Saludo dinámico
+    var hour = now.getHours();
+    var greeting = hour < 12 ? "Buen día" : hour < 20 ? "Buenas tardes" : "Buenas noches";
+    var greetingEl = byId("greeting-text");
+    if (greetingEl && greetingEl.textContent !== greeting) {
+      greetingEl.textContent = greeting;
+    }
   }
 
-  function formatDateISO(dateValue) {
-    var y = dateValue.getFullYear();
-    var m = String(dateValue.getMonth() + 1).padStart(2, "0");
-    var d = String(dateValue.getDate()).padStart(2, "0");
-    return y + "-" + m + "-" + d;
-  }
-
-  function parseISODate(value) {
-    var parts = value.split("-");
-    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-  }
-
-  function formatAgendaDate(value, options) {
-    return parseISODate(value).toLocaleDateString("es-AR", options || { weekday: "long", day: "numeric", month: "long" });
-  }
 
   function initializePWA() {
     var installButton = byId("pwa-install");
@@ -1261,15 +1417,15 @@
     }
 
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/service-worker.js?v=31").then(function (reg) {
+      navigator.serviceWorker.register("/service-worker.js?v=33").then(function (reg) {
         reg.update().catch(function () {});
       }).catch(function () {});
     }
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v31";
-    byId("script-build-version").textContent = "JS v31";
+    byId("frontend-version").textContent = "HTML v33";
+    byId("script-build-version").textContent = "JS v33";
 
     initializeTabs();
     initializePWA();
@@ -1289,11 +1445,11 @@
     byId("weather-refresh").addEventListener("click", loadWeather);
     byId("tv-refresh").addEventListener("click", renderTVs);
 
-    // Inicializar Firebase y Autenticación con Firebase Auth
+    // Inicializar Firebase y Autenticación
     initFirebase();
     initializeAuthentication();
 
-    // Cargar clima
+    // Cargar clima (una sola vez al inicio + caché)
     loadCachedWeather();
     loadWeather();
     setInterval(loadWeather, 30 * 60 * 1000);

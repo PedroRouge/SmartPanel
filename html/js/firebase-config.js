@@ -14,12 +14,21 @@
     authDefaultDomain: "smartpanel.local"
   };
 
-  // Priorizar configuración si se actualiza dinámicamente
+  // Priorizar configuración si se actualiza dinámicamente, validando el dominio
   var customConfig = null;
   try {
     var stored = localStorage.getItem("smart-panel-firebase-config");
     if (stored) {
-      customConfig = JSON.parse(stored);
+      var parsed = JSON.parse(stored);
+      // Validar que apiKey exista y databaseURL apunte estrictamente a Firebase
+      if (parsed && typeof parsed.apiKey === "string" && parsed.apiKey.length > 10 &&
+          typeof parsed.databaseURL === "string" &&
+          /^https:\/\/[a-z0-9-]+\.(firebaseio\.com|firebasedatabase\.app)$/i.test(parsed.databaseURL)) {
+        customConfig = parsed;
+      } else {
+        console.warn("[Firebase Config] Configuración personalizada en localStorage inválida o insegura. Descartada.");
+        localStorage.removeItem("smart-panel-firebase-config");
+      }
     }
   } catch (e) {
     customConfig = null;

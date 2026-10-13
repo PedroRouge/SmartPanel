@@ -604,8 +604,13 @@ void handleTvCommand(const String& targetId, const String& action, const String&
         else if (value == "DOWN")  { irsend.sendSamsung(0xE0E08679, 32); }
         else if (value == "LEFT")  { irsend.sendSamsung(0xE0E0A659, 32); }
         else if (value == "RIGHT") { irsend.sendSamsung(0xE0E046B9, 32); }
-        else if (value == "ENTER") { irsend.sendSamsung(0xE0E016E9, 32); }
+        else if (value == "ENTER" || value == "OK") { irsend.sendSamsung(0xE0E016E9, 32); }
         else if (value == "BACK")  { irsend.sendSamsung(0xE0E01AE5, 32); }
         else if (value == "HOME")  { irsend.sendSamsung(0xE0E058A7, 32); }
+        else if (value == "MENU")  { irsend.sendSamsung(0xE0E058A7, 32); }
+        else if (value == "PLAY_PAUSE") { irsend.sendSamsung(0xE0E052AD, 32); }
+
+        // Enviar también vía Wi-Fi HTTP local si la TV soporta ADB/HTTP bridge
+        executeHttpLocalCommand("http://" + tvIp + ":8080/key?name=" + value);
     }
 }
