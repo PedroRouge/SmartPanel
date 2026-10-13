@@ -20,15 +20,22 @@ FirebaseConfig config;
 // --- Emisor Infrarrojo (Opcional por hardware) ---
 IRsend irsend(IR_SEND_PIN);
 
+#include <esp_task_wdt.h>
+
+#define WDT_TIMEOUT_SECONDS 20 // 20 segundos de Watchdog por hardware
+
 // --- Variables de control ---
 unsigned long lastHeartbeat = 0;
 const unsigned long HEARTBEAT_INTERVAL = 15000; // Cada 15 segundos
+unsigned long lastStreamCheck = 0;
+const unsigned long STREAM_CHECK_INTERVAL = 30000; // Cada 30 segundos
 bool streamSubscribed = false;
 
 // --- Prototipos de funciones ---
 void initWiFi();
 void initFirebase();
 void sendHeartbeat();
+void checkStreamHealth();
 bool executeHttpLocalCommand(const String& url);
 void handleLightCommand(const String& lightName, bool targetState);
 void handlePoolCommand(bool targetState);
@@ -42,19 +49,24 @@ void streamTimeoutCallback(bool timeout);
 // =========================================================================
 void setup() {
     Serial.begin(115200);
-    delay(1500);
+    delay(1000);
 
     Serial.println("\n==================================================");
     Serial.println("  SMART PANEL - GATEWAY IOT LOCAL (ESP32-S3)     ");
+    Serial.println("  Arquitectura Cloud-to-Device (Alta Estabilidad) ");
     Serial.println("==================================================");
 
-    // Iniciar LED emisor Infrarrojo
+    // 1. Configurar Watchdog Timer por hardware (evita que la placa quede colgada)
+    esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true);
+    esp_task_wdt_add(NULL); // Añadir tarea actual al Watchdog
+
+    // 2. Iniciar LED emisor Infrarrojo
     irsend.begin();
 
-    // Conectar a la red Wi-Fi de la casa
+    // 3. Conectar a Wi-Fi con auto-reconexión automática
     initWiFi();
 
-    // Inicializar conexión con Firebase Realtime Database
+    // 4. Conectar con Firebase Realtime Database
     initFirebase();
 
     Serial.println("[Sistema] Gateway iniciado. Escuchando comandos en tiempo real...\n");
@@ -64,23 +76,46 @@ void setup() {
 // LOOP
 // =========================================================================
 void loop() {
-    // Mantener la conexión Wi-Fi activa
+    // Alimentar el Watchdog de hardware en cada ciclo
+    esp_task_wdt_reset();
+
+    // 1. Verificación y auto-reconexión de Wi-Fi
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[Wi-Fi] Conexión perdida, reintentando...");
+        Serial.println("[Wi-Fi] Conexión perdida tras corte de red. Reintentando...");
         WiFi.reconnect();
-        delay(3000);
+        delay(2000);
         return;
     }
 
-    // Heartbeat periódico a Firebase para informar que el ESP32 está online
+    // 2. Heartbeat periódico a Firebase
     unsigned long now = millis();
     if (now - lastHeartbeat >= HEARTBEAT_INTERVAL || lastHeartbeat == 0) {
         lastHeartbeat = now;
         sendHeartbeat();
     }
 
-    // La librería de Firebase maneja los eventos de Stream en segundo plano
+    // 3. Verificación de salud del Stream de Firebase (auto-recuperación si cae)
+    if (now - lastStreamCheck >= STREAM_CHECK_INTERVAL) {
+        lastStreamCheck = now;
+        checkStreamHealth();
+    }
+
     delay(20);
+}
+
+// =========================================================================
+// VERIFICACIÓN DE SALUD DEL STREAM
+// =========================================================================
+void checkStreamHealth() {
+    if (!Firebase.ready()) return;
+    if (!streamData.httpConnected()) {
+        Serial.println("[Stream Health] Stream desconectado. Reabriendo suscripción...");
+        if (Firebase.RTDB.beginStream(&streamData, "/home/commands")) {
+            Firebase.RTDB.setStreamCallback(&streamData, streamCallback, streamTimeoutCallback);
+            streamSubscribed = true;
+            Serial.println("[Stream Health] Stream reanudado exitosamente!");
+        }
+    }
 }
 
 // =========================================================================
