@@ -29,8 +29,10 @@
   var listenersAttached = false;
 
   var TV_DEVICES = [
-    { id: "tv-principal", name: "TV principal", room: "Living", model: "Smart TV", online: true, poweredOn: false, powerControlReady: true, volume: 35, muted: false },
-    { id: "tv-dormitorio", name: "TV dormitorio", room: "Dormitorio", model: "Smart TV", online: true, poweredOn: false, powerControlReady: true, volume: 30, muted: false }
+    { id: "tv-living", name: "TV Living", room: "Living", model: "Smart TV", ip: "192.168.0.52", online: true, poweredOn: false, powerControlReady: true, volume: 35, muted: false },
+    { id: "tv-pedro", name: "TV Pedro", room: "Habitación Pedro", model: "Smart TV", ip: "192.168.0.10", online: true, poweredOn: false, powerControlReady: true, volume: 30, muted: false },
+    { id: "tv-padres", name: "TV Habitación Padres", room: "Habitación Padres", model: "Smart TV", ip: "192.168.0.53", online: true, poweredOn: false, powerControlReady: true, volume: 30, muted: false },
+    { id: "tv-lucas", name: "TV Lucas", room: "Habitación Lucas", model: "Smart TV", ip: "192.168.0.51", online: true, poweredOn: false, powerControlReady: true, volume: 25, muted: false }
   ];
 
   function readState() {

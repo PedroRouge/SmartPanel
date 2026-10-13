@@ -351,7 +351,16 @@ void handleGateCommand(bool targetState) {
 void handleTvCommand(const String& targetId, const String& action, const String& value) {
     Serial.printf("[Acción TV] Target: %s | Acción: %s | Valor: %s\n", targetId.c_str(), action.c_str(), value.c_str());
 
-    String tvIp = (targetId == "tv-dormitorio") ? ANDROID_TV_BEDROOM_IP : ANDROID_TV_LIVING_IP;
+    String tvIp = TV_LIVING_IP;
+    if (targetId == "tv-pedro") {
+        tvIp = TV_PEDRO_IP;
+    } else if (targetId == "tv-padres") {
+        tvIp = TV_PADRES_IP;
+    } else if (targetId == "tv-lucas") {
+        tvIp = TV_LUCAS_IP;
+    } else if (targetId == "tv-living") {
+        tvIp = TV_LIVING_IP;
+    }
 
     // 1. Comando de Energía (Power)
     if (action == "power") {
