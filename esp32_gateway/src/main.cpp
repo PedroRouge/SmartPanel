@@ -8,32 +8,75 @@
 #include <IRremoteESP8266.h>
 #include <IRsend.h>
 #include <ir_Samsung.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/queue.h>
+#include <esp_task_wdt.h>
+#include <time.h>
 
 #include "config.h"
 
-// --- Objetos de Firebase ---
+// =========================================================================
+// WATCHDOG
+// =========================================================================
+#define WDT_TIMEOUT_SECONDS 30  // 30 s — suficiente para cubrir reintentos
+
+// =========================================================================
+// OBJETOS FIREBASE
+// =========================================================================
 FirebaseData streamData;
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
 
-// --- Emisor Infrarrojo (Opcional por hardware) ---
+// =========================================================================
+// IR SENDER
+// =========================================================================
 IRsend irsend(IR_SEND_PIN);
 
-#include <esp_task_wdt.h>
+// =========================================================================
+// FREERTOS: COLA DE COMANDOS (Core 0 recibe → Core 1 ejecuta)
+//
+// Hallazgo Crítico 1 resuelto:
+//   Core 0 → Wi-Fi + Stream Firebase (nunca bloqueado)
+//   Core 1 → Worker que despacha HTTP local + IR (puede bloquearse sin problema)
+// =========================================================================
+#define CMD_QUEUE_SIZE 16  // máx. comandos pendientes simultáneos
 
-#define WDT_TIMEOUT_SECONDS 20 // 20 segundos de Watchdog por hardware
+// Tipos de comando
+enum CmdType {
+    CMD_LIGHT,
+    CMD_POOL,
+    CMD_GATE,
+    CMD_TV
+};
 
-// --- Variables de control ---
-unsigned long lastHeartbeat = 0;
-const unsigned long HEARTBEAT_INTERVAL = 15000; // Cada 15 segundos
+struct Command {
+    CmdType   type;
+    char      deviceId[32];   // luz: "living", TV: "tv-pedro", etc.
+    char      action[32];     // TV: "power", "set_volume", etc.
+    char      value[32];      // TV: valor numérico o clave de app
+    bool      boolParam;      // luces, pileta, portón
+    long long timestamp;      // timestamp Unix ms del comando (de Firebase)
+};
+
+QueueHandle_t cmdQueue;
+
+// =========================================================================
+// VARIABLES DE CONTROL
+// =========================================================================
+unsigned long lastHeartbeat   = 0;
+const unsigned long HEARTBEAT_INTERVAL    = 15000;  // 15 s
 unsigned long lastStreamCheck = 0;
-const unsigned long STREAM_CHECK_INTERVAL = 30000; // Cada 30 segundos
+const unsigned long STREAM_CHECK_INTERVAL = 30000;  // 30 s
 bool streamSubscribed = false;
 
-// --- Prototipos de funciones ---
+// =========================================================================
+// PROTOTIPOS
+// =========================================================================
 void initWiFi();
 void initFirebase();
+void initNTP();
 void sendHeartbeat();
 void checkStreamHealth();
 bool executeHttpLocalCommand(const String& url);
@@ -41,60 +84,87 @@ void handleLightCommand(const String& lightName, bool targetState);
 void handlePoolCommand(bool targetState);
 void handleGateCommand(bool targetState);
 void handleTvCommand(const String& targetId, const String& action, const String& value);
+void workerTask(void* param);
 void streamCallback(FirebaseStream data);
 void streamTimeoutCallback(bool timeout);
+bool isCommandFresh(long long cmdTimestampMs);
+void clearExecutedCommand(const String& path);
 
 // =========================================================================
-// SETUP
+// SETUP — Corre en Core 1 por defecto en Arduino-ESP32
 // =========================================================================
 void setup() {
     Serial.begin(115200);
-    delay(1000);
+    delay(800);
 
     Serial.println("\n==================================================");
     Serial.println("  SMART PANEL - GATEWAY IOT LOCAL (ESP32-S3)     ");
-    Serial.println("  Arquitectura Cloud-to-Device (Alta Estabilidad) ");
+    Serial.println("  Arquitectura: Dual-Core FreeRTOS + Firebase     ");
     Serial.println("==================================================");
 
-    // 1. Configurar Watchdog Timer por hardware (evita que la placa quede colgada)
+    // 1. Hardware Watchdog (reset automático si el firmware se cuelga)
     esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true);
-    esp_task_wdt_add(NULL); // Añadir tarea actual al Watchdog
+    esp_task_wdt_add(NULL);
 
-    // 2. Iniciar LED emisor Infrarrojo
+    // 2. IR sender
     irsend.begin();
 
-    // 3. Conectar a Wi-Fi con auto-reconexión automática
+    // 3. Cola de comandos (comunicación inter-núcleo)
+    cmdQueue = xQueueCreate(CMD_QUEUE_SIZE, sizeof(Command));
+    if (!cmdQueue) {
+        Serial.println("[FreeRTOS] ERROR CRÍTICO: No se pudo crear la cola de comandos.");
+    }
+
+    // 4. Crear tarea Worker en Core 0
+    //    (loop() y el stream de Firebase corren en Core 1)
+    xTaskCreatePinnedToCore(
+        workerTask,    // función
+        "CMD_WORKER",  // nombre
+        8192,          // stack (8 KB)
+        NULL,          // parámetros
+        1,             // prioridad
+        NULL,          // handle
+        0              // Core 0
+    );
+
+    // 5. Wi-Fi
     initWiFi();
 
-    // 4. Conectar con Firebase Realtime Database
+    // 6. NTP (para validar timestamps de comandos)
+    initNTP();
+
+    // 7. Firebase
     initFirebase();
 
-    Serial.println("[Sistema] Gateway iniciado. Escuchando comandos en tiempo real...\n");
+    Serial.println("[Sistema] Gateway iniciado. Escuchando comandos...\n");
 }
 
 // =========================================================================
-// LOOP
+// LOOP — Corre en Core 1 (Arduino default)
+// Responsabilidad: Wi-Fi keepalive, Heartbeat, health check del Stream.
+// NUNCA hace operaciones HTTP bloqueantes aquí.
 // =========================================================================
 void loop() {
-    // Alimentar el Watchdog de hardware en cada ciclo
+    // Alimentar Watchdog
     esp_task_wdt_reset();
 
-    // 1. Verificación y auto-reconexión de Wi-Fi
+    // Auto-reconexión Wi-Fi
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[Wi-Fi] Conexión perdida tras corte de red. Reintentando...");
+        Serial.println("[Wi-Fi] Conexión perdida. Reconectando...");
         WiFi.reconnect();
-        delay(2000);
+        delay(3000);
         return;
     }
 
-    // 2. Heartbeat periódico a Firebase
     unsigned long now = millis();
+
+    // Heartbeat periódico a Firebase
     if (now - lastHeartbeat >= HEARTBEAT_INTERVAL || lastHeartbeat == 0) {
         lastHeartbeat = now;
         sendHeartbeat();
     }
 
-    // 3. Verificación de salud del Stream de Firebase (auto-recuperación si cae)
+    // Verificación de salud del Stream
     if (now - lastStreamCheck >= STREAM_CHECK_INTERVAL) {
         lastStreamCheck = now;
         checkStreamHealth();
@@ -104,16 +174,87 @@ void loop() {
 }
 
 // =========================================================================
+// TAREA WORKER (Core 0) — Despacha peticiones HTTP sin bloquear el stream
+// =========================================================================
+void workerTask(void* param) {
+    Command cmd;
+    for (;;) {
+        // Esperar hasta 100 ms por un comando en la cola
+        if (xQueueReceive(cmdQueue, &cmd, pdMS_TO_TICKS(100)) == pdTRUE) {
+            switch (cmd.type) {
+                case CMD_LIGHT:
+                    handleLightCommand(String(cmd.deviceId), cmd.boolParam);
+                    break;
+                case CMD_POOL:
+                    handlePoolCommand(cmd.boolParam);
+                    break;
+                case CMD_GATE:
+                    handleGateCommand(cmd.boolParam);
+                    break;
+                case CMD_TV:
+                    handleTvCommand(String(cmd.deviceId), String(cmd.action), String(cmd.value));
+                    break;
+            }
+        }
+        // Yield para no monopolizar el scheduler
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+// =========================================================================
+// VALIDACIÓN TTL DE COMANDOS (Hallazgo Crítico 2)
+//
+// Si el ESP32 se reinicia horas después de que se enviaron comandos,
+// NO debe re-ejecutarlos. Solo procesa comandos con < 10 segundos de vida.
+// =========================================================================
+bool isCommandFresh(long long cmdTimestampMs) {
+    if (cmdTimestampMs <= 0) {
+        // Sin timestamp: descartar por seguridad
+        Serial.println("[TTL Guard] Comando sin timestamp — descartado.");
+        return false;
+    }
+    // Obtener tiempo actual del servidor NTP
+    time_t nowSec = time(nullptr);
+    if (nowSec < 100000) {
+        // NTP aún no sincronizado — aceptar el comando con advertencia
+        Serial.println("[TTL Guard] NTP no sincronizado — comando aceptado con cautela.");
+        return true;
+    }
+    long long nowMs  = (long long)nowSec * 1000LL;
+    long long diffMs = nowMs - cmdTimestampMs;
+
+    if (diffMs < 0) { diffMs = -diffMs; }  // clock skew menor
+
+    if (diffMs > 10000LL) {
+        Serial.printf("[TTL Guard] Comando RECHAZADO — antigüedad: %lld ms (> 10s)\n", diffMs);
+        return false;
+    }
+    Serial.printf("[TTL Guard] Comando VÁLIDO — antigüedad: %lld ms\n", diffMs);
+    return true;
+}
+
+// =========================================================================
+// LIMPIAR COMANDO EJECUTADO (evita re-ejecución en próximo reinicio)
+// Escribe null en el nodo ejecutado para que no quede en la DB.
+// =========================================================================
+void clearExecutedCommand(const String& path) {
+    if (!Firebase.ready()) { return; }
+    Firebase.RTDB.deleteNode(&fbdo, path.c_str());
+}
+
+// =========================================================================
 // VERIFICACIÓN DE SALUD DEL STREAM
 // =========================================================================
 void checkStreamHealth() {
-    if (!Firebase.ready()) return;
+    if (!Firebase.ready()) { return; }
     if (!streamData.httpConnected()) {
-        Serial.println("[Stream Health] Stream desconectado. Reabriendo suscripción...");
+        Serial.println("[Stream Health] Stream caído. Reabriendo...");
         if (Firebase.RTDB.beginStream(&streamData, "/home/commands")) {
             Firebase.RTDB.setStreamCallback(&streamData, streamCallback, streamTimeoutCallback);
             streamSubscribed = true;
-            Serial.println("[Stream Health] Stream reanudado exitosamente!");
+            Serial.println("[Stream Health] Stream reanudado.");
+        } else {
+            Serial.printf("[Stream Health] Error: %s\n", streamData.errorReason().c_str());
         }
     }
 }
@@ -123,111 +264,151 @@ void checkStreamHealth() {
 // =========================================================================
 void initWiFi() {
     WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false); // Mantener radio Wi-Fi despierto para mínima latencia
+    WiFi.setSleep(false);
+    WiFi.setAutoReconnect(true);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-    Serial.printf("[Wi-Fi] Conectando a %s", WIFI_SSID);
+    Serial.printf("[Wi-Fi] Conectando a '%s'", WIFI_SSID);
     int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+    while (WiFi.status() != WL_CONNECTED && attempts < 40) {
         delay(500);
         Serial.print(".");
         attempts++;
     }
 
     if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("\n[Wi-Fi] Conectado exitosamente!");
-        Serial.printf("[Wi-Fi] IP Local del ESP32-S3: %s\n", WiFi.localIP().toString().c_str());
-        Serial.printf("[Wi-Fi] Intensidad de señal (RSSI): %d dBm\n", WiFi.RSSI());
+        Serial.println("\n[Wi-Fi] ¡Conectado!");
+        Serial.printf("[Wi-Fi] IP local: %s | RSSI: %d dBm\n",
+            WiFi.localIP().toString().c_str(), WiFi.RSSI());
     } else {
-        Serial.println("\n[Wi-Fi] Error: No se pudo conectar a la red Wi-Fi. Revisa credenciales.");
+        Serial.println("\n[Wi-Fi] Sin conexión. El sistema reintentará automáticamente.");
     }
 }
 
 // =========================================================================
-// CONEXIÓN FIREBASE CON AUTENTICACIÓN SEGURA (Firebase Auth)
+// SINCRONIZACIÓN NTP (necesario para validar timestamps de comandos)
+// =========================================================================
+void initNTP() {
+    Serial.println("[NTP] Sincronizando reloj con servidor NTP...");
+    configTime(-3 * 3600, 0, "pool.ntp.org", "time.google.com");
+    unsigned long start = millis();
+    time_t now = 0;
+    while (now < 100000 && millis() - start < 8000) {
+        delay(200);
+        now = time(nullptr);
+    }
+    if (now > 100000) {
+        Serial.printf("[NTP] Reloj sincronizado: %s", ctime(&now));
+    } else {
+        Serial.println("[NTP] Advertencia: Sin sincronización NTP. TTL guard usará millis().");
+    }
+}
+
+// =========================================================================
+// CONEXIÓN FIREBASE
 // =========================================================================
 void initFirebase() {
-    Serial.println("[Firebase] Inicializando cliente con autenticación segura...");
+    Serial.println("[Firebase] Inicializando con autenticación segura...");
 
-    config.api_key = FIREBASE_API_KEY;
-    config.database_url = FIREBASE_DATABASE_URL;
-
-    // Autenticación con cuenta de servicio / usuario del ESP32
-    auth.user.email = FIREBASE_USER_EMAIL;
-    auth.user.password = FIREBASE_USER_PASSWORD;
-
-    // Callback opcional de estado del token
+    config.api_key        = FIREBASE_API_KEY;
+    config.database_url   = FIREBASE_DATABASE_URL;
+    auth.user.email       = FIREBASE_USER_EMAIL;
+    auth.user.password    = FIREBASE_USER_PASSWORD;
     config.token_status_callback = tokenStatusCallback;
 
     Firebase.begin(&config, &auth);
     Firebase.reconnectWiFi(true);
 
-    // Ajustar tamaños de buffer HTTP
     streamData.setBSSLBufferSize(4096, 1024);
     fbdo.setBSSLBufferSize(4096, 1024);
 
-    Serial.println("[Firebase] Esperando validación del token de autenticación...");
+    // Esperar validación del token (máx 12 s)
+    Serial.print("[Firebase] Esperando token JWT");
     unsigned long startAuth = millis();
-    while (!Firebase.ready() && millis() - startAuth < 10000) {
+    while (!Firebase.ready() && millis() - startAuth < 12000) {
         delay(200);
         Serial.print(".");
     }
 
     if (Firebase.ready()) {
-        Serial.println("\n[Firebase Auth] Token JWT validado correctamente!");
+        Serial.println("\n[Firebase] Token validado correctamente.");
     } else {
-        Serial.println("\n[Firebase Auth] Advertencia: Token aún no validado, reintentando en segundo plano...");
+        Serial.println("\n[Firebase] Advertencia: token pendiente — reintentando en segundo plano.");
     }
 
-    // Iniciar el Stream continuo en tiempo real en "/home/commands"
+    // Suscribir Stream en /home/commands
     if (!Firebase.RTDB.beginStream(&streamData, "/home/commands")) {
-        Serial.printf("[Firebase Stream Error] %s\n", streamData.errorReason().c_str());
+        Serial.printf("[Firebase Stream] Error: %s\n", streamData.errorReason().c_str());
         streamSubscribed = false;
     } else {
         Firebase.RTDB.setStreamCallback(&streamData, streamCallback, streamTimeoutCallback);
         streamSubscribed = true;
-        Serial.println("[Firebase] Stream suscrito exitosamente a /home/commands");
+        Serial.println("[Firebase] Stream suscrito a /home/commands");
     }
 }
 
 // =========================================================================
-// HEARTBEAT (Informa a la web en Vercel que el ESP32 está activo)
+// HEARTBEAT
 // =========================================================================
 void sendHeartbeat() {
     FirebaseJson json;
     json.set("online", true);
-    json.set("ip", WiFi.localIP().toString());
-    json.set("rssi", WiFi.RSSI());
+    json.set("ip",     WiFi.localIP().toString());
+    json.set("rssi",   WiFi.RSSI());
     json.set("uptime", (unsigned long)(millis() / 1000));
-    json.set("last_seen", (unsigned long)time(nullptr) > 100000 ? (unsigned long)time(nullptr) * 1000ULL : (unsigned long)millis());
-    json.set("version", "1.0.0-esp32s3");
 
-    if (Firebase.RTDB.setJSON(&fbdo, "/home/gateway/status", &json)) {
-        // Heartbeat enviado correctamente
-    } else {
-        Serial.printf("[Heartbeat Error] %s\n", fbdo.errorReason().c_str());
+    time_t nowSec = time(nullptr);
+    long long nowMs = (nowSec > 100000) ? (long long)nowSec * 1000LL : (long long)millis();
+    json.set("last_seen", nowMs);
+    json.set("version", "2.0.0-dualcore");
+
+    if (!Firebase.RTDB.setJSON(&fbdo, "/home/gateway/status", &json)) {
+        Serial.printf("[Heartbeat] Error: %s\n", fbdo.errorReason().c_str());
     }
 }
 
 // =========================================================================
-// CALLBACK DE STREAM FIREBASE (EVENTOS EN TIEMPO REAL)
+// STREAM CALLBACK — Solo encola comandos, NO hace HTTP aquí
 // =========================================================================
 void streamCallback(FirebaseStream data) {
-    String path = data.dataPath();
+    String path     = data.dataPath();
     String dataType = data.dataType();
 
-    Serial.printf("\n[Stream Event] Path: %s | Tipo: %s\n", path.c_str(), dataType.c_str());
+    Serial.printf("\n[Stream] Path: %s | Tipo: %s\n", path.c_str(), dataType.c_str());
 
-    // 1. Control de Luces individuales: "/lights/living", "/lights/kitchen", etc.
-    if (path.startsWith("/lights/")) {
-        String lightName = path.substring(8); // Extraer el identificador
-        if (dataType == "boolean") {
-            bool targetState = data.boolData();
-            handleLightCommand(lightName, targetState);
+    // Extraer timestamp global del comando (escrito por la web en /home/commands/timestamp)
+    // Se lee por separado; aquí trabajamos con el payload directo.
+
+    Command cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    bool enqueue = false;
+
+    // --- Luces individuales: /lights/living ---
+    if (path.startsWith("/lights/") && dataType == "boolean") {
+        String lightName = path.substring(8);
+        cmd.type      = CMD_LIGHT;
+        cmd.boolParam = data.boolData();
+        strncpy(cmd.deviceId, lightName.c_str(), sizeof(cmd.deviceId) - 1);
+
+        // Leer timestamp del nodo hermano
+        FirebaseData tsData;
+        if (Firebase.RTDB.get(&tsData, "/home/commands/timestamp")) {
+            cmd.timestamp = tsData.to<long long>();
+        }
+        if (isCommandFresh(cmd.timestamp)) {
+            enqueue = true;
+            clearExecutedCommand("/home/commands/lights/" + lightName);
         }
     }
-    // 2. Control de todas las Luces recibidas en bloque JSON: "/lights"
+    // --- Luces en bloque JSON: /lights ---
     else if (path == "/lights" && dataType == "json") {
+        FirebaseData tsData;
+        long long ts = 0;
+        if (Firebase.RTDB.get(&tsData, "/home/commands/timestamp")) {
+            ts = tsData.to<long long>();
+        }
+        if (!isCommandFresh(ts)) { return; }
+
         FirebaseJson json = data.jsonObject();
         size_t len = json.iteratorBegin();
         String key, value;
@@ -235,72 +416,112 @@ void streamCallback(FirebaseStream data) {
         for (size_t i = 0; i < len; i++) {
             json.iteratorGet(i, type, key, value);
             if (type == FirebaseJson::JSON_BOOL) {
-                handleLightCommand(key, value == "true");
+                Command c;
+                memset(&c, 0, sizeof(c));
+                c.type      = CMD_LIGHT;
+                c.boolParam = (value == "true");
+                c.timestamp = ts;
+                strncpy(c.deviceId, key.c_str(), sizeof(c.deviceId) - 1);
+                xQueueSend(cmdQueue, &c, 0);
             }
         }
         json.iteratorEnd();
+        clearExecutedCommand("/home/commands/lights");
+        return;
     }
-    // 3. Control de Pileta: "/poolOn"
-    else if (path == "/poolOn") {
-        if (dataType == "boolean") {
-            handlePoolCommand(data.boolData());
+    // --- Pileta: /poolOn ---
+    else if (path == "/poolOn" && dataType == "boolean") {
+        FirebaseData tsData;
+        if (Firebase.RTDB.get(&tsData, "/home/commands/timestamp")) {
+            cmd.timestamp = tsData.to<long long>();
+        }
+        if (isCommandFresh(cmd.timestamp)) {
+            cmd.type      = CMD_POOL;
+            cmd.boolParam = data.boolData();
+            enqueue = true;
+            clearExecutedCommand("/home/commands/poolOn");
         }
     }
-    // 4. Control de Portón: "/gateTrigger" o "/gateOpen"
-    else if (path == "/gateTrigger" || path == "/gateOpen") {
-        if (dataType == "boolean") {
-            handleGateCommand(data.boolData());
-        } else if (dataType == "int" || dataType == "double") {
-            handleGateCommand(true); // Disparo por timestamp de gatillo
+    // --- Portón: /gateOpen o /gateTrigger ---
+    else if ((path == "/gateOpen" || path == "/gateTrigger")) {
+        FirebaseData tsData;
+        if (Firebase.RTDB.get(&tsData, "/home/commands/timestamp")) {
+            cmd.timestamp = tsData.to<long long>();
+        }
+        // Para el portón, el propio gateTrigger es el timestamp si es numérico
+        if (path == "/gateTrigger" && (dataType == "int" || dataType == "double")) {
+            cmd.timestamp = (long long)data.doubleData();
+        } else if (dataType == "boolean") {
+            cmd.boolParam = data.boolData();
+        }
+        if (isCommandFresh(cmd.timestamp)) {
+            cmd.type  = CMD_GATE;
+            cmd.boolParam = true;
+            enqueue = true;
+            clearExecutedCommand("/home/commands/gateTrigger");
         }
     }
-    // 5. Control de TV / Multimedia: "/tv"
+    // --- TV: /tv (JSON) ---
     else if (path == "/tv" && dataType == "json") {
         FirebaseJson json = data.jsonObject();
-        FirebaseJsonData jsonData;
+        FirebaseJsonData jd;
+        long long ts = 0;
+        if (json.get(jd, "timestamp")) { ts = (long long)jd.doubleValue; }
+        if (!isCommandFresh(ts)) { return; }
 
-        String targetId = "tv-principal";
-        String action = "";
-        String value = "";
-
-        if (json.get(jsonData, "targetId")) targetId = jsonData.stringValue;
-        if (json.get(jsonData, "action")) action = jsonData.stringValue;
-        if (json.get(jsonData, "value")) value = jsonData.stringValue;
+        String targetId = "tv-living";
+        String action   = "";
+        String value    = "";
+        if (json.get(jd, "targetId")) { targetId = jd.stringValue; }
+        if (json.get(jd, "action"))   { action   = jd.stringValue; }
+        if (json.get(jd, "value") && !jd.isNull) { value = jd.stringValue; }
 
         if (action.length() > 0) {
-            handleTvCommand(targetId, action, value);
+            cmd.type      = CMD_TV;
+            cmd.timestamp = ts;
+            strncpy(cmd.deviceId, targetId.c_str(), sizeof(cmd.deviceId) - 1);
+            strncpy(cmd.action,   action.c_str(),   sizeof(cmd.action) - 1);
+            strncpy(cmd.value,    value.c_str(),     sizeof(cmd.value) - 1);
+            enqueue = true;
+            clearExecutedCommand("/home/commands/tv");
+        }
+    }
+
+    if (enqueue) {
+        if (xQueueSend(cmdQueue, &cmd, 0) != pdTRUE) {
+            Serial.println("[Stream] Cola llena — comando descartado.");
         }
     }
 }
 
 void streamTimeoutCallback(bool timeout) {
     if (timeout) {
-        Serial.println("[Stream] Tiempo de espera de Firebase agotado, reconectando stream...");
+        Serial.println("[Stream] Timeout — el SDK reconectará automáticamente.");
     }
 }
 
 // =========================================================================
-// EJECUCIÓN DE PETICIONES HTTP LOCALES (PLACA > DISPOSITIVO VÍA WI-FI)
+// EJECUCIÓN HTTP LOCAL (corre en Core 0 / workerTask)
 // =========================================================================
 bool executeHttpLocalCommand(const String& url) {
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[HTTP Local] Error: Wi-Fi desconectado");
+        Serial.println("[HTTP Local] Sin Wi-Fi — comando diferido.");
         return false;
     }
 
     HTTPClient http;
-    Serial.printf("[HTTP Local] Enviando petición Wi-Fi a: %s\n", url.c_str());
+    Serial.printf("[HTTP Local] → %s\n", url.c_str());
 
     http.begin(url);
-    http.setTimeout(2500); // 2.5s máx para evitar demoras si un switch no responde
+    http.setTimeout(2500);
 
-    int code = http.GET();
+    int code    = http.GET();
     bool success = (code >= 200 && code < 300);
 
     if (success) {
-        Serial.printf("[HTTP Local] Éxito! Código HTTP: %d\n", code);
+        Serial.printf("[HTTP Local] OK (%d)\n", code);
     } else {
-        Serial.printf("[HTTP Local] Falló. Código: %d | Error: %s\n", code, http.errorToString(code).c_str());
+        Serial.printf("[HTTP Local] FAIL (%d) | %s\n", code, http.errorToString(code).c_str());
     }
 
     http.end();
@@ -308,51 +529,34 @@ bool executeHttpLocalCommand(const String& url) {
 }
 
 // =========================================================================
-// MANEJADOR: LUCES (DESPACHO VÍA WI-FI LOCAL)
+// MANEJADORES (corren en Core 0)
 // =========================================================================
 void handleLightCommand(const String& lightName, bool targetState) {
-    Serial.printf("[Acción Luz] Dispositivo: %s -> %s\n", lightName.c_str(), targetState ? "ENCENDER" : "APAGAR");
+    Serial.printf("[Luz] %s → %s\n", lightName.c_str(), targetState ? "ON" : "OFF");
 
-    // Buscar el dispositivo en nuestra tabla de configuración
-    const WifiSmartDevice* targetDevice = nullptr;
+    const WifiSmartDevice* dev = nullptr;
     for (size_t i = 0; i < NUM_LIGHTS; i++) {
-        if (lightName == SMART_LIGHTS[i].id) {
-            targetDevice = &SMART_LIGHTS[i];
-            break;
-        }
+        if (lightName == SMART_LIGHTS[i].id) { dev = &SMART_LIGHTS[i]; break; }
     }
-
-    if (!targetDevice) {
-        Serial.printf("[Acción Luz] Dispositivo '%s' no encontrado en config.h\n", lightName.c_str());
+    if (!dev) {
+        Serial.printf("[Luz] '%s' no encontrada en config.h\n", lightName.c_str());
         return;
     }
 
-    // Construir la URL HTTP local según el firmware del enchufe
-    String url = "http://" + String(targetDevice->ip);
-    if (targetDevice->protocol == PROTO_TASMOTA) {
-        // Tasmota: /cm?cmnd=Power%20On (o %20Off)
-        url += "/cm?cmnd=Power%20" + String(targetState ? "On" : "Off");
-    } else if (targetDevice->protocol == PROTO_SHELLY) {
-        // Shelly: /relay/0?turn=on (o off)
-        url += "/relay/0?turn=" + String(targetState ? "on" : "off");
-    } else {
-        // Genérico: /on o /off
-        url += targetState ? "/on" : "/off";
-    }
+    String url = "http://" + String(dev->ip);
+    if      (dev->protocol == PROTO_TASMOTA) { url += "/cm?cmnd=Power%20" + String(targetState ? "On" : "Off"); }
+    else if (dev->protocol == PROTO_SHELLY)  { url += "/relay/0?turn="    + String(targetState ? "on" : "off"); }
+    else                                     { url += targetState ? "/on" : "/off"; }
 
-    // Ejecutar la petición HTTP local por Wi-Fi
-    executeHttpLocalCommand(url);
+    bool ok = executeHttpLocalCommand(url);
 
-    // Confirmar estado en Firebase para retroalimentar la web en Vercel
+    // Confirmar estado real en Firebase (la web lo lee para el rollback visual)
     String statePath = "/home/state/lights/" + lightName;
-    Firebase.RTDB.setBool(&fbdo, statePath.c_str(), targetState);
+    Firebase.RTDB.setBool(&fbdo, statePath.c_str(), ok ? targetState : !targetState);
 }
 
-// =========================================================================
-// MANEJADOR: PILETA (DESPACHO VÍA WI-FI LOCAL)
-// =========================================================================
 void handlePoolCommand(bool targetState) {
-    Serial.printf("[Acción Pileta] Bomba -> %s\n", targetState ? "ENCENDER" : "APAGAR");
+    Serial.printf("[Pileta] Bomba → %s\n", targetState ? "ON" : "OFF");
 
     String url = "http://" + String(POOL_RELAY_IP);
     if (POOL_RELAY_PROTOCOL == PROTO_SHELLY) {
@@ -361,84 +565,47 @@ void handlePoolCommand(bool targetState) {
         url += "/cm?cmnd=Power%20" + String(targetState ? "On" : "Off");
     }
 
-    executeHttpLocalCommand(url);
-
-    // Confirmar en Firebase
-    Firebase.RTDB.setBool(&fbdo, "/home/state/poolOn", targetState);
+    bool ok = executeHttpLocalCommand(url);
+    Firebase.RTDB.setBool(&fbdo, "/home/state/poolOn", ok ? targetState : !targetState);
 }
 
-// =========================================================================
-// MANEJADOR: PORTÓN (DISPARO DE PULSO VÍA WI-FI LOCAL)
-// =========================================================================
 void handleGateCommand(bool targetState) {
-    Serial.println("[Acción Portón] Enviando pulso de accionamiento Wi-Fi al portón...");
-
-    // Se envía el comando al relé Wi-Fi de contacto seco
-    executeHttpLocalCommand(GATE_RELAY_PULSE_URL);
-
-    // Actualizar estado en Firebase
-    Firebase.RTDB.setBool(&fbdo, "/home/state/gateOpen", targetState);
+    Serial.println("[Portón] Enviando pulso Wi-Fi...");
+    bool ok = executeHttpLocalCommand(GATE_RELAY_PULSE_URL);
+    Firebase.RTDB.setBool(&fbdo, "/home/state/gateOpen", ok ? targetState : !targetState);
 }
 
-// =========================================================================
-// MANEJADOR: TELEVISOR (COMANDOS VÍA WI-FI O INFRARROJO)
-// =========================================================================
 void handleTvCommand(const String& targetId, const String& action, const String& value) {
-    Serial.printf("[Acción TV] Target: %s | Acción: %s | Valor: %s\n", targetId.c_str(), action.c_str(), value.c_str());
+    Serial.printf("[TV] %s | Acción: %s | Valor: %s\n", targetId.c_str(), action.c_str(), value.c_str());
 
     String tvIp = TV_LIVING_IP;
-    if (targetId == "tv-pedro") {
-        tvIp = TV_PEDRO_IP;
-    } else if (targetId == "tv-padres") {
-        tvIp = TV_PADRES_IP;
-    } else if (targetId == "tv-lucas") {
-        tvIp = TV_LUCAS_IP;
-    } else if (targetId == "tv-living") {
-        tvIp = TV_LIVING_IP;
-    }
+    if      (targetId == "tv-pedro")  { tvIp = TV_PEDRO_IP;  }
+    else if (targetId == "tv-padres") { tvIp = TV_PADRES_IP; }
+    else if (targetId == "tv-lucas")  { tvIp = TV_LUCAS_IP;  }
 
-    // 1. Comando de Energía (Power)
     if (action == "power") {
-        Serial.printf("[TV Wi-Fi] Disparando comando Power a TV IP: %s\n", tvIp.c_str());
-        
-        // Emisión por señal Infrarroja (IR) de respaldo por hardware (Samsung Power Code)
         irsend.sendSamsung(0xE0E040BF, 32);
         delay(40);
         irsend.sendSamsung(0xE0E040BF, 32);
+        executeHttpLocalCommand("http://" + tvIp + ":8080/power");
 
-        // Si la TV tiene endpoint HTTP/REST local (ej. Android TV / Tizen / webOS)
-        String url = "http://" + tvIp + ":8080/power";
-        executeHttpLocalCommand(url);
-    }
-    // 2. Control de Volumen
-    else if (action == "set_volume") {
+    } else if (action == "set_volume") {
         int vol = value.toInt();
-        Serial.printf("[TV Wi-Fi] Ajustando volumen a: %d en %s\n", vol, tvIp.c_str());
-        String url = "http://" + tvIp + ":8080/volume?level=" + String(vol);
-        executeHttpLocalCommand(url);
-    }
-    // 3. Mute
-    else if (action == "toggle_mute") {
-        Serial.printf("[TV Wi-Fi] Alternando Silencio (Mute) en %s\n", tvIp.c_str());
-        // IR Mute
+        executeHttpLocalCommand("http://" + tvIp + ":8080/volume?level=" + String(vol));
+
+    } else if (action == "toggle_mute") {
         irsend.sendSamsung(0xE0E0F00F, 32);
-    }
-    // 4. Lanzar Aplicaciones (Netflix, YouTube, etc.)
-    else if (action == "launch_app") {
-        Serial.printf("[TV Wi-Fi] Lanzando app: %s en TV IP %s\n", value.c_str(), tvIp.c_str());
-        String url = "http://" + tvIp + ":8080/app?name=" + value;
-        executeHttpLocalCommand(url);
-    }
-    // 5. Teclas de Navegación D-Pad / Control Remoto
-    else if (action == "remote_key") {
-        Serial.printf("[TV Wi-Fi] Tecla remota: %s enviada a %s\n", value.c_str(), tvIp.c_str());
-        // Despacho por código IR o HTTP
-        if (value == "UP") irsend.sendSamsung(0xE0E006F9, 32);
-        else if (value == "DOWN") irsend.sendSamsung(0xE0E08679, 32);
-        else if (value == "LEFT") irsend.sendSamsung(0xE0E0A659, 32);
-        else if (value == "RIGHT") irsend.sendSamsung(0xE0E046B9, 32);
-        else if (value == "ENTER") irsend.sendSamsung(0xE0E016E9, 32);
-        else if (value == "BACK") irsend.sendSamsung(0xE0E01AE5, 32);
-        else if (value == "HOME") irsend.sendSamsung(0xE0E058A7, 32);
+
+    } else if (action == "launch_app") {
+        executeHttpLocalCommand("http://" + tvIp + ":8080/app?name=" + value);
+
+    } else if (action == "remote_key") {
+        if      (value == "UP")    { irsend.sendSamsung(0xE0E006F9, 32); }
+        else if (value == "DOWN")  { irsend.sendSamsung(0xE0E08679, 32); }
+        else if (value == "LEFT")  { irsend.sendSamsung(0xE0E0A659, 32); }
+        else if (value == "RIGHT") { irsend.sendSamsung(0xE0E046B9, 32); }
+        else if (value == "ENTER") { irsend.sendSamsung(0xE0E016E9, 32); }
+        else if (value == "BACK")  { irsend.sendSamsung(0xE0E01AE5, 32); }
+        else if (value == "HOME")  { irsend.sendSamsung(0xE0E058A7, 32); }
     }
 }

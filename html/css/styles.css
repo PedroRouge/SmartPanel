@@ -392,3 +392,33 @@ h3 { margin-bottom: 5px; font-size: 14px; font-weight: 620; }
 @media (prefers-reduced-motion: reduce) {
   *, *:before, *:after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* -----------------------------------------------------------------------
+   ESTADO PENDIENTE: El comando fue enviado al ESP32, esperando confirmación
+   del dispositivo físico en la red local (feedback visual anti-optimismo)
+----------------------------------------------------------------------- */
+@keyframes pending-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .45; }
+}
+
+.device-card.is-pending {
+  animation: pending-pulse 1.1s ease-in-out infinite;
+  pointer-events: none; /* Evitar clics dobles durante la espera */
+}
+
+.device-card.is-pending .state-switch {
+  cursor: wait;
+}
+
+.device-card.is-pending .switch-state::after {
+  content: " …";
+  color: var(--teal);
+}
+
+/* Pool toggle pendiente */
+.pool-toggle.is-pending {
+  animation: pending-pulse 1.1s ease-in-out infinite;
+  pointer-events: none;
+  cursor: wait;
+}

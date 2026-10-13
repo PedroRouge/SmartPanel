@@ -28,3 +28,11 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+
+# -----------------------------------------------------------------------
+# SEGURIDAD ESP32: Archivos con credenciales Wi-Fi y Firebase locales.
+# NUNCA deben subirse a GitHub si el repo es público.
+# Usá esp32_gateway/include/config.local.h para sobreescribir en local.
+# -----------------------------------------------------------------------
+esp32_gateway/include/config.local.h
+esp32_gateway/.pio/

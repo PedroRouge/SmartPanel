@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "30";
+  var APP_BUILD_VERSION = "32";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -234,34 +234,79 @@
 
   // --- ENVIAR COMANDOS HACIA FIREBASE (El ESP32 los ejecuta vía Wi-Fi) ---
   function sendLightCommand(lightName, targetState) {
+    // Estado optimista local para feedback inmediato
+    var prevState = state.lights[lightName];
     state.lights[lightName] = targetState;
     saveState();
+    // Marcar tarjeta como "pendiente" hasta confirmación del ESP32
+    var card = document.querySelector("[data-device='" + lightName + "']");
+    if (card) { card.classList.add("is-pending"); }
     renderLights();
 
     if (db && apiAuthenticated) {
       var updates = {};
       updates["home/commands/lights/" + lightName] = targetState;
-      updates["home/state/lights/" + lightName] = targetState;
       updates["home/commands/timestamp"] = Date.now();
       db.ref().update(updates).catch(function (err) {
         console.error("Error enviando comando luz:", err);
+        // Rollback inmediato si falla Firebase
+        state.lights[lightName] = prevState;
+        if (card) { card.classList.remove("is-pending"); }
+        renderLights();
       });
+
+      // Timeout de rollback: si el ESP32 no confirma en 5s, revertir
+      var rollbackTimer = setTimeout(function () {
+        if (card && card.classList.contains("is-pending")) {
+          card.classList.remove("is-pending");
+          console.warn("[" + lightName + "] Sin confirmación del ESP32 en 5s — sin cambio en red local.");
+        }
+      }, 5000);
+
+      // Escuchar confirmación real del ESP32 en /home/state/lights/{name}
+      db.ref("home/state/lights/" + lightName).once("value").then(function () {
+        clearTimeout(rollbackTimer);
+        if (card) { card.classList.remove("is-pending"); }
+      });
+    } else {
+      if (card) { card.classList.remove("is-pending"); }
     }
   }
 
   function sendPoolCommand(targetState) {
+    var prevState = state.poolOn;
     state.poolOn = targetState;
     saveState();
+    // Marcar pileta como pendiente
+    var toggle = byId("pool-toggle");
+    if (toggle) { toggle.classList.add("is-pending"); }
     renderPool();
 
     if (db && apiAuthenticated) {
       var updates = {};
       updates["home/commands/poolOn"] = targetState;
-      updates["home/state/poolOn"] = targetState;
       updates["home/commands/timestamp"] = Date.now();
       db.ref().update(updates).catch(function (err) {
         console.error("Error enviando comando pileta:", err);
+        state.poolOn = prevState;
+        if (toggle) { toggle.classList.remove("is-pending"); }
+        renderPool();
       });
+
+      // Rollback si no hay confirmación en 6s (pileta puede tardar más)
+      var poolTimer = setTimeout(function () {
+        if (toggle && toggle.classList.contains("is-pending")) {
+          toggle.classList.remove("is-pending");
+          console.warn("[Pileta] Sin confirmación del ESP32 en 6s.");
+        }
+      }, 6000);
+
+      db.ref("home/state/poolOn").once("value").then(function () {
+        clearTimeout(poolTimer);
+        if (toggle) { toggle.classList.remove("is-pending"); }
+      });
+    } else {
+      if (toggle) { toggle.classList.remove("is-pending"); }
     }
   }
 
@@ -443,19 +488,9 @@
         submit.textContent = "Iniciar sesión";
         acceptSession(userInput);
       }).catch(function (error) {
-        // Si el usuario no existe aún, intentamos registrar la cuenta inicial automáticamente
-        if (error.code === "auth/user-not-found" || error.code === "auth/invalid-credential") {
-          auth.createUserWithEmailAndPassword(email, pass).then(function () {
-            submit.disabled = false;
-            submit.textContent = "Iniciar sesión";
-            acceptSession(userInput);
-          }).catch(function (createErr) {
-            submit.disabled = false;
-            submit.textContent = "Iniciar sesión";
-            errorEl.textContent = "Contraseña incorrecta o credencial inválida.";
-            errorEl.hidden = false;
-          });
-        } else {
+        // SEGURIDAD: NO se crean cuentas nuevas automáticamente.
+        // Solo los usuarios pre-registrados en Firebase Console pueden acceder.
+        {
           submit.disabled = false;
           submit.textContent = "Iniciar sesión";
           var msg = "Error al autenticar: " + error.message;
