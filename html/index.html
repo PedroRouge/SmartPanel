@@ -137,7 +137,7 @@
 
       <section class="view" id="panel-agenda" role="tabpanel" aria-labelledby="tab-agenda" data-panel="agenda" hidden>
         <div class="page-heading agenda-page-heading">
-          <div><p class="eyebrow">PLANIFICACIÓN</p><h1>Agenda</h1><p>Eventos guardados en la notebook.</p></div>
+          <div><p class="eyebrow">PLANIFICACIÓN</p><h1>Agenda</h1><p>Eventos sincronizados en la nube en tiempo real.</p></div>
           <button class="primary-button" type="button" id="new-event-button"><span aria-hidden="true">＋</span> Nuevo evento</button>
         </div>
         <div class="agenda-layout">
@@ -166,13 +166,13 @@
         <div class="page-heading"><p class="eyebrow">ENTRETENIMIENTO</p><h1>Multimedia</h1><p>Selecciona un televisor para abrir sus controles.</p></div>
         <section class="tv-section" aria-labelledby="tv-list-heading">
           <div class="section-heading"><div><p class="eyebrow">DISPOSITIVOS</p><h2 id="tv-list-heading">Televisores</h2></div><button class="weather-refresh" id="tv-refresh" type="button" aria-label="Buscar televisores">↻</button></div>
-          <p class="tv-api-status" id="tv-api-status" aria-live="polite">Consultando API de la notebook...</p>
+          <p class="tv-api-status" id="tv-api-status" aria-live="polite">Conectando con ESP32-S3 y Firebase...</p>
           <div class="tv-list" id="tv-list" aria-live="polite"></div>
-          <div class="tv-list-empty panel-surface" id="tv-list-empty" hidden>No hay televisores reportados por la API.</div>
+          <div class="tv-list-empty panel-surface" id="tv-list-empty" hidden>No hay televisores detectados.</div>
         </section>
         <section class="tv-control panel-surface" id="tv-control" aria-labelledby="selected-tv-name" hidden>
-          <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV principal</h2><p class="tv-location" id="selected-tv-location">Living</p></div><div class="tv-heading-status"><span class="tv-status"><span class="status-dot" id="selected-tv-dot"></span><span id="selected-tv-power">Demo · API no conectada</span></span><button class="tv-power-button" id="tv-power-button" type="button" aria-label="Emparejar Android TV"><span aria-hidden="true">⏻</span><span id="tv-power-label">Emparejar</span></button></div></div>
-          <p class="tv-power-hint" id="tv-power-hint">Toca Emparejar y confirma en el ONN el código que aparecerá aquí.</p>
+          <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV Living</h2><p class="tv-location" id="selected-tv-location">Living</p></div><div class="tv-heading-status"><span class="tv-status"><span class="status-dot" id="selected-tv-dot"></span><span id="selected-tv-power">Apagada</span></span><button class="tv-power-button" id="tv-power-button" type="button" aria-label="Encender o apagar"><span aria-hidden="true">⏻</span><span id="tv-power-label">Encender</span></button></div></div>
+          <p class="tv-power-hint" id="tv-power-hint" hidden>Control Wi-Fi / Infrarrojo listo.</p>
           <div class="tv-pairing" id="tv-pairing-panel" hidden>
             <p>Confirma el emparejamiento en el ONN e ingresa su código de seis caracteres.</p>
             <form class="tv-pairing-form" id="tv-pairing-form">
