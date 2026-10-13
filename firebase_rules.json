@@ -1,10 +1,6 @@
 {
   "rules": {
-    ".read": "auth != null",
-    ".write": "auth != null",
-    "home": {
-      ".read": "auth != null",
-      ".write": "auth != null"
-    }
+    ".read": "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || auth.token.email == 'esp32@smartpanel.local')",
+    ".write": "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || auth.token.email == 'esp32@smartpanel.local')"
   }
 }
