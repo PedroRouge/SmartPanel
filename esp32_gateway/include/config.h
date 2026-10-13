@@ -4,19 +4,16 @@
 // =========================================================================
 // 1. CONFIGURACIÓN WI-FI DEL HOGAR
 // =========================================================================
-#define WIFI_SSID       "TU_WIFI_SSID"        // Nombre de tu red Wi-Fi (2.4 GHz)
-#define WIFI_PASSWORD   "TU_WIFI_PASSWORD"    // Contraseña de tu red Wi-Fi
+#define WIFI_SSID       "WiFi Starlink Rouge"
+#define WIFI_PASSWORD   "Casa2026"
 
 // =========================================================================
 // 2. CONFIGURACIÓN FIREBASE (AUTENTICACIÓN SEGURA OBLIGATORIA)
 // =========================================================================
-// API Key de Firebase Console > Configuración del Proyecto > Claves de API web
-#define FIREBASE_API_KEY       "AIzaSy_TU_API_KEY_DE_FIREBASE"
-// URL de tu base de datos (terminada en .firebaseio.com sin '/' al final)
-#define FIREBASE_DATABASE_URL  "https://tu-proyecto-smartpanel-default-rtdb.firebaseio.com"
+#define FIREBASE_API_KEY       "AIzaSyAnf7z9wl24JNJgFutE0qRvnnBnquNWoNc"
+#define FIREBASE_DATABASE_URL  "https://smart-panel-53d7b-default-rtdb.firebaseio.com"
 
 // Usuario y Contraseña para el ESP32 en Firebase Authentication
-// (Crea este usuario en Firebase Console > Authentication > Users)
 #define FIREBASE_USER_EMAIL    "esp32@smartpanel.local"
 #define FIREBASE_USER_PASSWORD "Pr484014228520."
 

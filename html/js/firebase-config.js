@@ -1,21 +1,20 @@
-// Configuración de Firebase Realtime Database y Auth para Smart Panel
+// Configuración oficial de Firebase para Smart Panel
 (function () {
   "use strict";
 
-  // Reemplaza estos valores con los de tu consola de Firebase
-  // (Firebase Console > Configuración del proyecto > Apps web)
   var DEFAULT_CONFIG = {
-    apiKey: "AIzaSy_TU_API_KEY_DE_FIREBASE",
-    authDomain: "tu-proyecto-smartpanel.firebaseapp.com",
-    databaseURL: "https://tu-proyecto-smartpanel-default-rtdb.firebaseio.com",
-    projectId: "tu-proyecto-smartpanel",
-    storageBucket: "tu-proyecto-smartpanel.appspot.com",
-    messagingSenderId: "123456789012",
-    appId: "1:123456789012:web:abcdef123456",
-    // Si un usuario ingresa solo "admin", se complementa como "admin@smartpanel.local"
+    apiKey: "AIzaSyAnf7z9wl24JNJgFutE0qRvnnBnquNWoNc",
+    authDomain: "smart-panel-53d7b.firebaseapp.com",
+    databaseURL: "https://smart-panel-53d7b-default-rtdb.firebaseio.com",
+    projectId: "smart-panel-53d7b",
+    storageBucket: "smart-panel-53d7b.firebasestorage.app",
+    messagingSenderId: "1085885262056",
+    appId: "1:1085885262056:web:90373760572ff556f1015d",
+    measurementId: "G-Y99C1G3J4F",
     authDefaultDomain: "smartpanel.local"
   };
 
+  // Priorizar configuración si se actualiza dinámicamente
   var customConfig = null;
   try {
     var stored = localStorage.getItem("smart-panel-firebase-config");
