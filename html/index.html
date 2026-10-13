@@ -11,16 +11,39 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="29">
+  <meta name="smart-panel-version" content="31">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=29">
-  <script>window.SMART_PANEL_API_URL = window.SMART_PANEL_API_URL || "https://open-cost-levy-ignored.trycloudflare.com";</script>
-  <script src="js/app.js?v=29" defer></script>
+  <link rel="stylesheet" href="css/styles.css?v=31">
+  <!-- Firebase SDK (v10 compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="js/firebase-config.js?v=31"></script>
+  <script src="js/app.js?v=31" defer></script>
 </head>
 <body>
+  <script>
+    // Purgar automáticamente Service Worker y cachés viejas de la versión anterior
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for (var i = 0; i < registrations.length; i++) {
+          registrations[i].update();
+        }
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(function(keys) {
+        keys.forEach(function(key) {
+          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-31') {
+            caches.delete(key);
+          }
+        });
+      });
+    }
+  </script>
   <div class="app-shell">
     <header class="topbar">
       <a class="brand" href="#inicio" aria-label="Smart Panel, inicio">

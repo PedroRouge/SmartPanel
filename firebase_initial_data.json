@@ -1,0 +1,71 @@
+{
+  "home": {
+    "auth": {
+      "username": "admin",
+      "pin": "1234"
+    },
+    "state": {
+      "lights": {
+        "living": false,
+        "kitchen": false,
+        "bedroom": false,
+        "garden": false
+      },
+      "poolOn": false,
+      "gateOpen": false
+    },
+    "commands": {
+      "lights": {
+        "living": false,
+        "kitchen": false,
+        "bedroom": false,
+        "garden": false
+      },
+      "poolOn": false,
+      "gateOpen": false,
+      "tv": {
+        "targetId": "tv-principal",
+        "action": "",
+        "value": "",
+        "timestamp": 0
+      }
+    },
+    "tvs": {
+      "tv-principal": {
+        "id": "tv-principal",
+        "name": "TV principal",
+        "room": "Living",
+        "model": "Smart TV",
+        "ip": "192.168.1.180",
+        "poweredOn": false,
+        "volume": 35,
+        "muted": false,
+        "online": true,
+        "powerControlReady": true
+      },
+      "tv-dormitorio": {
+        "id": "tv-dormitorio",
+        "name": "TV dormitorio",
+        "room": "Dormitorio",
+        "model": "Smart TV",
+        "ip": "192.168.1.181",
+        "poweredOn": false,
+        "volume": 30,
+        "muted": false,
+        "online": true,
+        "powerControlReady": true
+      }
+    },
+    "events": {},
+    "gateway": {
+      "status": {
+        "online": true,
+        "ip": "192.168.1.100",
+        "last_seen": 0,
+        "uptime": 0,
+        "rssi": -50,
+        "version": "1.0.0-esp32s3"
+      }
+    }
+  }
+}
