@@ -11,19 +11,19 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="65">
+  <meta name="smart-panel-version" content="66">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=65">
+  <link rel="stylesheet" href="css/styles.css?v=66">
   <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js" defer></script>
-  <script src="js/firebase-config.js?v=65" defer></script>
-  <script src="js/app.js?v=65" defer></script>
+  <script src="js/firebase-config.js?v=66" defer></script>
+  <script src="js/app.js?v=66" defer></script>
 </head>
 <body>
   <script>
@@ -41,7 +41,7 @@
     if ('caches' in window) {
       caches.keys().then(function(keys) {
         keys.forEach(function(key) {
-          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-65') {
+          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-66') {
             caches.delete(key);
           }
         });
@@ -54,33 +54,33 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v44</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v66</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
       <div class="home-quick-status" aria-label="Estado actual de la casa">
-        <span class="quick-status-item" title="Conexión con el ESP32"><span aria-hidden="true">⌁</span><i class="status-dot is-checking" id="quick-esp-dot"></i><span id="quick-esp">ESP32</span></span>
-        <span class="quick-status-item" title="Luces encendidas"><span aria-hidden="true">✳</span><strong id="quick-lights">0</strong></span>
-        <span class="quick-status-item" title="Motor de pileta"><span aria-hidden="true">≈</span><i class="status-dot is-checking" id="quick-pool-dot"></i><span id="quick-pool">--</span></span>
-        <span class="quick-status-item" title="Portón"><span aria-hidden="true">⇧</span><i class="status-dot is-checking" id="quick-gate-dot"></i><span id="quick-gate">--</span></span>
+        <span class="quick-status-item" title="Conexi&#243;n con el ESP32"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h4l2 3 4-6 2 3h4"/><path d="M7 7h.01M17 17h.01"/></svg><i class="status-dot is-checking" id="quick-esp-dot"></i><span id="quick-esp">ESP32</span></span>
+        <span class="quick-status-item" title="Luces encendidas"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M8.2 14.5a7 7 0 1 1 7.6 0c-.9.6-1.3 1.4-1.5 2.5h-4.6c-.2-1.1-.6-1.9-1.5-2.5Z"/></svg><strong id="quick-lights">0</strong></span>
+        <span class="quick-status-item" title="Motor de pileta"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9c2.2 0 2.2-2 4.4-2s2.2 2 4.4 2 2.2-2 4.4-2 2.2 2 4.4 2"/><path d="M3 15c2.2 0 2.2-2 4.4-2s2.2 2 4.4 2 2.2-2 4.4-2 2.2 2 4.4 2"/><path d="M3 20h18"/></svg><i class="status-dot is-checking" id="quick-pool-dot"></i><span id="quick-pool">--</span></span>
+        <span class="quick-status-item" title="Port&#243;n"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5l8-2 8 2v16"/><path d="M8 6v15m8-15v15M4 11h16"/></svg><i class="status-dot is-checking" id="quick-gate-dot"></i><span id="quick-gate">--</span></span>
       </div>
       <div class="topbar-actions">
         <button class="push-enable-button" id="push-enable" type="button" aria-label="Activar notificaciones push">Activar avisos</button>
         <button class="notif-bell-btn" id="notif-bell" type="button" aria-label="Notificaciones" title="Notificaciones">
-          <span aria-hidden="true">🔔</span>
+          <svg class="topbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
           <span class="notif-bell-badge" id="notif-bell-badge"></span>
         </button>
-        <button class="pwa-install-button" id="pwa-install" type="button" aria-label="Instalar Smart Panel" title="Instalar Smart Panel" hidden><span aria-hidden="true">⇩</span><span>Instalar</span></button>
+        <button class="pwa-install-button" id="pwa-install" type="button" aria-label="Instalar Smart Panel" title="Instalar Smart Panel" hidden><svg class="topbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M5 17v4h14v-4"/></svg><span>Instalar</span></button>
         <span class="session-user" id="session-user" hidden></span>
         <button class="api-logout" id="api-logout" type="button" hidden>Cerrar sesión</button>
       </div>
     </header>
 
     <nav class="tab-bar" role="tablist" aria-label="Secciones del panel">
-      <button class="tab-button is-active" type="button" role="tab" id="tab-inicio" aria-controls="panel-inicio" aria-selected="true" data-tab="inicio"><span aria-hidden="true">⌂</span> Inicio</button>
-      <button class="tab-button" type="button" role="tab" id="tab-agenda" aria-controls="panel-agenda" aria-selected="false" data-tab="agenda" tabindex="-1"><span aria-hidden="true">▦</span> Agenda</button>
-      <button class="tab-button" type="button" role="tab" id="tab-multimedia" aria-controls="panel-multimedia" aria-selected="false" data-tab="multimedia" tabindex="-1"><span aria-hidden="true">▣</span> Multimedia</button>
-      <button class="tab-button" type="button" role="tab" id="tab-hogar" aria-controls="panel-hogar" aria-selected="false" data-tab="hogar" tabindex="-1"><span aria-hidden="true">⌂</span> Hogar</button>
-      <button class="tab-button" type="button" role="tab" id="tab-pileta" aria-controls="panel-pileta" aria-selected="false" data-tab="pileta" tabindex="-1"><span aria-hidden="true">≈</span> Pileta</button>
-      <button class="tab-button" type="button" role="tab" id="tab-camaras" aria-controls="panel-camaras" aria-selected="false" data-tab="camaras" tabindex="-1"><span aria-hidden="true">▧</span> Cámaras</button>
-      <button class="tab-button" type="button" role="tab" id="tab-estado" aria-controls="panel-estado" aria-selected="false" data-tab="estado" tabindex="-1"><span aria-hidden="true">ⓘ</span> Estado</button>
+      <button class="tab-button is-active" type="button" role="tab" id="tab-inicio" aria-controls="panel-inicio" aria-selected="true" data-tab="inicio"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7"/><path d="M5 9v12h14V9m-9 12v-7h4v7"/></svg> Inicio</button>
+      <button class="tab-button" type="button" role="tab" id="tab-agenda" aria-controls="panel-agenda" aria-selected="false" data-tab="agenda" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="M7 14h.01M12 14h.01M17 14h.01M7 18h.01M12 18h.01"/></svg> Agenda</button>
+      <button class="tab-button" type="button" role="tab" id="tab-multimedia" aria-controls="panel-multimedia" aria-selected="false" data-tab="multimedia" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg> Multimedia</button>
+      <button class="tab-button" type="button" role="tab" id="tab-hogar" aria-controls="panel-hogar" aria-selected="false" data-tab="hogar" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7"/><path d="M5 9v12h14V9m-9 12v-7h4v7"/></svg> Hogar</button>
+      <button class="tab-button" type="button" role="tab" id="tab-pileta" aria-controls="panel-pileta" aria-selected="false" data-tab="pileta" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2"/><path d="M3 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2"/><path d="M3 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2"/></svg> Pileta</button>
+      <button class="tab-button" type="button" role="tab" id="tab-camaras" aria-controls="panel-camaras" aria-selected="false" data-tab="camaras" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3a2 2 0 0 1 2 2v10H2V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="3.5"/></svg> Cámaras</button>
+      <button class="tab-button" type="button" role="tab" id="tab-estado" aria-controls="panel-estado" aria-selected="false" data-tab="estado" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg> Estado</button>
     </nav>
 
     <main class="main-content">
