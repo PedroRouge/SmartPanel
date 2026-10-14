@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "51";
+  var APP_BUILD_VERSION = "52";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -1795,16 +1795,9 @@
     try {
       return await messaging.getToken({ vapidKey: vapidKey, serviceWorkerRegistration: registration });
     } catch (firstError) {
-      console.warn("[FCM] Falló el primer registro; limpiando el token/suscripción local antes de reintentar.", firstError);
-      try { await messaging.deleteToken(); } catch (deleteError) {
-        console.warn("[FCM] Firebase no pudo borrar el token anterior; se continuará con limpieza local.", deleteError);
-      }
-      try {
-        var subscription = await registration.pushManager.getSubscription();
-        if (subscription) { await subscription.unsubscribe(); }
-      } catch (unsubscribeError) {
-        console.warn("[FCM] No se pudo limpiar la suscripción Push anterior.", unsubscribeError);
-      }
+      // Preserve a working browser subscription on transient FCM failures.
+      // A mismatched VAPID subscription is already removed by the caller.
+      console.warn("[FCM] Falló el primer registro; se conserva la suscripción actual y se reintenta.", firstError);
       await new Promise(function (resolve) { setTimeout(resolve, 800); });
       try {
         return await messaging.getToken({ vapidKey: vapidKey, serviceWorkerRegistration: registration });
@@ -1841,7 +1834,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=51").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=52").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -2537,8 +2530,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v51";
-    byId("script-build-version").textContent = "JS v51";
+    byId("frontend-version").textContent = "HTML v52";
+    byId("script-build-version").textContent = "JS v52";
 
     initializeConfirmDialog();
     initializeTabs();
