@@ -1,14 +1,14 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "59";
+  var APP_BUILD_VERSION = "60";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
     longitude: -60.57469,
     location: "Colonia Ensayo, Entre Ríos"
   };
-  var WEATHER_STORAGE_KEY = "smart-panel-weather-v4-" + WEATHER_CONFIG.latitude + "-" + WEATHER_CONFIG.longitude;
+  var WEATHER_STORAGE_KEY = "smart-panel-weather-v5-" + WEATHER_CONFIG.latitude + "-" + WEATHER_CONFIG.longitude;
 
   var state = readState();
   var db = null;
@@ -17,6 +17,8 @@
   var pushWorkerPromise = null;
   var foregroundMessageBound = false;
   var firebaseConnected = false;
+  var firebaseConnectionMode = "checking";
+  var firebaseProbeBusy = false;
   var gatewayOnline = false;
   var gatewayDetails = "Esperando heartbeat del ESP32";
   var gatewayReportedOnline = false;
@@ -135,6 +137,11 @@
           firebaseConnected = isConnected;
           console.info("[Firebase] Realtime Database " + (isConnected ? "conectada" : "sin conexión"));
         }
+        if (isConnected) {
+          firebaseConnectionMode = "realtime";
+        } else if (!firebaseProbeBusy) {
+          probeFirebaseHttps(auth && auth.currentUser);
+        }
         renderSystemStatus();
       });
 
@@ -146,6 +153,7 @@
             var name = user.email ? user.email.split("@")[0] : "admin";
             acceptSession(name);
             updateAccountStatus(user);
+            probeFirebaseHttps(user);
           } else {
             console.log("[Firebase Auth] Sesión no iniciada (acceso restringido por reglas).");
             apiAuthenticated = false;
@@ -155,6 +163,9 @@
           }
         });
       }
+      window.setInterval(function () {
+        if (!firebaseConnected && auth && auth.currentUser && !firebaseProbeBusy) { probeFirebaseHttps(auth.currentUser); }
+      }, 30000);
     } catch (error) {
       console.error("[Firebase] Error al inicializar:", error);
       firebaseConnected = false;
@@ -405,20 +416,62 @@
   function renderSystemStatus() {
     var dot = byId("detail-firebase-dot");
     var label = byId("detail-firebase-status");
-    if (dot) { dot.classList.remove("is-checking", "is-online", "is-error"); dot.classList.add(firebaseConnected ? "is-online" : "is-error"); }
-    if (label) { label.textContent = firebaseConnected ? "Conectado" : "Sin conexión"; }
     var meta = byId("detail-firebase-meta");
-    if (meta) { meta.textContent = firebaseConnected ? "Realtime Database · sincronización activa" : "Realtime Database · esperando reconexión"; }
+    var mode = firebaseConnectionMode;
+    var statusClass = mode === "checking" ? "is-checking" : (mode === "offline" ? "is-error" : "is-online");
+    var statusText = mode === "realtime" ? "Conectado" : (mode === "https" ? "Disponible por HTTPS" : (mode === "denied" ? "Firebase responde - revisar permisos" : (mode === "offline" ? "Sin respuesta" : "Comprobando conexi\u00f3n...")));
+    var detailText = mode === "realtime" ? "Realtime Database - sincronizaci\u00f3n en tiempo real" : (mode === "https" ? "Base activa; el canal en tiempo real est\u00e1 reconectando" : (mode === "denied" ? "Servidor activo; Firebase rechaz\u00f3 la lectura con esta sesi\u00f3n" : (mode === "offline" ? "No respondi\u00f3 Realtime Database ni la comprobaci\u00f3n HTTPS" : "Comprobando Realtime Database y HTTPS")));
+    if (dot) { dot.classList.remove("is-checking", "is-online", "is-error"); dot.classList.add(statusClass); }
+    if (label) { label.textContent = statusText; }
+    if (meta) { meta.textContent = detailText; }
     var lights = byId("quick-lights");
     if (lights) { lights.textContent = String(Object.keys(state.lights).filter(function (key) { return state.lights[key] === true; }).length); }
     var pool = byId("quick-pool");
-    if (pool) { pool.textContent = state.poolOn ? "Encendida" : "Apagada"; }
+    if (pool) { pool.textContent = state.poolOn ? "ON" : "OFF"; }
     var poolDot = byId("quick-pool-dot");
     if (poolDot) { poolDot.classList.remove("is-checking", "is-online", "is-error"); poolDot.classList.add(state.poolOn ? "is-online" : "is-error"); }
     var gate = byId("quick-gate");
-    if (gate) { gate.textContent = state.gateOpen ? "Abierto" : "Cerrado"; }
+    if (gate) { gate.textContent = state.gateOpen ? "ABIERTO" : "CERRADO"; }
     var gateDot = byId("quick-gate-dot");
     if (gateDot) { gateDot.classList.remove("is-checking", "is-online", "is-error"); gateDot.classList.add(state.gateOpen ? "is-error" : "is-online"); }
+  }
+
+  function probeFirebaseHttps(user) {
+    var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
+    if (firebaseConnected) {
+      firebaseConnectionMode = "realtime";
+      renderSystemStatus();
+      return Promise.resolve(true);
+    }
+    if (firebaseProbeBusy || !config.databaseURL || !user || !user.getIdToken || !window.fetch) {
+      return Promise.resolve(false);
+    }
+    firebaseProbeBusy = true;
+    firebaseConnectionMode = "checking";
+    renderSystemStatus();
+    var timeoutId;
+    var timeout = new Promise(function (_, reject) {
+      timeoutId = setTimeout(function () { reject(new Error("timeout")); }, 6000);
+    });
+    var request = user.getIdToken().then(function (token) {
+      var url = config.databaseURL.replace(/\/+$/, "") + "/home/state.json?auth=" + encodeURIComponent(token);
+      return fetch(url, { cache: "no-store" });
+    });
+    return Promise.race([request, timeout]).then(function (response) {
+      if (firebaseConnected) { firebaseConnectionMode = "realtime"; }
+      else if (response.ok || response.status === 404) { firebaseConnectionMode = "https"; }
+      else if (response.status === 401 || response.status === 403) { firebaseConnectionMode = "denied"; }
+      else { firebaseConnectionMode = "offline"; }
+      return response.ok;
+    }).catch(function (error) {
+      console.warn("[Firebase] HTTPS check did not respond:", error && error.message ? error.message : error);
+      firebaseConnectionMode = firebaseConnected ? "realtime" : "offline";
+      return false;
+    }).finally(function () {
+      clearTimeout(timeoutId);
+      firebaseProbeBusy = false;
+      renderSystemStatus();
+    });
   }
 
   function updateAccountStatus(user) {
@@ -868,7 +921,7 @@
     var url = "https://api.open-meteo.com/v1/forecast?latitude=" + WEATHER_CONFIG.latitude +
       "&longitude=" + WEATHER_CONFIG.longitude +
       "&current=temperature_2m,weather_code" +
-      "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_mean" +
       "&forecast_days=7&timezone=auto";
 
     fetch(url)
@@ -891,6 +944,14 @@
       });
   }
 
+  function weatherDistanceKm(lat1, lon1, lat2, lon2) {
+    var radians = Math.PI / 180;
+    var dLat = (lat2 - lat1) * radians;
+    var dLon = (lon2 - lon1) * radians;
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * radians) * Math.cos(lat2 * radians) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
   function applyWeatherData(data, statusText) {
     var current = data.current;
     var daily = data.daily;
@@ -902,7 +963,11 @@
     byId("weather-symbol").textContent = summary[1];
     byId("weather-high").textContent = Math.round(daily.temperature_2m_max[0]) + "°";
     byId("weather-low").textContent = Math.round(daily.temperature_2m_min[0]) + "°";
+    var updatedAt = current.time && current.time.indexOf("T") >= 0 ? current.time.split("T")[1].slice(0, 5) : "";
     byId("weather-status").textContent = statusText;
+    var distance = typeof data.latitude === "number" && typeof data.longitude === "number" ? weatherDistanceKm(WEATHER_CONFIG.latitude, WEATHER_CONFIG.longitude, data.latitude, data.longitude) : null;
+    var sourceNote = byId("weather-source-note");
+    if (sourceNote) { sourceNote.textContent = "Pron\u00f3stico Open-Meteo - celda de modelo" + (distance === null ? "" : " a " + distance.toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " km") + (updatedAt ? " - hora " + updatedAt : ""); }
     renderForecast(daily);
   }
 
@@ -933,8 +998,8 @@
       item.appendChild(createTextElement("span", "forecast-icon", summary[1]));
       item.appendChild(createTextElement("span", "forecast-temperature", Math.round(daily.temperature_2m_max[i]) + "° / " + Math.round(daily.temperature_2m_min[i]) + "°"));
 
-      var rain = daily.precipitation_probability_max && typeof daily.precipitation_probability_max[i] === "number" ? daily.precipitation_probability_max[i] : null;
-      item.appendChild(createTextElement("span", "forecast-rain", rain === null ? "Lluvia --%" : "Lluvia " + rain + "%"));
+      var rain = daily.precipitation_probability_mean && typeof daily.precipitation_probability_mean[i] === "number" ? daily.precipitation_probability_mean[i] : null;
+      item.appendChild(createTextElement("span", "forecast-rain", rain === null ? "Prom. lluvia --%" : "Prom. lluvia " + rain + "%"));
       list.appendChild(item);
     }
   }
@@ -2048,7 +2113,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=59").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=60").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -2779,8 +2844,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v59";
-    byId("script-build-version").textContent = "JS v59";
+    byId("frontend-version").textContent = "HTML v60";
+    byId("script-build-version").textContent = "JS v60";
 
     initializeConfirmDialog();
     initializeTabs();

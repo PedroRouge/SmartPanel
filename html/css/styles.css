@@ -365,6 +365,7 @@ h3 { margin-bottom: 5px; font-size: 14px; font-weight: 650; }
 }
 .weather-details strong { color: var(--text); font-weight: 600; }
 #weather-status { max-width: 100%; margin-left: auto; color: var(--quiet); overflow-wrap: break-word; text-align: right; }
+.weather-source-note { margin: 8px 0 0; color: var(--quiet); font-size: 10px; line-height: 1.45; }
 .summary-icon { color: var(--teal); font-size: 21px; }
 .summary-items { margin-top: 13px; }
 .summary-item {
@@ -1924,4 +1925,54 @@ button:disabled { filter: saturate(.65); }
 
 @media (display-mode: window-controls-overlay) and (max-width: 900px) {
   .version-reader { display: none; }
+}
+
+
+/* Mobile topbar: two clean rows for identity/actions and live home state. */
+@media (max-width: 700px) {
+  :root { --topbar-h: 98px; }
+  .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "brand actions" "home home";
+    align-items: center;
+    gap: 7px 8px;
+    min-height: var(--topbar-h);
+    padding: 7px 2px 8px;
+  }
+  .brand { grid-area: brand; min-width: 0; gap: 8px; font-size: 14px; }
+  .topbar-actions { grid-area: actions; gap: 5px; }
+  .home-quick-status {
+    grid-area: home;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+    overflow: visible;
+  }
+  .quick-status-item {
+    min-width: 0;
+    min-height: 30px;
+    justify-content: center;
+    gap: 4px;
+    padding-inline: 3px;
+    font-size: 8px;
+  }
+  .quick-status-item > span:first-child { font-size: 11px; }
+  .quick-status-item .status-dot { width: 5px; height: 5px; flex-basis: 5px; }
+  .quick-status-item strong { font-size: 9px; }
+  .tab-bar { top: var(--topbar-h); }
+  .weather-source-note {
+    margin: 8px 0 0;
+    color: var(--quiet);
+    font-size: 10px;
+    line-height: 1.45;
+  }
+  .forecast-rain { font-size: 9px; }
+}
+
+@media (max-width: 360px) {
+  .topbar-actions .api-logout { padding-inline: 7px; font-size: 10px; }
+  .quick-status-item { gap: 3px; font-size: 7.5px; }
+  .quick-status-item > span:first-child { font-size: 10px; }
 }
