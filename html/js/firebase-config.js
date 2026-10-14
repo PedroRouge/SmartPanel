@@ -11,7 +11,6 @@
     messagingSenderId: "1085885262056",
     appId: "1:1085885262056:web:90373760572ff556f1015d",
     measurementId: "G-Y99C1G3J4F",
-    vapidKey: "BoyXIPOR-LiIe33vfBlH4xiSvOyDeiEucCoeeA5q3u7Rw3GSSFrTui29lirBFrUbwaj2XWTBRtH4iBaWQlw-w2g",
     authDefaultDomain: "smartpanel.local"
   };
 
@@ -41,4 +40,9 @@
     window.SMART_PANEL_FIREBASE_CONFIG || {},
     customConfig || {}
   );
+
+  // The previously published VAPID value is malformed (it does not encode
+  // an uncompressed P-256 public key). Never let stale localStorage override
+  // it; Firebase Messaging will use its project-compatible default key.
+  delete window.SMART_PANEL_FIREBASE_CONFIG.vapidKey;
 })();

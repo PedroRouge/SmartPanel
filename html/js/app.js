@@ -1609,7 +1609,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=44").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=45").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -1666,15 +1666,12 @@
           throw new Error("Este navegador o dispositivo no es compatible con Firebase Web Push.");
         }
 
-        var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
-        if (!config.vapidKey || config.vapidKey.indexOf("REEMPLAZAR") === 0) {
-          throw new Error("Falta configurar la clave publica Web Push (VAPID).");
-        }
         var registration = pushWorkerRegistration || (pushWorkerPromise ? await pushWorkerPromise : await navigator.serviceWorker.ready);
         if (!registration) { throw new Error("No se pudo iniciar el Service Worker de notificaciones."); }
         pushWorkerRegistration = registration;
         var messaging = firebase.messaging();
-        var token = await messaging.getToken({ vapidKey: config.vapidKey, serviceWorkerRegistration: registration });
+        // Omit the malformed legacy VAPID value and use Firebase Messaging's default application server key.
+        var token = await messaging.getToken({ serviceWorkerRegistration: registration });
         if (!token) { throw new Error("Firebase no devolvio un token para este dispositivo."); }
 
         var currentUser = auth.currentUser;
@@ -2286,8 +2283,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v44";
-    byId("script-build-version").textContent = "JS v44";
+    byId("frontend-version").textContent = "HTML v45";
+    byId("script-build-version").textContent = "JS v45";
 
     initializeConfirmDialog();
     initializeTabs();
