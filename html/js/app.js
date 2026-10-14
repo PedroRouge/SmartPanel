@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "61";
+  var APP_BUILD_VERSION = "63";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -29,7 +29,6 @@
   var currentUsername = "";
   var cameraCredentials = {};
   var weatherHasData = false;
-  var volumeCommandTimer = null;
   function formatDateISO(dateValue) {
     var y = dateValue.getFullYear();
     var m = String(dateValue.getMonth() + 1).padStart(2, "0");
@@ -174,6 +173,28 @@
     }
   }
 
+  function applySharedTvState(tvsData) {
+    if (!tvsData || typeof tvsData !== "object") { return; }
+    var list = [];
+    Object.keys(tvsData).forEach(function (key) {
+      var remoteTv = tvsData[key];
+      if (remoteTv && typeof remoteTv === "object") { list.push(remoteTv); }
+    });
+    if (!list.length) { return; }
+    TV_DEVICES = list;
+    TV_DEVICES.forEach(function (tv) {
+      var cached = state.tvStates[tv.id] || {};
+      if (typeof tv.volume === "number") { cached.volume = tv.volume; }
+      else if (typeof cached.volume !== "number") { cached.volume = 35; }
+      if (typeof tv.muted === "boolean") { cached.muted = tv.muted; }
+      else if (typeof cached.muted !== "boolean") { cached.muted = false; }
+      state.tvStates[tv.id] = cached;
+    });
+    saveState();
+    renderTVs();
+    renderMedia();
+  }
+
   function attachFirebaseListeners() {
     if (!db || !apiAuthenticated || listenersAttached) { return; }
     var user = auth && auth.currentUser;
@@ -263,26 +284,7 @@
 
     // 3. TVs en tiempo real
     listen("home/tvs", function (snapshot) {
-      var tvsData = snapshot.val();
-      if (tvsData && typeof tvsData === "object") {
-        var list = [];
-        Object.keys(tvsData).forEach(function (key) {
-          var item = tvsData[key];
-          if (item && typeof item === "object") {
-            list.push(item);
-          }
-        });
-        if (list.length) {
-          TV_DEVICES = list;
-          TV_DEVICES.forEach(function (tv) {
-            if (!state.tvStates[tv.id]) {
-              state.tvStates[tv.id] = { volume: tv.volume || 35, muted: tv.muted === true };
-            }
-          });
-          renderTVs();
-          renderMedia();
-        }
-      }
+      applySharedTvState(snapshot.val());
     });
 
     // 4. Agenda privada para la cuenta actual.
@@ -317,6 +319,9 @@
       console.warn("[Actividad] Initial HTTPS history read failed:", error);
       renderActivityError(user);
     });
+    syncSharedDeviceStateViaRest(user).catch(function (error) {
+      console.warn("[Estado] No se pudo consultar el estado compartido por HTTPS:", error);
+    });
     readUserEventsViaRest(user).catch(function (error) {
       console.warn("[Agenda] La lectura HTTPS inicial no estuvo disponible:", error);
     });
@@ -326,7 +331,8 @@
         agendaRestSyncBusy = true;
         Promise.all([
           readUserEventsViaRest(user).catch(function (error) { console.warn("[Agenda] HTTPS sync failed:", error); }),
-          readUserActivityViaRest(user).catch(function (error) { console.warn("[Actividad] HTTPS sync failed:", error); })
+          readUserActivityViaRest(user).catch(function (error) { console.warn("[Actividad] HTTPS sync failed:", error); }),
+          syncSharedDeviceStateViaRest(user).catch(function (error) { console.warn("[Estado] HTTPS sync failed:", error); })
         ]).finally(function () { agendaRestSyncBusy = false; });
       }
     }, 15000);
@@ -413,6 +419,108 @@
     }).then(function (activityData) {
       if (auth && auth.currentUser && auth.currentUser.uid === user.uid) { renderActivity(activityData); }
       return activityData;
+    });
+  }
+
+  function fetchFirebaseValueViaRest(user, path) {
+    var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
+    if (!config.databaseURL || !user || !user.getIdToken) { return Promise.reject(new Error("Firebase session unavailable.")); }
+    return user.getIdToken().then(function (token) {
+      var baseUrl = config.databaseURL.replace(/\/+$/, "");
+      var safePath = path.split("/").map(encodeURIComponent).join("/");
+      return fetch(baseUrl + "/" + safePath + ".json?auth=" + encodeURIComponent(token), { cache: "no-store" });
+    }).then(function (response) {
+      if (!response.ok) { throw new Error("Firebase HTTP " + response.status + " reading " + path); }
+      return response.json();
+    });
+  }
+
+  function updateFirebasePaths(updates) {
+    var user = auth && auth.currentUser;
+    if (!db || !apiAuthenticated || !user) { return Promise.reject(new Error("Inicia sesi\u00f3n para enviar ordenes.")); }
+    if (firebaseConnected) { return db.ref().update(updates); }
+    var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
+    if (!config.databaseURL || !window.fetch) { return Promise.reject(new Error("Firebase no esta disponible.")); }
+    return user.getIdToken().then(function (token) {
+      var url = config.databaseURL.replace(/\/+$/, "") + "/.json?auth=" + encodeURIComponent(token);
+      return fetch(url, { method: "PATCH", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updates) });
+    }).then(function (response) {
+      if (!response.ok) { throw new Error("Firebase respondio HTTP " + response.status + " al enviar la orden."); }
+    });
+  }
+
+  function waitForFirebaseValue(path, target, timeoutMs) {
+    var user = auth && auth.currentUser;
+    var expires = Date.now() + timeoutMs;
+    var stopped = false;
+    var timer;
+    function poll() {
+      if (stopped) { return Promise.reject(new Error("Se cancelo la espera de confirmacion.")); }
+      return fetchFirebaseValueViaRest(user, path).then(function (value) {
+        if (stopped) { throw new Error("Se cancelo la espera de confirmacion."); }
+        if (value === target) { return value; }
+        if (Date.now() >= expires) { throw new Error("El ESP32 no confirmo la accion a tiempo."); }
+        return new Promise(function (resolve) { setTimeout(resolve, 900); }).then(poll);
+      });
+    }
+    var timeout = new Promise(function (_, reject) {
+      timer = setTimeout(function () { stopped = true; reject(new Error("El ESP32 no confirmo la accion a tiempo.")); }, timeoutMs);
+    });
+    return Promise.race([poll(), timeout]).finally(function () { stopped = true; clearTimeout(timer); });
+  }
+
+  function requireGatewayConnection(action, feedback) {
+    if (!apiAuthenticated || !db) {
+      if (feedback) { feedback.textContent = "Inicia sesion para controlar este dispositivo."; }
+      return false;
+    }
+    refreshGatewayFreshness();
+    if (gatewayOnline) { return true; }
+    var message = "No hay conexi\u00f3n con ESP32. La orden de " + action + " no se envio. Conecta el gateway y vuelve a intentar.";
+    if (feedback) { feedback.textContent = message; }
+    addNotification("alert", "!", "ESP32 SIN CONEXION", "No hay conexi\u00f3n con ESP32", message);
+    return false;
+  }
+
+  function syncSharedDeviceStateViaRest(user) {
+    if (firebaseConnected) { return Promise.resolve(); }
+    return Promise.all([
+      fetchFirebaseValueViaRest(user, "home/state"),
+      fetchFirebaseValueViaRest(user, "home/gateway/status"),
+      fetchFirebaseValueViaRest(user, "home/tvs")
+    ]).then(function (values) {
+      if (firebaseConnected || !auth || !auth.currentUser || auth.currentUser.uid !== user.uid) { return; }
+      var home = values[0];
+      if (home && typeof home === "object") {
+        if (home.lights && typeof home.lights === "object") {
+          Object.keys(home.lights).forEach(function (key) { state.lights[key] = home.lights[key] === true; });
+          renderLights();
+        }
+        if (typeof home.poolOn === "boolean") { state.poolOn = home.poolOn; renderPool(); }
+        if (typeof home.gateOpen === "boolean") { state.gateOpen = home.gateOpen; renderGate(); }
+        saveState();
+      }
+      var gateway = values[1];
+      if (gateway && typeof gateway === "object") {
+        gatewayLastSeen = Number(gateway.last_seen) || 0;
+        gatewayReportedOnline = gateway.online === true;
+        var ageSeconds = gatewayLastSeen > 0 ? Math.floor((Date.now() - gatewayLastSeen) / 1000) : -1;
+        var online = gatewayReportedOnline && ageSeconds >= 0 && ageSeconds < 45;
+        if (online) {
+          gatewayDetails = "ESP32-S3 LAN (" + (gateway.ip || "Wi-Fi") + ")";
+          updateGatewayStatusUI(true, gatewayDetails);
+        } else {
+          gatewayOnline = false;
+          gatewayDetails = gatewayLastSeen ? "Heartbeat vencido" : "ESP32 no detectado";
+          updateGatewayStatusUI(false, gatewayDetails);
+        }
+      } else {
+        gatewayOnline = false;
+        gatewayReportedOnline = false;
+        gatewayLastSeen = 0;
+        updateGatewayStatusUI(false, "ESP32 no detectado");
+      }
+      applySharedTvState(values[2]);
     });
   }
 
@@ -600,78 +708,53 @@
 
   // --- ENVIAR COMANDOS HACIA FIREBASE (El ESP32 los ejecuta vía Wi-Fi) ---
   function sendLightCommand(lightName, targetState) {
-    var prevState = state.lights[lightName];
-    state.lights[lightName] = targetState;
-    saveState();
-    // Marcar tarjeta como "pendiente" hasta confirmación del ESP32
     var card = document.querySelector("[data-device='" + lightName + "']");
+    if (!requireGatewayConnection("la luz", null)) { return; }
+    if (card && card.classList.contains("is-pending")) { return; }
     if (card) { card.classList.add("is-pending"); }
-    renderLights();
-
-    if (!db || !apiAuthenticated) {
-      if (card) { card.classList.remove("is-pending"); }
-      state.lights[lightName] = prevState;
-      renderLights();
-      return;
-    }
-
     var updates = {};
     updates["home/commands/lights/" + lightName] = targetState;
     updates["home/commands/timestamp"] = Date.now();
-    db.ref().update(updates).then(function () {
-      return waitForRealtimeValue("home/state/lights/" + lightName, targetState, 8000);
+    updateFirebasePaths(updates).then(function () {
+      return waitForFirebaseValue("home/state/lights/" + lightName, targetState, 8000);
     }).then(function (confirmedState) {
       if (card) { card.classList.remove("is-pending"); }
       state.lights[lightName] = confirmedState === true;
       saveState();
       renderLights();
       var lightLabels = { living: "Living", kitchen: "Cocina", bedroom: "Dormitorio", garden: "Exterior" };
-      recordActivity("Luz " + (confirmedState ? "encendida" : "apagada") + ": " + (lightLabels[lightName] || lightName), "ok", gatewayOnline ? "Confirmado por el ESP32" : "Estado confirmado en Firebase");
+      recordActivity("Luz " + (confirmedState ? "encendida" : "apagada") + ": " + (lightLabels[lightName] || lightName), "ok", "Estado confirmado por el ESP32");
     }).catch(function (error) {
       console.error("No se pudo enviar/confirmar el comando de luz:", error);
       if (card) { card.classList.remove("is-pending"); }
-      state.lights[lightName] = prevState;
-      saveState();
       renderLights();
       recordActivity("Cambio de luz: " + lightName, "error", error.message);
-      addNotification("alert", "⚠", "ERROR DE DISPOSITIVO", "No se pudo cambiar " + lightName, error.message);
+      addNotification("alert", "!", "ERROR DE DISPOSITIVO", "No se pudo cambiar " + lightName, error.message);
     });
   }
 
   function sendPoolCommand(targetState) {
-    var prevState = state.poolOn;
-    state.poolOn = targetState;
-    saveState();
     var toggle = byId("pool-toggle");
+    if (!requireGatewayConnection("la pileta", null)) { return; }
+    if (toggle && toggle.classList.contains("is-pending")) { return; }
     if (toggle) { toggle.classList.add("is-pending"); }
-    renderPool();
-
-    if (!db || !apiAuthenticated) {
-      if (toggle) { toggle.classList.remove("is-pending"); }
-      state.poolOn = prevState;
-      renderPool();
-      return;
-    }
-
     var updates = {};
     updates["home/commands/poolOn"] = targetState;
     updates["home/commands/timestamp"] = Date.now();
-    db.ref().update(updates).then(function () {
-      return waitForRealtimeValue("home/state/poolOn", targetState, 8000);
+    updateFirebasePaths(updates).then(function () {
+      return waitForFirebaseValue("home/state/poolOn", targetState, 8000);
     }).then(function (confirmedState) {
       if (toggle) { toggle.classList.remove("is-pending"); }
       state.poolOn = confirmedState === true;
       saveState();
       renderPool();
-      recordActivity("Motor de pileta " + (confirmedState ? "encendido" : "apagado"), "ok", gatewayOnline ? "Confirmado por el ESP32" : "Estado confirmado en Firebase");
+      recordActivity("Motor de pileta " + (confirmedState ? "encendido" : "apagado"), "ok", "Estado confirmado por el ESP32");
     }).catch(function (error) {
       console.error("No se pudo enviar/confirmar el comando de pileta:", error);
       if (toggle) { toggle.classList.remove("is-pending"); }
-      state.poolOn = prevState;
-      saveState();
       renderPool();
       recordActivity("Cambio del motor de pileta", "error", error.message);
-      addNotification("alert", "⚠", "ERROR DE DISPOSITIVO", "No se pudo cambiar la pileta", error.message);
+      addNotification("alert", "!", "ERROR DE DISPOSITIVO", "No se pudo cambiar la pileta", error.message);
     });
   }
 
@@ -679,48 +762,41 @@
   function sendGateCommand(targetState) {
     var button = byId("gate-button");
     var feedbackEl = byId("gate-feedback");
-    var prevState = state.gateOpen;
-    if (!apiAuthenticated || !db) {
-      feedbackEl.textContent = "Iniciá sesión para controlar el portón.";
-      return;
-    }
+    if (!requireGatewayConnection("el porton", feedbackEl)) { return; }
+    if (button.disabled) { return; }
     button.disabled = true;
-    feedbackEl.textContent = targetState ? "Enviando apertura vía Wi-Fi..." : "Enviando cierre vía Wi-Fi...";
-    state.gateOpen = targetState;
-    saveState();
-    renderGate();
-
+    feedbackEl.textContent = targetState ? "Enviando apertura por Wi-Fi..." : "Enviando cierre por Wi-Fi...";
     var updates = {};
     updates["home/commands/gateOpen"] = targetState;
     updates["home/commands/gateTrigger"] = Date.now();
     updates["home/commands/timestamp"] = Date.now();
-    db.ref().update(updates).then(function () {
-      feedbackEl.textContent = "Comando enviado. Esperando confirmación del ESP32...";
-      return waitForRealtimeValue("home/state/gateOpen", targetState, 10000);
+    updateFirebasePaths(updates).then(function () {
+      feedbackEl.textContent = "Orden enviada. Esperando confirmacion del ESP32...";
+      return waitForFirebaseValue("home/state/gateOpen", targetState, 10000);
     }).then(function (confirmedState) {
       state.gateOpen = confirmedState === true;
       saveState();
       renderGate();
-      feedbackEl.textContent = "Portón accionado correctamente.";
+      feedbackEl.textContent = "Porton accionado correctamente.";
       button.disabled = false;
-      recordActivity("Portón " + (confirmedState ? "abierto" : "cerrado"), "ok", gatewayOnline ? "Confirmado por el ESP32" : "Estado confirmado en Firebase");
+      recordActivity("Porton " + (confirmedState ? "abierto" : "cerrado"), "ok", "Estado confirmado por el ESP32");
       setTimeout(function () { feedbackEl.textContent = ""; }, 4000);
     }).catch(function (error) {
-      state.gateOpen = prevState;
-      saveState();
       renderGate();
       feedbackEl.textContent = "Error: " + error.message;
       button.disabled = false;
-      recordActivity("Acción sobre el portón", "error", error.message);
-      addNotification("alert", "⚠", "ERROR DE DISPOSITIVO", "No se pudo accionar el portón", error.message);
+      recordActivity("Accion sobre el porton", "error", error.message);
+      addNotification("alert", "!", "ERROR DE DISPOSITIVO", "No se pudo accionar el porton", error.message);
     });
   }
 
   function sendTVCommand(action, value) {
     var tv = getSelectedTv();
     if (!tv) { return; }
-
+    var feedback = byId("media-feedback");
+    if (!requireGatewayConnection("el televisor", feedback)) { renderMedia(); return; }
     var tvState = getSelectedTvState();
+    var previous = { volume: tvState.volume, muted: tvState.muted, poweredOn: tv.poweredOn };
     if (action === "set_volume") {
       tvState.volume = Number(value);
       tvState.muted = false;
@@ -732,40 +808,41 @@
     } else if (action === "power") {
       tv.poweredOn = !tv.poweredOn;
     }
-
     saveState();
     renderTVs();
     renderMedia();
 
-    if (db && apiAuthenticated) {
-      var commandPayload = {
-        targetId: tv.id,
-        action: action,
-        value: value !== undefined ? value : null,
-        timestamp: Date.now()
-      };
-
-      var updates = {};
-      updates["home/commands/tv"] = commandPayload;
-      if (action === "set_volume") {
-        updates["home/tvs/" + tv.id + "/volume"] = tvState.volume;
-        updates["home/tvs/" + tv.id + "/muted"] = false;
-      } else if (action === "toggle_mute" || action === "set_mute") {
-        updates["home/tvs/" + tv.id + "/muted"] = tvState.muted;
-      } else if (action === "power") {
-        updates["home/tvs/" + tv.id + "/poweredOn"] = tv.poweredOn;
-      }
-
-      db.ref().update(updates).then(function () {
-        byId("media-feedback").textContent = tv.name + " · comando Wi-Fi enviado al ESP32.";
-        recordActivity("Comando multimedia: " + tv.name, "ok", "Orden enviada (" + action.replace(/_/g, " ") + "); ejecución física no confirmada");
-      }).catch(function (err) {
-        byId("media-feedback").textContent = "Error: " + err.message;
-        recordActivity("Comando multimedia: " + tv.name, "error", err.message);
-      });
-    } else {
-      byId("media-feedback").textContent = tv.name + " · modo demo (inicia sesión para enviar comandos).";
+    var commandPayload = {
+      targetId: tv.id,
+      action: action,
+      value: value !== undefined ? value : null,
+      timestamp: Date.now()
+    };
+    var updates = { "home/commands/tv": commandPayload };
+    if (action === "set_volume") {
+      updates["home/tvs/" + tv.id + "/volume"] = tvState.volume;
+      updates["home/tvs/" + tv.id + "/muted"] = false;
+    } else if (action === "toggle_mute" || action === "set_mute") {
+      updates["home/tvs/" + tv.id + "/muted"] = tvState.muted;
+    } else if (action === "power") {
+      updates["home/tvs/" + tv.id + "/poweredOn"] = tv.poweredOn;
     }
+
+    updateFirebasePaths(updates).then(function () {
+      feedback.textContent = tv.name + " - orden enviada al ESP32 y compartida con tus dispositivos.";
+      recordActivity("Comando multimedia: " + tv.name, "ok", "Orden enviada (" + action.replace(/_/g, " ") + "); ejecucion fisica sin sensor de confirmacion");
+    }).catch(function (error) {
+      tvState.volume = previous.volume;
+      tvState.muted = previous.muted;
+      state.volume = previous.volume;
+      state.muted = previous.muted;
+      tv.poweredOn = previous.poweredOn;
+      saveState();
+      renderTVs();
+      renderMedia();
+      feedback.textContent = "Error: " + error.message;
+      recordActivity("Comando multimedia: " + tv.name, "error", error.message);
+    });
   }
 
   function promptFirebaseConfig() {
@@ -1879,19 +1956,11 @@
     var slider = byId("volume-slider");
     slider.addEventListener("input", function () {
       var val = Number(this.value);
-      var tvState = getSelectedTvState();
-      tvState.volume = val;
-      tvState.muted = false;
-      renderMedia();
-
-      if (volumeCommandTimer) { clearTimeout(volumeCommandTimer); }
-      volumeCommandTimer = setTimeout(function () {
-        sendTVCommand("set_volume", val);
-      }, 200);
+      byId("volume-value").textContent = val + "%";
+      this.style.setProperty("--volume-level", val + "%");
     });
 
     slider.addEventListener("change", function () {
-      if (volumeCommandTimer) { clearTimeout(volumeCommandTimer); }
       sendTVCommand("set_volume", Number(this.value));
     });
 
@@ -2152,7 +2221,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=61").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=63").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -2773,6 +2842,8 @@
 
     // Solo actuar si cambia el estado esperado
     if (shouldBeOn !== lastPoolScheduleState) {
+      refreshGatewayFreshness();
+      if (!gatewayOnline) { return; }
       lastPoolScheduleState = shouldBeOn;
 
       if (shouldBeOn) {
@@ -2883,8 +2954,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v61";
-    byId("script-build-version").textContent = "JS v61";
+    byId("frontend-version").textContent = "HTML v63";
+    byId("script-build-version").textContent = "JS v63";
 
     initializeConfirmDialog();
     initializeTabs();
