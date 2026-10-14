@@ -318,13 +318,31 @@
     }
   }
 
+  // Wait for the ESP32 to report the desired state; an initial read may be stale.
+  function waitForRealtimeValue(path, expectedValue, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      var ref = db.ref(path);
+      var settled = false;
+      var listener;
+      var timer = setTimeout(function () {
+        finish(new Error("El ESP32 no confirmó el cambio a tiempo."));
+      }, timeoutMs);
+      function finish(error, value) {
+        if (settled) { return; }
+        settled = true;
+        clearTimeout(timer);
+        ref.off("value", listener);
+        if (error) { reject(error); } else { resolve(value); }
+      }
+      listener = function (snapshot) {
+        if (snapshot.val() === expectedValue) { finish(null, snapshot.val()); }
+      };
+      ref.on("value", listener, function (error) { finish(error); });
+    });
+  }
+
   // --- ENVIAR COMANDOS HACIA FIREBASE (El ESP32 los ejecuta vía Wi-Fi) ---
   function sendLightCommand(lightName, targetState) {
-    // BUG-07: Advertir si Firebase está desconectado
-    if (db && !firebaseConnected) {
-      console.warn("[" + lightName + "] Firebase desconectado. El comando puede llegar tarde.");
-    }
-    // Estado optimista local para feedback inmediato
     var prevState = state.lights[lightName];
     state.lights[lightName] = targetState;
     saveState();
@@ -333,53 +351,34 @@
     if (card) { card.classList.add("is-pending"); }
     renderLights();
 
-    if (db && apiAuthenticated) {
-      var updates = {};
-      updates["home/commands/lights/" + lightName] = targetState;
-      updates["home/commands/timestamp"] = Date.now();
-      db.ref().update(updates).catch(function (err) {
-        console.error("Error enviando comando luz:", err);
-        // Rollback inmediato si falla Firebase
-        state.lights[lightName] = prevState;
-        saveState();
-        if (card) { card.classList.remove("is-pending"); }
-        renderLights();
-      });
-
-      // BUG-03 FIX: Timeout de rollback que restaura estado Y animación
-      var rollbackTimer = setTimeout(function () {
-        if (card && card.classList.contains("is-pending")) {
-          card.classList.remove("is-pending");
-          // Restaurar el estado real desde Firebase
-          state.lights[lightName] = prevState;
-          saveState();
-          renderLights();
-          console.warn("[" + lightName + "] Sin confirmación del ESP32 en 5s — enchufe sin respuesta.");
-        }
-      }, 5000);
-
-      // Escuchar confirmación real del ESP32 en /home/state/lights/{name}
-      db.ref("home/state/lights/" + lightName).once("value").then(function (snap) {
-        clearTimeout(rollbackTimer);
-        if (card) { card.classList.remove("is-pending"); }
-        // Aplicar el estado confirmado por el hardware
-        state.lights[lightName] = snap.val() === true;
-        saveState();
-        renderLights();
-      });
-    } else {
+    if (!db || !apiAuthenticated) {
       if (card) { card.classList.remove("is-pending"); }
-      if (!apiAuthenticated) {
-        state.lights[lightName] = prevState;
-        renderLights();
-      }
+      state.lights[lightName] = prevState;
+      renderLights();
+      return;
     }
+
+    var updates = {};
+    updates["home/commands/lights/" + lightName] = targetState;
+    updates["home/commands/timestamp"] = Date.now();
+    db.ref().update(updates).then(function () {
+      return waitForRealtimeValue("home/state/lights/" + lightName, targetState, 8000);
+    }).then(function (confirmedState) {
+      if (card) { card.classList.remove("is-pending"); }
+      state.lights[lightName] = confirmedState === true;
+      saveState();
+      renderLights();
+    }).catch(function (error) {
+      console.error("No se pudo enviar/confirmar el comando de luz:", error);
+      if (card) { card.classList.remove("is-pending"); }
+      state.lights[lightName] = prevState;
+      saveState();
+      renderLights();
+      addNotification("alert", "⚠", "ERROR DE DISPOSITIVO", "No se pudo cambiar " + lightName, error.message);
+    });
   }
 
   function sendPoolCommand(targetState) {
-    if (db && !firebaseConnected) {
-      console.warn("[Pileta] Firebase desconectado. El comando puede llegar tarde.");
-    }
     var prevState = state.poolOn;
     state.poolOn = targetState;
     saveState();
@@ -387,42 +386,31 @@
     if (toggle) { toggle.classList.add("is-pending"); }
     renderPool();
 
-    if (db && apiAuthenticated) {
-      var updates = {};
-      updates["home/commands/poolOn"] = targetState;
-      updates["home/commands/timestamp"] = Date.now();
-      db.ref().update(updates).catch(function (err) {
-        console.error("Error enviando comando pileta:", err);
-        state.poolOn = prevState;
-        saveState();
-        if (toggle) { toggle.classList.remove("is-pending"); }
-        renderPool();
-      });
-
-      var poolTimer = setTimeout(function () {
-        if (toggle && toggle.classList.contains("is-pending")) {
-          toggle.classList.remove("is-pending");
-          state.poolOn = prevState;
-          saveState();
-          renderPool();
-          console.warn("[Pileta] Sin confirmación del ESP32 en 6s.");
-        }
-      }, 6000);
-
-      db.ref("home/state/poolOn").once("value").then(function (snap) {
-        clearTimeout(poolTimer);
-        if (toggle) { toggle.classList.remove("is-pending"); }
-        state.poolOn = snap.val() === true;
-        saveState();
-        renderPool();
-      });
-    } else {
+    if (!db || !apiAuthenticated) {
       if (toggle) { toggle.classList.remove("is-pending"); }
-      if (!apiAuthenticated) {
-        state.poolOn = prevState;
-        renderPool();
-      }
+      state.poolOn = prevState;
+      renderPool();
+      return;
     }
+
+    var updates = {};
+    updates["home/commands/poolOn"] = targetState;
+    updates["home/commands/timestamp"] = Date.now();
+    db.ref().update(updates).then(function () {
+      return waitForRealtimeValue("home/state/poolOn", targetState, 8000);
+    }).then(function (confirmedState) {
+      if (toggle) { toggle.classList.remove("is-pending"); }
+      state.poolOn = confirmedState === true;
+      saveState();
+      renderPool();
+    }).catch(function (error) {
+      console.error("No se pudo enviar/confirmar el comando de pileta:", error);
+      if (toggle) { toggle.classList.remove("is-pending"); }
+      state.poolOn = prevState;
+      saveState();
+      renderPool();
+      addNotification("alert", "⚠", "ERROR DE DISPOSITIVO", "No se pudo cambiar la pileta", error.message);
+    });
   }
 
   // BUG-09: Gate con rollback completo + auto-clear del mensaje (UX-03)
@@ -430,68 +418,38 @@
     var button = byId("gate-button");
     var feedbackEl = byId("gate-feedback");
     var prevState = state.gateOpen;
-    button.disabled = true;
-    feedbackEl.textContent = targetState ? "Enviando apertura vía Wi-Fi..." : "Enviando cierre vía Wi-Fi...";
-
-    if (!apiAuthenticated) {
-      button.disabled = false;
-      feedbackEl.textContent = "Inicia sesión para controlar el portón.";
+    if (!apiAuthenticated || !db) {
+      feedbackEl.textContent = "Iniciá sesión para controlar el portón.";
       return;
     }
-
-    if (db && !firebaseConnected) {
-      feedbackEl.textContent = "Advertencia: Firebase desconectado. Reintentando...";
-    }
-
-    // Optimista local para feedback inmediato
+    button.disabled = true;
+    feedbackEl.textContent = targetState ? "Enviando apertura vía Wi-Fi..." : "Enviando cierre vía Wi-Fi...";
     state.gateOpen = targetState;
     saveState();
     renderGate();
 
-    if (db && apiAuthenticated) {
-      var updates = {};
-      updates["home/commands/gateOpen"] = targetState;
-      updates["home/commands/gateTrigger"] = Date.now();
-      updates["home/commands/timestamp"] = Date.now();
-      db.ref().update(updates).then(function () {
-        feedbackEl.textContent = "Comando enviado. Esperando confirmación del ESP32...";
-
-        // Timeout de rollback: si el ESP32 no confirma en 8s
-        var gateTimer = setTimeout(function () {
-          state.gateOpen = prevState;
-          saveState();
-          renderGate();
-          feedbackEl.textContent = "Sin confirmación del ESP32. Verifica la conexión Wi-Fi local.";
-          button.disabled = false;
-        }, 8000);
-
-        // Esperar confirmación real desde Firebase (ESP32 escribe el estado)
-        db.ref("home/state/gateOpen").once("value").then(function (snap) {
-          clearTimeout(gateTimer);
-          state.gateOpen = snap.val() === true;
-          saveState();
-          renderGate();
-          feedbackEl.textContent = "Portón accionado correctamente.";
-          button.disabled = false;
-          // UX-03: Auto-limpiar el mensaje tras 4 segundos
-          setTimeout(function () { feedbackEl.textContent = ""; }, 4000);
-        });
-      }).catch(function (err) {
-        state.gateOpen = prevState;
-        saveState();
-        renderGate();
-        feedbackEl.textContent = "Error: " + err.message;
-        button.disabled = false;
-      });
-    } else {
-      setTimeout(function () {
-        state.gateOpen = prevState;
-        saveState();
-        renderGate();
-        button.disabled = false;
-        feedbackEl.textContent = "Inicia sesión para controlar el portón.";
-      }, 400);
-    }
+    var updates = {};
+    updates["home/commands/gateOpen"] = targetState;
+    updates["home/commands/gateTrigger"] = Date.now();
+    updates["home/commands/timestamp"] = Date.now();
+    db.ref().update(updates).then(function () {
+      feedbackEl.textContent = "Comando enviado. Esperando confirmación del ESP32...";
+      return waitForRealtimeValue("home/state/gateOpen", targetState, 10000);
+    }).then(function (confirmedState) {
+      state.gateOpen = confirmedState === true;
+      saveState();
+      renderGate();
+      feedbackEl.textContent = "Portón accionado correctamente.";
+      button.disabled = false;
+      setTimeout(function () { feedbackEl.textContent = ""; }, 4000);
+    }).catch(function (error) {
+      state.gateOpen = prevState;
+      saveState();
+      renderGate();
+      feedbackEl.textContent = "Error: " + error.message;
+      button.disabled = false;
+      addNotification("alert", "⚠", "ERROR DE DISPOSITIVO", "No se pudo accionar el portón", error.message);
+    });
   }
 
   function sendTVCommand(action, value) {
@@ -855,7 +813,10 @@
       ref.set(payload).then(function () {
         closeEventForm();
       }).catch(function (err) {
-        byId("event-form-error").textContent = "Error guardando en Firebase: " + err.message;
+        console.error("Error guardando evento en Firebase:", err);
+        var detail = err.code ? " (" + err.code + ")" : "";
+        var uid = auth && auth.currentUser ? auth.currentUser.uid : "{uid}";
+        byId("event-form-error").textContent = "No se pudo guardar en Firebase" + detail + ": " + err.message + ". Revisa los permisos de users/" + uid + "/events.";
         byId("event-form-error").hidden = false;
       });
     } else {
@@ -932,11 +893,15 @@
       icon: "🗑"
     }).then(function (confirmed) {
       if (!confirmed) { return; }
-      if (typeof onDeleted === "function") { onDeleted(); }
       if (db && apiAuthenticated && activeEventsRef && eventData.id) {
-        activeEventsRef.child(eventData.id).remove().catch(function (err) {
+        activeEventsRef.child(eventData.id).remove().then(function () {
+          if (typeof onDeleted === "function") { onDeleted(); }
+        }).catch(function (err) {
           console.error("Error al eliminar evento:", err);
+          addNotification("alert", "⚠", "NO SE PUDO ELIMINAR", eventData.title || "Evento", err.message);
         });
+      } else {
+        addNotification("alert", "⚠", "NO SE PUDO ELIMINAR", eventData.title || "Evento", "Iniciá sesión para modificar tu agenda.");
       }
     });
   }
@@ -1576,7 +1541,7 @@
     }
 
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/service-worker.js?v=39").then(function (reg) {
+      navigator.serviceWorker.register("/service-worker.js?v=40").then(function (reg) {
         pushWorkerRegistration = reg;
         reg.update().catch(function () {});
         initializePushNotifications();
@@ -2166,8 +2131,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v39";
-    byId("script-build-version").textContent = "JS v39";
+    byId("frontend-version").textContent = "HTML v40";
+    byId("script-build-version").textContent = "JS v40";
 
     initializeConfirmDialog();
     initializeTabs();
