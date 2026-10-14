@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "54";
+  var APP_BUILD_VERSION = "55";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -1775,12 +1775,6 @@
     return "smart-panel-push-registered-v1-" + uid;
   }
 
-  function isPhonePushUi() {
-    var smallViewport = window.matchMedia && window.matchMedia("(max-width: 700px)").matches;
-    var mobileDevice = /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || "");
-    return !!(smallViewport || mobileDevice);
-  }
-
   function isAppleMobileDevice() {
     return /iPhone|iPad|iPod/i.test(navigator.userAgent || "") ||
       (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -1794,7 +1788,7 @@
     var button = byId("push-enable");
     if (!button) { return; }
     button.hidden = false;
-    if (!user || !isPhonePushUi()) { return; }
+    if (!user) { return; }
     try {
       if (window.localStorage.getItem(pushRegistrationKey(user.uid)) === "1") {
         button.hidden = true;
@@ -1871,7 +1865,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=54").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=55").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -2005,7 +1999,7 @@
         }
         clearStalePushErrors();
         addNotification("important", "\uD83D\uDD14", "NOTIFICACIONES", "Dispositivo registrado", "Este navegador quedó asociado a tu cuenta.");
-        if (isPhonePushUi()) { button.hidden = true; }
+        button.hidden = true;
       } catch (error) {
         console.error("[FCM] No se pudo activar push:", error);
         var detail = error.code ? error.code + ": " + error.message : error.message || String(error);
@@ -2602,8 +2596,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v54";
-    byId("script-build-version").textContent = "JS v54";
+    byId("frontend-version").textContent = "HTML v55";
+    byId("script-build-version").textContent = "JS v55";
 
     initializeConfirmDialog();
     initializeTabs();
