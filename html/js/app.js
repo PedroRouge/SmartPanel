@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "53";
+  var APP_BUILD_VERSION = "54";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -1781,6 +1781,15 @@
     return !!(smallViewport || mobileDevice);
   }
 
+  function isAppleMobileDevice() {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent || "") ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  function isInstalledWebApp() {
+    return navigator.standalone === true || !!(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  }
+
   function syncPushButtonForUser(user) {
     var button = byId("push-enable");
     if (!button) { return; }
@@ -1862,7 +1871,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=53").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=54").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -1880,7 +1889,16 @@
     button.dataset.pushBound = "true";
 
     if (!window.Notification || !navigator.serviceWorker || !firebase.messaging) {
-      setPushButtonState("unsupported", "Push no disponible", "Este navegador no admite notificaciones web push.");
+      if (isAppleMobileDevice() && !isInstalledWebApp()) {
+        var iosHelp = "En iPad, abre esta web desde su icono en la pantalla de inicio. Web Push requiere iPadOS 16.4 o posterior.";
+        setPushButtonState("unsupported", "Agregar a inicio", iosHelp);
+        button.addEventListener("click", function () {
+          var installDialog = byId("pwa-install-dialog");
+          if (installDialog) { installDialog.hidden = false; }
+        });
+      } else {
+        setPushButtonState("unsupported", "Push no disponible", "Este navegador no admite notificaciones web push.");
+      }
       return;
     }
     if (Notification.permission === "denied") {
@@ -1929,6 +1947,22 @@
         if (!registration) { throw new Error("No se pudo iniciar el Service Worker de notificaciones."); }
         pushWorkerRegistration = registration;
         var messaging = firebase.messaging();
+        // If the browser's Push service rejected the previous subscription,
+        // the next deliberate retry repairs this origin's local FCM state.
+        if (button.dataset.pushRepair === "true") {
+          console.info("[FCM] Renovando la suscripción Push local de este navegador.");
+          try {
+            await withTimeout(messaging.deleteToken(), 8000, "No se pudo limpiar el token Push anterior.");
+          } catch (deleteError) {
+            console.warn("[FCM] El SDK no pudo borrar el token anterior; se limpiará la suscripción local.", deleteError);
+          }
+          var subscriptionToRepair = await registration.pushManager.getSubscription();
+          if (subscriptionToRepair) {
+            var unsubscribed = await subscriptionToRepair.unsubscribe();
+            if (!unsubscribed) { throw new Error("El navegador no permitió renovar su suscripción Push. Borra los datos del sitio y vuelve a intentar."); }
+          }
+          button.dataset.pushRepair = "false";
+        }
         var existingSubscription = await registration.pushManager.getSubscription();
         if (existingSubscription && !subscriptionUsesVapidKey(existingSubscription, config.vapidKey)) {
           console.info("[FCM] Eliminando la suscripción Push anterior, creada con otra clave VAPID.");
@@ -1965,6 +1999,7 @@
           });
         }
         setPushButtonState("active", "Dispositivo listo", "Permiso y registro FCM confirmados en este dispositivo.");
+        button.dataset.pushRepair = "false";
         try { window.localStorage.setItem(pushRegistrationKey(currentUser.uid), "1"); } catch (storageError) {
           console.warn("[FCM] El dispositivo quedó registrado, pero no se pudo guardar el estado local de la UI.", storageError);
         }
@@ -1974,11 +2009,16 @@
       } catch (error) {
         console.error("[FCM] No se pudo activar push:", error);
         var detail = error.code ? error.code + ": " + error.message : error.message || String(error);
-        if (error.name === "AbortError" && /push service|permission denied/i.test(error.message || "")) {
-          detail = "El permiso del sitio está concedido, pero el servicio Push del navegador rechazó registrar esta suscripción. Prueba sin VPN/proxy o desde otra red; el permiso visible del navegador no garantiza que el servicio Push acepte el registro.";
+        var pushServiceRejected = error.name === "AbortError" && /push service|permission denied/i.test(error.message || "");
+        if (pushServiceRejected) {
+          button.dataset.pushRepair = "true";
+          setPushButtonState("error", "Reparar avisos", "Pulsa para renovar la suscripción Push local de este navegador.");
+          detail = "El permiso del sitio está concedido, pero el navegador rechazó su suscripción Push. Pulsa «Reparar avisos» para renovar el registro local; si vuelve a fallar, el navegador o la red está bloqueando su servicio Push.";
+        } else {
+          button.dataset.pushRepair = "false";
         }
         var blocked = Notification.permission === "denied";
-        setPushButtonState(blocked ? "blocked" : "error", blocked ? "Avisos bloqueados" : "Reintentar avisos", detail);
+        if (!pushServiceRejected) { setPushButtonState(blocked ? "blocked" : "error", blocked ? "Avisos bloqueados" : "Reintentar avisos", detail); }
         addNotification("alert", "\uD83D\uDD14", "ERROR DE NOTIFICACIONES", "No se pudieron activar los avisos", detail);
       } finally {
         button.disabled = false;
@@ -2562,8 +2602,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v53";
-    byId("script-build-version").textContent = "JS v53";
+    byId("frontend-version").textContent = "HTML v54";
+    byId("script-build-version").textContent = "JS v54";
 
     initializeConfirmDialog();
     initializeTabs();
