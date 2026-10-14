@@ -1546,3 +1546,235 @@ body.notifications-open { overflow: hidden; }
 }
 .danger-button:hover, .danger-button:focus-visible { background: var(--red); color: #fff; box-shadow: 0 0 16px rgba(237, 121, 121, .4); }
 .danger-button:active { transform: scale(.98); }
+
+/* =======================================================
+   VISUAL REFRESH · SMART PANEL
+   Estilos de presentación únicamente; conserva estructura e interacciones.
+======================================================= */
+:root {
+  --page: #090e17;
+  --surface: #111a27;
+  --surface-raised: #182536;
+  --surface-border: rgba(170, 192, 220, .13);
+  --text: #f1f5f9;
+  --muted: #a4b1c2;
+  --quiet: #77869a;
+  --teal: #74e0ca;
+  --teal-soft: rgba(116, 224, 202, .12);
+  --amber: #f2c77d;
+  --red: #ff8585;
+  --radius: 20px;
+}
+
+body {
+  background:
+    radial-gradient(ellipse at 8% -8%, rgba(64, 130, 131, .16), transparent 34rem),
+    radial-gradient(ellipse at 100% 28rem, rgba(46, 82, 120, .10), transparent 32rem),
+    var(--page);
+}
+
+.app-shell { width: min(calc(100% - 36px), 1320px); }
+.topbar {
+  min-height: var(--topbar-h);
+  gap: 14px;
+  border-color: rgba(170, 192, 220, .1);
+  background: rgba(9, 14, 23, .88);
+}
+.brand { font-size: 15px; letter-spacing: .15px; }
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(116, 224, 202, .2), rgba(116, 224, 202, .04));
+  box-shadow: inset 0 1px rgba(255,255,255,.1), 0 4px 16px rgba(0,0,0,.16);
+}
+.version-reader {
+  max-width: 37%;
+  padding: 6px 11px;
+  border-color: rgba(170, 192, 220, .09);
+  background: rgba(255,255,255,.025);
+}
+.topbar-actions { gap: 8px; }
+.push-enable-button, .notif-bell-btn, .pwa-install-button, .api-logout {
+  min-height: 42px;
+  border-radius: 12px;
+}
+.notif-bell-btn, .weather-refresh, .calendar-nav, .calendar-today,
+.icon-button, .event-action, .camera-remove { transition: all .18s ease; }
+.notif-bell-btn:hover, .weather-refresh:hover, .calendar-nav:hover,
+.calendar-today:hover, .icon-button:hover, .event-action:hover,
+.camera-remove:hover { transform: translateY(-1px); }
+
+.tab-bar {
+  margin-inline: -18px;
+  padding: 10px 18px;
+  gap: 7px;
+  border-color: rgba(170, 192, 220, .1);
+  background: rgba(9, 14, 23, .88);
+}
+.tab-button {
+  min-height: 44px;
+  min-width: 88px;
+  padding-inline: 15px;
+  border-radius: 12px;
+  color: #97a6b8;
+  font-size: 12px;
+}
+.tab-button.is-active {
+  background: linear-gradient(135deg, rgba(116, 224, 202, .16), rgba(116, 224, 202, .07));
+  border-color: rgba(116, 224, 202, .22);
+  color: var(--teal);
+  box-shadow: inset 0 1px rgba(255,255,255,.035);
+}
+
+.main-content { padding-block: 34px 52px; }
+.welcome-row, .page-heading { margin-bottom: 24px; }
+.eyebrow { letter-spacing: 1.55px; }
+h1 { font-size: clamp(28px, 3vw, 36px); letter-spacing: -.8px; }
+h2 { letter-spacing: -.25px; }
+.welcome-row h1 { font-size: clamp(30px, 3.5vw, 42px); }
+.home-indicator {
+  padding: 9px 13px;
+  border-color: rgba(116, 224, 202, .15);
+  background: rgba(116, 224, 202, .045);
+  color: #b7c8d2;
+}
+.home-indicator .status-dot { width: 8px; height: 8px; flex-basis: 8px; }
+
+.dashboard-grid { gap: 16px; }
+.panel-surface {
+  border-color: rgba(170, 192, 220, .12);
+  border-radius: 21px;
+  background: linear-gradient(145deg, rgba(255,255,255,.035), transparent 56%), var(--surface);
+  box-shadow: 0 14px 40px rgba(0,0,0,.17), inset 0 1px rgba(255,255,255,.025);
+}
+.clock-panel, .weather-panel, .summary-panel, .forecast-panel { padding: 23px; }
+.clock-panel {
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 100% 0%, rgba(75, 174, 160, .18), transparent 62%), linear-gradient(150deg, #142532, #111a27 72%);
+}
+.clock-panel:after {
+  position: absolute;
+  right: -54px;
+  bottom: -88px;
+  width: 210px;
+  height: 210px;
+  border: 1px solid rgba(116, 224, 202, .08);
+  border-radius: 50%;
+  box-shadow: 0 0 0 22px rgba(116,224,202,.025), 0 0 0 45px rgba(116,224,202,.018);
+  content: "";
+  pointer-events: none;
+}
+.clock { position: relative; z-index: 1; letter-spacing: -3px; font-weight: 350; }
+.date-line { position: relative; z-index: 1; }
+.weather-reading #weather-temperature { font-weight: 400; letter-spacing: -1.5px; }
+.summary-item { min-height: 48px; }
+.forecast-item { border: 1px solid rgba(170,192,220,.07); background: rgba(255,255,255,.035); }
+.today-agenda { padding: 22px; }
+.today-agenda > .section-heading { margin-bottom: 14px; }
+
+.page-heading > p:last-child { line-height: 1.6; }
+.agenda-page-heading { align-items: center; }
+.agenda-layout { gap: 18px; }
+.calendar-panel { padding: 20px; }
+.calendar-toolbar { gap: 9px; margin-bottom: 17px; }
+.calendar-nav, .calendar-today {
+  border-radius: 11px;
+  background: rgba(255,255,255,.035);
+}
+.calendar-weekdays { color: #8291a5; font-size: 10px; font-weight: 700; letter-spacing: .4px; }
+.calendar-day { border-radius: 11px; font-weight: 550; }
+.calendar-day.is-today { background: rgba(242,199,125,.07); }
+.calendar-day.is-selected { box-shadow: inset 0 0 0 1px rgba(116,224,202,.08); }
+.agenda-day-panel {
+  padding: 20px;
+  border: 1px solid var(--surface-border);
+  border-radius: 21px;
+  background: linear-gradient(145deg, rgba(255,255,255,.025), transparent 65%), rgba(17,26,39,.74);
+}
+.event-row { padding-block: 14px; }
+.event-time { font-weight: 650; }
+
+.primary-button, .secondary-button, .danger-button {
+  min-height: 44px;
+  border-radius: 12px;
+  font-weight: 700;
+  transition: transform .16s ease, background .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.primary-button { box-shadow: 0 5px 18px rgba(102,214,195,.08); }
+.primary-button:hover, .secondary-button:hover, .danger-button:hover { transform: translateY(-1px); }
+.device-card, .tv-device, .camera-card, .app-link, .pool-motor, .water-temperature {
+  border-radius: 18px;
+}
+.device-card, .tv-device, .app-link { transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease; }
+.device-card:hover, .tv-device:hover, .app-link:hover {
+  transform: translateY(-2px);
+  border-color: rgba(116,224,202,.24);
+  box-shadow: 0 10px 26px rgba(0,0,0,.15);
+}
+.device-card { min-height: 92px; padding: 15px; }
+.device-symbol { border-radius: 13px; }
+.camera-card { border: 1px solid var(--surface-border); background: var(--surface); }
+.camera-preview { border-radius: 17px 17px 0 0; }
+.form-field input, .form-field textarea, .tv-pairing-code {
+  border-radius: 12px;
+  border-color: rgba(170,192,220,.15);
+  background: #0d1521;
+}
+.form-field > span { font-size: 12px; }
+.form-actions { gap: 9px; }
+.notif-panel {
+  border-left-color: rgba(170,192,220,.14);
+  background: rgba(13,19,29,.97);
+  box-shadow: -24px 0 70px rgba(0,0,0,.35);
+}
+.notif-item { border-radius: 15px; }
+.app-footer { padding-top: 17px; border-top-color: rgba(170,192,220,.1); }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
+}
+
+@media (min-width: 600px) {
+  .dashboard-grid { gap: 17px; }
+  .clock-panel, .weather-panel, .summary-panel, .forecast-panel { padding: 24px; }
+  .today-agenda { grid-column: 1 / -1; }
+  .calendar-panel { padding: 21px; }
+}
+
+@media (min-width: 900px) {
+  .app-shell { width: min(calc(100% - 64px), 1320px); }
+  .main-content { padding-top: 40px; }
+  .dashboard-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; }
+  .clock-panel { grid-column: 1 / span 5; grid-row: 1 / span 2; }
+  .weather-panel { grid-column: 6 / span 7; grid-row: 1; }
+  .summary-panel { grid-column: 6 / span 7; grid-row: 2; }
+  .forecast-panel { grid-column: 1 / -1; grid-row: 3; }
+  .today-agenda { grid-column: 1 / -1; grid-row: 4; }
+  .agenda-layout { grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: 22px; }
+  .agenda-day-panel { position: sticky; top: calc(var(--topbar-h) + var(--tabbar-h) + 42px); }
+}
+
+@media (max-width: 700px) {
+  .app-shell { width: calc(100% - 24px); }
+  .topbar { min-height: 62px; gap: 8px; }
+  .version-reader { display: none; }
+  .tab-bar { top: 62px; margin-inline: -12px; padding-inline: 12px; }
+  .main-content { padding-block: 23px 38px; }
+  .dashboard-grid { gap: 12px; }
+  .panel-surface { border-radius: 18px; }
+  .clock-panel, .weather-panel, .summary-panel, .forecast-panel { padding: 18px; }
+  .agenda-day-panel { border-radius: 18px; }
+  .home-indicator { padding: 7px 9px; font-size: 10px; }
+}
+
+@media (max-width: 440px) {
+  .app-shell { width: calc(100% - 20px); }
+  .topbar { min-height: 58px; }
+  .tab-bar { top: 58px; margin-inline: -10px; }
+  .tab-button { min-width: 62px; }
+  .welcome-row { align-items: center; }
+  .calendar-panel { padding: 12px; }
+  .agenda-day-panel { padding: 16px; }
+}
