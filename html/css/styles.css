@@ -166,6 +166,7 @@ a { color: inherit; text-decoration: none; }
 .push-enable-button[data-push-state="active"] { border-color: rgba(102, 214, 195, .42); background: rgba(102, 214, 195, .16); }
 .push-enable-button[data-push-state="blocked"], .push-enable-button[data-push-state="error"], .push-enable-button[data-push-state="unsupported"] { border-color: rgba(237, 121, 121, .4); background: rgba(237, 121, 121, .1); color: var(--red); }
 .push-enable-button[data-push-state="loading"] { opacity: .72; cursor: progress; }
+@keyframes push-enable-spin { to { transform: rotate(360deg); } }
 
 .status-dot.is-checking { background: var(--amber); box-shadow: none; }
 .status-dot.is-error { background: var(--red); box-shadow: none; }
@@ -1405,7 +1406,7 @@ body.notifications-open { overflow: hidden; }
   .push-enable-button:before { content: "🔔"; font-size: 15px; }
   .push-enable-button[data-push-state="active"]:before { content: "✓"; }
   .push-enable-button[data-push-state="blocked"]:before, .push-enable-button[data-push-state="error"]:before, .push-enable-button[data-push-state="unsupported"]:before { content: "!"; }
-  .push-enable-button[data-push-state="loading"]:before { content: "…"; }
+  .push-enable-button[data-push-state="loading"]:before { content: "↻"; display: inline-block; font-size: 18px; animation: push-enable-spin .8s linear infinite; }
   .notif-bell-btn { width: 36px; height: 36px; }
   .tab-bar { top: 58px; margin: 0 -10px; padding: 7px 10px; gap: 5px; }
   .tab-button { min-width: 63px; min-height: 46px; padding: 0 9px; gap: 4px; font-size: 11px; }

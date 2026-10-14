@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "48";
+  var APP_BUILD_VERSION = "50";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -861,6 +861,51 @@
     });
   }
 
+  function deleteEventViaRest(user, eventId) {
+    var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
+    if (!config.databaseURL || !window.fetch || !user || !user.getIdToken) {
+      return Promise.reject(new Error("No se pudo iniciar la eliminación autenticada del evento."));
+    }
+    return user.getIdToken().then(function (idToken) {
+      var baseUrl = config.databaseURL.replace(/\/+$/, "");
+      var path = "/users/" + encodeURIComponent(user.uid) + "/events/" + encodeURIComponent(eventId) + ".json";
+      return fetch(baseUrl + path + "?auth=" + encodeURIComponent(idToken), { method: "DELETE", cache: "no-store" });
+    }).then(function (response) {
+      return response.text().then(function (body) {
+        var data = null;
+        try { data = body ? JSON.parse(body) : null; } catch (e) {}
+        if (!response.ok) { throw new Error((data && data.error) || ("Firebase respondió HTTP " + response.status + " al eliminar.")); }
+      });
+    });
+  }
+
+  function deleteEventWithFallback(user, ref, eventId) {
+    if (!firebaseConnected) { return deleteEventViaRest(user, eventId); }
+    var timer;
+    var restFallback = new Promise(function (resolve, reject) {
+      timer = setTimeout(function () { deleteEventViaRest(user, eventId).then(resolve, reject); }, 5000);
+    });
+    var realtimeDelete = ref.remove().catch(function (error) {
+      clearTimeout(timer);
+      console.warn("[Agenda] Falló la eliminación en tiempo real; intentando HTTPS autenticado.", error);
+      return deleteEventViaRest(user, eventId);
+    });
+    return Promise.race([realtimeDelete, restFallback]).finally(function () { clearTimeout(timer); });
+  }
+
+  function withTimeout(promise, timeoutMs, message) {
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () { reject(new Error(message)); }, timeoutMs);
+      Promise.resolve(promise).then(function (value) {
+        clearTimeout(timer);
+        resolve(value);
+      }, function (error) {
+        clearTimeout(timer);
+        reject(error);
+      });
+    });
+  }
+
   function saveEventWithFallback(user, ref, eventId, payload) {
     if (!firebaseConnected) {
       console.warn("[Agenda] RTDB no marcó conexión en tiempo real; guardando por HTTPS autenticado.");
@@ -1033,8 +1078,14 @@
       icon: "🗑"
     }).then(function (confirmed) {
       if (!confirmed) { return; }
-      if (db && apiAuthenticated && activeEventsRef && eventData.id) {
-        activeEventsRef.child(eventData.id).remove().then(function () {
+      var user = auth && auth.currentUser;
+      if (db && apiAuthenticated && user && eventData.id) {
+        var userEventRef = db.ref("users/" + user.uid + "/events/" + eventData.id);
+        deleteEventWithFallback(user, userEventRef, eventData.id).then(function () {
+          calendarEvents = calendarEvents.filter(function (event) { return event.id !== eventData.id; });
+          renderCalendar();
+          renderAgendaDay();
+          renderTodayEvents();
           if (typeof onDeleted === "function") { onDeleted(); }
         }).catch(function (err) {
           console.error("Error al eliminar evento:", err);
@@ -1744,7 +1795,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=48").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=50").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -1768,7 +1819,7 @@
     if (Notification.permission === "denied") {
       setPushButtonState("blocked", "Avisos bloqueados", "Cambia el permiso de notificaciones en los ajustes del sitio.");
     } else if (Notification.permission === "granted") {
-      setPushButtonState("ready", "Completar avisos", "Toca para registrar este dispositivo en tu cuenta.");
+      setPushButtonState("ready", "Revisar avisos", "Verifica y completa el registro Push de este navegador en tu cuenta.");
     } else {
       setPushButtonState("idle", "Activar avisos", "Activa avisos nativos en este dispositivo.");
     }
@@ -1803,7 +1854,11 @@
 
         var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
         if (!config.vapidKey) { throw new Error("Falta la clave Web Push de Firebase (VAPID)."); }
-        var registration = pushWorkerRegistration || (pushWorkerPromise ? await pushWorkerPromise : await navigator.serviceWorker.ready);
+        var registration = await withTimeout(
+          pushWorkerRegistration || (pushWorkerPromise ? pushWorkerPromise : navigator.serviceWorker.ready),
+          12000,
+          "El Service Worker tardó demasiado en activarse. Recarga la página y vuelve a intentar."
+        );
         if (!registration) { throw new Error("No se pudo iniciar el Service Worker de notificaciones."); }
         pushWorkerRegistration = registration;
         var messaging = firebase.messaging();
@@ -1818,16 +1873,20 @@
             if (staleSubscription) { await staleSubscription.unsubscribe(); }
           }
         }
-        var token = await getFcmTokenWithRecovery(messaging, registration, config.vapidKey);
+        var token = await withTimeout(
+          getFcmTokenWithRecovery(messaging, registration, config.vapidKey),
+          25000,
+          "El navegador no completó el registro Push en 25 segundos. Revisa el permiso del sitio y la conexión del navegador."
+        );
         if (!token) { throw new Error("Firebase no devolvio un token para este dispositivo."); }
 
         var currentUser = auth.currentUser;
         var tokenKey = encodeURIComponent(token);
-        await db.ref("pushTokens/" + currentUser.uid + "/" + tokenKey).set({
+        await withTimeout(db.ref("pushTokens/" + currentUser.uid + "/" + tokenKey).set({
           token: token,
           updatedAt: Date.now(),
           platform: navigator.userAgent
-        });
+        }), 15000, "Firebase tardó demasiado en guardar el dispositivo.");
 
         if (!foregroundMessageBound) {
           foregroundMessageBound = true;
@@ -1845,6 +1904,9 @@
       } catch (error) {
         console.error("[FCM] No se pudo activar push:", error);
         var detail = error.code ? error.code + ": " + error.message : error.message || String(error);
+        if (error.name === "AbortError" && /push service|permission denied/i.test(error.message || "")) {
+          detail = "El navegador rechazó el registro en su servicio Push. Restablece el permiso de notificaciones de este sitio, cierra todas sus pestañas y vuelve a tocar Revisar avisos. Si persiste, prueba otro navegador actualizado en HTTPS.";
+        }
         var blocked = Notification.permission === "denied";
         setPushButtonState(blocked ? "blocked" : "error", blocked ? "Avisos bloqueados" : "Reintentar avisos", detail);
         addNotification("alert", "\uD83D\uDD14", "ERROR DE NOTIFICACIONES", "No se pudieron activar los avisos", detail);
@@ -2430,8 +2492,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v48";
-    byId("script-build-version").textContent = "JS v48";
+    byId("frontend-version").textContent = "HTML v50";
+    byId("script-build-version").textContent = "JS v50";
 
     initializeConfirmDialog();
     initializeTabs();
