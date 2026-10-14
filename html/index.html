@@ -11,19 +11,19 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="68">
+  <meta name="smart-panel-version" content="69">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=68">
+  <link rel="stylesheet" href="css/styles.css?v=69">
   <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js" defer></script>
-  <script src="js/firebase-config.js?v=68" defer></script>
-  <script src="js/app.js?v=68" defer></script>
+  <script src="js/firebase-config.js?v=69" defer></script>
+  <script src="js/app.js?v=69" defer></script>
 </head>
 <body>
   <script>
@@ -41,7 +41,7 @@
     if ('caches' in window) {
       caches.keys().then(function(keys) {
         keys.forEach(function(key) {
-          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-68') {
+          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-69') {
             caches.delete(key);
           }
         });
@@ -54,7 +54,7 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v68</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v69</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
       <div class="home-quick-status" aria-label="Estado actual de la casa">
         <span class="quick-status-item" title="Conexi&#243;n con el ESP32"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h4l2 3 4-6 2 3h4"/><path d="M7 7h.01M17 17h.01"/></svg><i class="status-dot is-checking" id="quick-esp-dot"></i><span id="quick-esp">ESP32</span></span>
         <span class="quick-status-item" title="Luces encendidas"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M8.2 14.5a7 7 0 1 1 7.6 0c-.9.6-1.3 1.4-1.5 2.5h-4.6c-.2-1.1-.6-1.9-1.5-2.5Z"/></svg><strong id="quick-lights">0</strong></span>
@@ -73,14 +73,15 @@
       </div>
     </header>
 
+    <a class="sidebar-brand" href="#inicio" data-open-section="inicio" aria-label="Smart Panel, inicio"><span class="brand-mark" aria-hidden="true">S</span><span>Smart Panel</span></a>
     <nav class="tab-bar" role="tablist" aria-label="Secciones del panel">
-      <button class="tab-button is-active" type="button" role="tab" id="tab-inicio" aria-controls="panel-inicio" aria-selected="true" data-tab="inicio"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7"/><path d="M5 9v12h14V9m-9 12v-7h4v7"/></svg> Inicio</button>
-      <button class="tab-button" type="button" role="tab" id="tab-agenda" aria-controls="panel-agenda" aria-selected="false" data-tab="agenda" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="M7 14h.01M12 14h.01M17 14h.01M7 18h.01M12 18h.01"/></svg> Agenda</button>
-      <button class="tab-button" type="button" role="tab" id="tab-multimedia" aria-controls="panel-multimedia" aria-selected="false" data-tab="multimedia" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg> Multimedia</button>
-      <button class="tab-button" type="button" role="tab" id="tab-hogar" aria-controls="panel-hogar" aria-selected="false" data-tab="hogar" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7"/><path d="M5 9v12h14V9m-9 12v-7h4v7"/></svg> Hogar</button>
-      <button class="tab-button" type="button" role="tab" id="tab-pileta" aria-controls="panel-pileta" aria-selected="false" data-tab="pileta" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2"/><path d="M3 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2"/><path d="M3 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2"/></svg> Pileta</button>
-      <button class="tab-button" type="button" role="tab" id="tab-camaras" aria-controls="panel-camaras" aria-selected="false" data-tab="camaras" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3a2 2 0 0 1 2 2v10H2V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="3.5"/></svg> Cámaras</button>
-      <button class="tab-button" type="button" role="tab" id="tab-estado" aria-controls="panel-estado" aria-selected="false" data-tab="estado" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg> Estado</button>
+      <button class="tab-button is-active" type="button" role="tab" id="tab-inicio" aria-controls="panel-inicio" aria-selected="true" data-tab="inicio"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7"/><path d="M5 9v12h14V9m-9 12v-7h4v7"/></svg><span class="tab-label">Inicio</span></button>
+      <button class="tab-button" type="button" role="tab" id="tab-agenda" aria-controls="panel-agenda" aria-selected="false" data-tab="agenda" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="M7 14h.01M12 14h.01M17 14h.01M7 18h.01M12 18h.01"/></svg><span class="tab-label">Agenda</span></button>
+      <button class="tab-button" type="button" role="tab" id="tab-multimedia" aria-controls="panel-multimedia" aria-selected="false" data-tab="multimedia" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg><span class="tab-label">Medios</span></button>
+      <button class="tab-button" type="button" role="tab" id="tab-hogar" aria-controls="panel-hogar" aria-selected="false" data-tab="hogar" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7"/><path d="M5 9v12h14V9m-9 12v-7h4v7"/></svg><span class="tab-label">Hogar</span></button>
+      <button class="tab-button" type="button" role="tab" id="tab-pileta" aria-controls="panel-pileta" aria-selected="false" data-tab="pileta" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2"/><path d="M3 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2"/><path d="M3 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2"/></svg><span class="tab-label">Pileta</span></button>
+      <button class="tab-button" type="button" role="tab" id="tab-camaras" aria-controls="panel-camaras" aria-selected="false" data-tab="camaras" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3a2 2 0 0 1 2 2v10H2V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="3.5"/></svg><span class="tab-label">C&#225;maras</span></button>
+      <button class="tab-button" type="button" role="tab" id="tab-estado" aria-controls="panel-estado" aria-selected="false" data-tab="estado" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg><span class="tab-label">Estado</span></button>
     </nav>
 
     <main class="main-content">
@@ -143,6 +144,14 @@
             </div>
             <div class="forecast-list" id="forecast-list">
               <div class="forecast-placeholder">Consultando clima y pronóstico semanal...</div>
+            </div>
+          </section>
+          <section class="quick-access-panel panel-surface" aria-labelledby="quick-access-heading">
+            <div class="section-heading"><div><p class="eyebrow">ACCIONES R&#193;PIDAS</p><h2 id="quick-access-heading">Ir directo a</h2></div></div>
+            <div class="quick-access-grid">
+              <button class="quick-action" type="button" data-open-section="hogar"><span class="quick-action-icon" aria-hidden="true">&#9678;</span><span class="quick-action-copy"><strong>Luces y accesos</strong><small>Controlar el hogar</small></span><span class="quick-action-arrow" aria-hidden="true">&#8594;</span></button>
+              <button class="quick-action" type="button" data-open-section="pileta"><span class="quick-action-icon" aria-hidden="true">&#8776;</span><span class="quick-action-copy"><strong>Pileta</strong><small>Motor y horarios</small></span><span class="quick-action-arrow" aria-hidden="true">&#8594;</span></button>
+              <button class="quick-action" type="button" data-open-section="multimedia"><span class="quick-action-icon" aria-hidden="true">&#9655;</span><span class="quick-action-copy"><strong>Medios</strong><small>TV y reproducci&#243;n</small></span><span class="quick-action-arrow" aria-hidden="true">&#8594;</span></button>
             </div>
           </section>
           <section class="today-agenda panel-surface" aria-labelledby="today-agenda-heading">

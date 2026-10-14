@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "68";
+  var APP_BUILD_VERSION = "69";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -2355,6 +2355,18 @@
       }
     }
 
+    Array.prototype.forEach.call(document.querySelectorAll("[data-open-section]"), function (button) {
+      button.addEventListener("click", function () {
+        var section = this.getAttribute("data-open-section");
+        activate(section);
+        var panel = document.querySelector('[data-panel="' + section + '"]');
+        var heading = panel && panel.querySelector("h1");
+        if (heading) {
+          if (!heading.hasAttribute("tabindex")) { heading.setAttribute("tabindex", "-1"); }
+          heading.focus();
+        }
+      });
+    });
     Array.prototype.forEach.call(tabs, function (tab) {
       tab.addEventListener("click", function () {
         activate(this.getAttribute("data-tab"));
@@ -2521,7 +2533,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=68").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=69").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -3260,8 +3272,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v68";
-    byId("script-build-version").textContent = "JS v65";
+    byId("frontend-version").textContent = "HTML v69";
+    byId("script-build-version").textContent = "JS v69";
 
     initializeConfirmDialog();
     initializeTabs();
