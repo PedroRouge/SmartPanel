@@ -11,19 +11,19 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="66">
+  <meta name="smart-panel-version" content="67">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=66">
+  <link rel="stylesheet" href="css/styles.css?v=67">
   <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js" defer></script>
-  <script src="js/firebase-config.js?v=66" defer></script>
-  <script src="js/app.js?v=66" defer></script>
+  <script src="js/firebase-config.js?v=67" defer></script>
+  <script src="js/app.js?v=67" defer></script>
 </head>
 <body>
   <script>
@@ -41,7 +41,7 @@
     if ('caches' in window) {
       caches.keys().then(function(keys) {
         keys.forEach(function(key) {
-          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-66') {
+          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-67') {
             caches.delete(key);
           }
         });
@@ -54,7 +54,7 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v66</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v67</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
       <div class="home-quick-status" aria-label="Estado actual de la casa">
         <span class="quick-status-item" title="Conexi&#243;n con el ESP32"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h4l2 3 4-6 2 3h4"/><path d="M7 7h.01M17 17h.01"/></svg><i class="status-dot is-checking" id="quick-esp-dot"></i><span id="quick-esp">ESP32</span></span>
         <span class="quick-status-item" title="Luces encendidas"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M8.2 14.5a7 7 0 1 1 7.6 0c-.9.6-1.3 1.4-1.5 2.5h-4.6c-.2-1.1-.6-1.9-1.5-2.5Z"/></svg><strong id="quick-lights">0</strong></span>
@@ -109,7 +109,7 @@
               </div>
               <button class="weather-refresh" id="weather-refresh" type="button" aria-label="Actualizar clima">↻</button>
             </div>
-            <div class="weather-reading"><span class="weather-symbol" id="weather-symbol" aria-hidden="true">☁</span><span id="weather-temperature">--°</span><span class="weather-description" id="weather-description">Consultando Open-Meteo...</span></div>
+            <div class="weather-reading"><span class="weather-symbol" id="weather-symbol" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .4-8A6 6 0 0 0 6 9a4.5 4.5 0 0 0 1 9Z"/></svg></span><span id="weather-temperature">--°</span><span class="weather-description" id="weather-description">Consultando Open-Meteo...</span></div>
             <div class="weather-details">
               <span>Máx. <strong id="weather-high">--°</strong></span>
               <span>Mín. <strong id="weather-low">--°</strong></span>
@@ -124,7 +124,7 @@
                 <p class="eyebrow">ESTADO DE CASA</p>
                 <h2 id="summary-heading">Resumen</h2>
               </div>
-              <span class="summary-icon" aria-hidden="true">⌂</span>
+              <span class="summary-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5l8-2 8 2v16"/><path d="M8 6v15m8-15v15M4 11h16"/></svg></span>
             </div>
             <div class="summary-items">
               <div class="summary-item"><span class="summary-icon light-icon" aria-hidden="true">✳</span><span>Luces encendidas</span><strong id="summary-lights">0</strong></div>
@@ -159,10 +159,10 @@
       <section class="view" id="panel-estado" role="tabpanel" aria-labelledby="tab-estado" data-panel="estado" hidden>
         <div class="page-heading"><p class="eyebrow">INFORMACIÓN DEL SISTEMA</p><h1>Estado</h1><p>Diagnóstico de conexión y actividad reciente. Esta sección es solo informativa.</p></div>
         <section class="system-status-grid" aria-label="Conexiones del sistema">
-          <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true">⌁</span><div><p class="eyebrow">DOMÓTICA LOCAL</p><h2>ESP32</h2><p class="system-status-value"><i class="status-dot is-checking" id="detail-esp-dot"></i><span id="detail-esp-status">Esperando estado…</span></p><p class="system-status-meta" id="detail-esp-meta">Heartbeat del gateway</p></div></article>
-          <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true">☁</span><div><p class="eyebrow">BASE DE DATOS</p><h2>Firebase</h2><p class="system-status-value"><i class="status-dot is-checking" id="detail-firebase-dot"></i><span id="detail-firebase-status">Comprobando conexión…</span></p><p class="system-status-meta" id="detail-firebase-meta">Realtime Database</p></div></article>
-          <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true">▣</span><div><p class="eyebrow">FRONTEND</p><h2>Servidor web</h2><p class="system-status-value"><i class="status-dot is-online"></i><span>Disponible</span></p><p class="system-status-meta">Smart Panel cargado desde Vercel</p></div></article>
-          <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SESIÓN</p><h2>Cuenta</h2><p class="system-status-value"><i class="status-dot is-checking" id="detail-auth-dot"></i><span id="detail-auth-status">Comprobando sesión…</span></p><p class="system-status-meta" id="detail-auth-meta">Los datos de agenda son personales</p></div></article>
+          <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 9h6v6H9zM9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3"/></svg></span><div><p class="eyebrow">DOM&Oacute;TICA LOCAL</p><h2>ESP32</h2><p class="system-status-value"><i class="status-dot is-checking" id="detail-esp-dot"></i><span id="detail-esp-status">Esperando estado&hellip;</span></p><p class="system-status-meta" id="detail-esp-meta">Heartbeat del gateway</p></div></article>
+          <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .4-8A6 6 0 0 0 6 9a4.5 4.5 0 0 0 1 9Z"/></svg></span><div><p class="eyebrow">BASE DE DATOS</p><h2>Firebase</h2><p class="system-status-value"><i class="status-dot is-checking" id="detail-firebase-dot"></i><span id="detail-firebase-status">Comprobando conexi&oacute;n&hellip;</span></p><p class="system-status-meta" id="detail-firebase-meta">Realtime Database</p></div></article>
+          <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01M11 8h6m-6 9h6"/></svg></span><div><p class="eyebrow">FRONTEND</p><h2>Servidor web</h2><p class="system-status-value"><i class="status-dot is-online"></i><span>Disponible</span></p><p class="system-status-meta">Smart Panel cargado desde Vercel</p></div></article>
+          <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><div><p class="eyebrow">SESI&Oacute;N</p><h2>Cuenta</h2><p class="system-status-value"><i class="status-dot is-checking" id="detail-auth-dot"></i><span id="detail-auth-status">Comprobando sesi&oacute;n&hellip;</span></p><p class="system-status-meta" id="detail-auth-meta">Los datos de agenda son personales</p></div></article>
         </section>
         <section class="activity-panel panel-surface" aria-labelledby="activity-heading"><div class="section-heading"><div><p class="eyebrow">REGISTRO DE LA CUENTA</p><h2 id="activity-heading">Historial de actividad</h2></div><span class="activity-retention">Sincronizado entre dispositivos</span></div><p class="activity-description">Acciones del hogar y cambios de agenda, con su resultado y dispositivo de origen.</p><div class="activity-toolbar"><label for="activity-filter">Mostrar</label><select id="activity-filter" class="activity-filter"><option value="all">Toda la actividad</option><option value="errors">Solo errores</option><option value="success">Solo confirmadas</option></select><span id="activity-count" class="activity-count"></span></div><div class="activity-list" id="activity-list" aria-live="polite"><p class="event-empty">Inicia sesion para consultar la actividad.</p></div></section>
         <section class="activity-panel devices-panel panel-surface" aria-labelledby="push-devices-heading"><div class="section-heading"><div><p class="eyebrow">NOTIFICACIONES</p><h2 id="push-devices-heading">Dispositivos registrados</h2></div><span class="activity-retention">Vinculados a tu cuenta</span></div><p class="activity-description">Cada navegador registrado recibe los avisos de esta cuenta. Puedes quitar dispositivos que ya no uses.</p><div class="push-device-list" id="push-device-list" aria-live="polite"><p class="event-empty">Cargando los dispositivos de tu cuenta...</p></div></section>
@@ -322,7 +322,7 @@
             <div class="password-wrapper">
               <input id="auth-password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
               <button class="password-toggle-btn" id="auth-password-toggle" type="button" aria-label="Mostrar u ocultar contraseña" title="Mostrar u ocultar contraseña" tabindex="-1">
-                <span id="password-toggle-icon" aria-hidden="true">👁</span>
+                <span id="password-toggle-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z'/><circle cx='12' cy='12' r='3'/></svg></span>
               </button>
             </div>
           </label>
@@ -389,7 +389,7 @@
       <div class="confirm-modal-backdrop" id="confirm-modal-backdrop"></div>
       <section class="confirm-dialog panel-surface" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-message">
         <div class="confirm-header">
-          <span class="confirm-icon" id="confirm-modal-icon" aria-hidden="true">🗑</span>
+          <span class="confirm-icon" id="confirm-modal-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d='M3 6h18m-2 0-1 14H6L5 6m4 0V4h6v2m-5 4v6m4-6v6'/></svg></span>
           <div>
             <p class="eyebrow" id="confirm-modal-eyebrow">AGENDA</p>
             <h2 id="confirm-modal-title">¿Eliminar evento?</h2>

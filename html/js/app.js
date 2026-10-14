@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "66";
+  var APP_BUILD_VERSION = "67";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -107,6 +107,38 @@
 
   function byId(id) {
     return document.getElementById(id);
+  }
+
+  function svgIcon(name, className) {
+    var paths = {
+      bell: '<path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>',
+      calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
+      alert: '<path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5m0 3h.01"/>',
+      eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+      eyeoff: '<path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3 3.8M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7a10 10 0 0 0 4-.8"/>',
+      sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>',
+      partly: '<circle cx="9" cy="9" r="3"/><path d="M9 2v2m-5 0 1.4 1.4M2 9h2"/><path d="M8 19h9a4 4 0 0 0 .4-8A6 6 0 0 0 6 10a4.5 4.5 0 0 0 2 9Z"/>',
+      cloudy: '<path d="M6 18h11a4 4 0 0 0 .4-8A6 6 0 0 0 6 9a4.5 4.5 0 0 0 0 9Z"/>',
+      fog: '<path d="M5 10a7 7 0 0 1 14 0M3 14h18M5 18h14M8 22h8"/>',
+      rain: '<path d="M6 14h12a4 4 0 0 0 .4-8A6 6 0 0 0 6 6a4 4 0 0 0 0 8Z"/><path d="m8 17-1 3m6-3-1 3m6-3-1 3"/>',
+      snow: '<path d="M6 13h12a4 4 0 0 0 .4-8A6 6 0 0 0 6 5a4 4 0 0 0 0 8Z"/><path d="M8 17h.01M12 20h.01M16 17h.01"/>',
+      storm: '<path d="M6 14h12a4 4 0 0 0 .4-8A6 6 0 0 0 6 6a4 4 0 0 0 0 8Z"/><path d="m13 14-4 5h4l-2 4 6-7h-4l2-2"/>'
+    };
+    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.8");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("class", className || "ui-icon");
+    svg.innerHTML = paths[name] || paths.bell;
+    return svg;
+  }
+
+  function notificationIcon(type, className) {
+    return svgIcon(type === "agenda" ? "calendar" : type === "alert" ? "alert" : "bell", className);
   }
 
   function createTextElement(tagName, className, text) {
@@ -1038,10 +1070,10 @@
         if (!passInput) { return; }
         if (passInput.type === "password") {
           passInput.type = "text";
-          if (icon) { icon.textContent = "🙈"; }
+          if (icon) { icon.replaceChildren(svgIcon("eyeoff")); }
         } else {
           passInput.type = "password";
-          if (icon) { icon.textContent = "👁"; }
+          if (icon) { icon.replaceChildren(svgIcon("eye")); }
         }
       });
     }
@@ -1158,16 +1190,16 @@
 
   // --- CLIMA (Directo vía Open-Meteo) ---
   function weatherDescription(code) {
-    if (code === 0) { return ["Despejado", "☀"]; }
-    if (code === 1 || code === 2) { return ["Parcialmente nublado", "◒"]; }
-    if (code === 3) { return ["Nublado", "☁"]; }
-    if (code === 45 || code === 48) { return ["Niebla", "≋"]; }
-    if (code >= 51 && code <= 67) { return ["Llovizna", "☂"]; }
-    if (code >= 71 && code <= 77) { return ["Nieve", "❄"]; }
-    if (code >= 80 && code <= 82) { return ["Lluvia", "☂"]; }
-    if (code >= 85 && code <= 86) { return ["Nieve", "❄"]; }
-    if (code >= 95) { return ["Tormenta", "ϟ"]; }
-    return ["Clima actual", "☁"];
+    if (code === 0) { return ["Despejado", "sun"]; }
+    if (code === 1 || code === 2) { return ["Parcialmente nublado", "partly"]; }
+    if (code === 3) { return ["Nublado", "cloudy"]; }
+    if (code === 45 || code === 48) { return ["Niebla", "fog"]; }
+    if (code >= 51 && code <= 67) { return ["Llovizna", "rain"]; }
+    if (code >= 71 && code <= 77) { return ["Nieve", "snow"]; }
+    if (code >= 80 && code <= 82) { return ["Lluvia", "rain"]; }
+    if (code >= 85 && code <= 86) { return ["Nieve", "snow"]; }
+    if (code >= 95) { return ["Tormenta", "storm"]; }
+    return ["Clima actual", "cloudy"];
   }
 
   function loadWeather() {
@@ -1219,7 +1251,7 @@
 
     byId("weather-temperature").textContent = Math.round(current.temperature_2m) + "°";
     byId("weather-description").textContent = summary[0];
-    byId("weather-symbol").textContent = summary[1];
+    byId("weather-symbol").replaceChildren(svgIcon(summary[1], "ui-icon"));
     byId("weather-high").textContent = Math.round(daily.temperature_2m_max[0]) + "°";
     byId("weather-low").textContent = Math.round(daily.temperature_2m_min[0]) + "°";
     var updatedAt = current.time && current.time.indexOf("T") >= 0 ? current.time.split("T")[1].slice(0, 5) : "";
@@ -1624,7 +1656,7 @@
       if (eyebrowEl) { eyebrowEl.textContent = options.eyebrow || "CONFIRMAR ACCIÓN"; }
       if (confirmBtn) { confirmBtn.textContent = options.confirmText || "Eliminar"; }
       if (cancelBtn) { cancelBtn.textContent = options.cancelText || "Cancelar"; }
-      if (iconEl && options.icon) { iconEl.textContent = options.icon; }
+      if (iconEl) { iconEl.replaceChildren(svgIcon("trash")); }
 
       modal.hidden = false;
       if (cancelBtn) { cancelBtn.focus(); }
@@ -1664,7 +1696,7 @@
       eyebrow: "AGENDA",
       confirmText: "Eliminar",
       cancelText: "Cancelar",
-      icon: "🗑"
+      icon: "bell"
     }).then(function (confirmed) {
       if (!confirmed) { return; }
       var user = auth && auth.currentUser;
@@ -2126,7 +2158,7 @@
         eyebrow: "SEGURIDAD",
         confirmText: "Eliminar",
         cancelText: "Cancelar",
-        icon: "📷"
+        icon: "bell"
       }).then(function (confirmed) {
         if (!confirmed) { return; }
         state.cameras = state.cameras.filter(function (c) { return c.id !== camera.id; });
@@ -2483,7 +2515,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=66").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=67").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -2525,7 +2557,7 @@
       if (button.dataset.pushBusy === "true") { return; }
       if (!auth || !auth.currentUser || !db) {
         setPushButtonState("error", "Inicia sesion primero", "Inicia sesion en Smart Panel y vuelve a activar los avisos.");
-        addNotification("alert", "\uD83D\uDD14", "NOTIFICACIONES", "Inicia sesion primero", "Los avisos se asocian a tu cuenta para sincronizar tus dispositivos.");
+        addNotification("alert", "bell", "NOTIFICACIONES", "Inicia sesion primero", "Los avisos se asocian a tu cuenta para sincronizar tus dispositivos.");
         return;
       }
 
@@ -2542,7 +2574,7 @@
         if (permission !== "granted") { permission = await Notification.requestPermission(); }
         if (permission !== "granted") {
           setPushButtonState("blocked", "Permiso no concedido", "Permite las notificaciones del sitio desde los ajustes del navegador.");
-          addNotification("alert", "\uD83D\uDD14", "PERMISO DE NOTIFICACIONES", "No se concedio el permiso", "Puedes activarlo mas tarde desde los ajustes del sitio.");
+          addNotification("alert", "bell", "PERMISO DE NOTIFICACIONES", "No se concedio el permiso", "Puedes activarlo mas tarde desde los ajustes del sitio.");
           return;
         }
         if (!firebase.messaging || !(await firebase.messaging.isSupported())) {
@@ -2608,7 +2640,7 @@
             var data = payload.notification || payload.data || {};
             var title = data.title || "Smart Panel";
             var body = data.body || "Tienes una actualizacion.";
-            addNotification("agenda", "\uD83D\uDD14", "AVISO PUSH", title, body, true);
+            addNotification("agenda", "bell", "AVISO PUSH", title, body, true);
           });
         }
         setPushButtonState("active", "Dispositivo listo", "Permiso y registro FCM confirmados en este dispositivo.");
@@ -2617,7 +2649,7 @@
           console.warn("[FCM] El dispositivo quedó registrado, pero no se pudo guardar el estado local de la UI.", storageError);
         }
         clearStalePushErrors();
-        addNotification("important", "\uD83D\uDD14", "NOTIFICACIONES", "Dispositivo registrado", "Este navegador quedó asociado a tu cuenta.");
+        addNotification("important", "bell", "NOTIFICACIONES", "Dispositivo registrado", "Este navegador quedó asociado a tu cuenta.");
         button.hidden = true;
       } catch (error) {
         console.error("[FCM] No se pudo activar push:", error);
@@ -2632,7 +2664,7 @@
         }
         var blocked = Notification.permission === "denied";
         if (!pushServiceRejected) { setPushButtonState(blocked ? "blocked" : "error", blocked ? "Avisos bloqueados" : "Reintentar avisos", detail); }
-        addNotification("alert", "\uD83D\uDD14", "ERROR DE NOTIFICACIONES", "No se pudieron activar los avisos", detail);
+        addNotification("alert", "bell", "ERROR DE NOTIFICACIONES", "No se pudieron activar los avisos", detail);
       } finally {
         button.disabled = false;
         button.dataset.pushBusy = "false";
@@ -2748,7 +2780,9 @@
     toast.setAttribute("role", "status");
     toast.title = "Abrir notificaciones";
 
-    var iconEl = createTextElement("span", "notif-toast-icon", notif.icon);
+    var iconEl = document.createElement("span");
+    iconEl.className = "notif-toast-icon";
+    iconEl.appendChild(notificationIcon(notif.type));
     var content = document.createElement("div");
     content.className = "notif-toast-content";
     content.appendChild(createTextElement("span", "notif-toast-label", notif.label));
@@ -2833,7 +2867,8 @@
     if (!notifications.length) {
       var empty = document.createElement("div");
       empty.className = "notif-empty";
-      empty.innerHTML = '<span class="notif-empty-icon" aria-hidden="true">\uD83D\uDD14</span><p>No hay notificaciones por ahora.<br>Los avisos de agenda y pileta<br>aparecerán aquí.</p>';
+      empty.innerHTML = '<span class="notif-empty-icon" aria-hidden="true"></span><p>No hay notificaciones por ahora.<br>Los avisos de agenda y pileta<br>aparecerán aquí.</p>';
+      empty.querySelector(".notif-empty-icon").appendChild(notificationIcon("important"));
       list.appendChild(empty);
       return;
     }
@@ -2842,7 +2877,9 @@
       var item = document.createElement("div");
       item.className = "notif-item notif-" + n.type + (n.read ? "" : " is-unread");
 
-      var icon = createTextElement("span", "notif-item-icon", n.icon);
+      var icon = document.createElement("span");
+      icon.className = "notif-item-icon";
+      icon.appendChild(notificationIcon(n.type));
       var content = document.createElement("div");
       content.className = "notif-item-content";
       content.appendChild(createTextElement("span", "notif-item-label", n.label));
@@ -2965,7 +3002,7 @@
           var desc = ev.notes ? ev.notes.split("\n")[0].slice(0, 60) : "";
           addNotification(
             "agenda",
-            "📅",
+            "bell",
             "AGENDA · MAÑANA",
             ev.title,
             "Mañana" + timeStr + (desc ? " · " + desc : ""),
@@ -2984,7 +3021,7 @@
           var descToday = ev.notes ? ev.notes.split("\n")[0].slice(0, 60) : "";
           addNotification(
             "agenda",
-            "📅",
+            "bell",
             "AGENDA · HOY",
             ev.title,
             "Hoy" + timeStrToday + (descToday ? " · " + descToday : ""),
@@ -3217,7 +3254,7 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v65";
+    byId("frontend-version").textContent = "HTML v67";
     byId("script-build-version").textContent = "JS v65";
 
     initializeConfirmDialog();
