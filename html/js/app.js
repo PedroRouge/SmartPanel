@@ -42,6 +42,7 @@
   var selectedAgendaDate = formatDateISO(new Date());
   var calendarEvents = [];
   var eventEditingId = null;
+  var pendingEventId = null;
   var deferredInstallPrompt = null;
   var listenersAttached = false;
   var activeFirebaseRefs = [];
@@ -121,7 +122,11 @@
 
       // Estado de conexión a Firebase
       db.ref(".info/connected").on("value", function (snapshot) {
-        firebaseConnected = snapshot.val() === true;
+        var isConnected = snapshot.val() === true;
+        if (firebaseConnected !== isConnected) {
+          firebaseConnected = isConnected;
+          console.info("[Firebase] Realtime Database " + (isConnected ? "conectada" : "sin conexión"));
+        }
       });
 
       // Observer de autenticación de Firebase
@@ -789,6 +794,7 @@
     byId("event-form").reset();
     byId("event-form-error").hidden = true;
     eventEditingId = null;
+    pendingEventId = null;
   }
 
   function saveCalendarEvent(e) {
@@ -832,17 +838,35 @@
       errorEl.hidden = false;
       return;
     }
+    if (!firebaseConnected) {
+      errorEl.textContent = "Firebase no tiene conexión en este momento. Revisa internet y vuelve a intentar; el evento no se envio.";
+      errorEl.hidden = false;
+      return;
+    }
 
     // Resolve the private path from Firebase Auth for every operation. Do not
     // rely on a listener reference that can be stale or not initialized yet.
     var userEventsRef = db.ref("users/" + user.uid + "/events");
     var editingId = eventEditingId;
-    var ref = editingId ? userEventsRef.child(editingId) : userEventsRef.push();
+    if (!editingId && !pendingEventId) { pendingEventId = userEventsRef.push().key; }
+    var ref = userEventsRef.child(editingId || pendingEventId);
     submitButton.disabled = true;
     submitButton.textContent = "Guardando...";
-    ref.set(payload).then(function () {
+    var timeoutId;
+    var timeoutPromise = new Promise(function (resolve, reject) {
+      timeoutId = setTimeout(function () {
+        var connection = firebaseConnected ? "conectada" : "sin conexion";
+        var error = new Error("Firebase no confirmo el guardado despues de 15 segundos (" + connection + "). Puedes reintentar; se reutilizara el mismo evento.");
+        error.code = "EVENT_SAVE_TIMEOUT";
+        reject(error);
+      }, 15000);
+    });
+    Promise.race([ref.set(payload), timeoutPromise]).then(function () {
+      clearTimeout(timeoutId);
+      pendingEventId = null;
       closeEventForm();
     }).catch(function (err) {
+      clearTimeout(timeoutId);
       console.error("Error guardando evento en Firebase:", err);
       var detail = err.code ? " (" + err.code + ")" : "";
       errorEl.textContent = "No se pudo guardar" + detail + ": " + err.message;
@@ -1585,7 +1609,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=43").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=44").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -2262,8 +2286,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v43";
-    byId("script-build-version").textContent = "JS v43";
+    byId("frontend-version").textContent = "HTML v44";
+    byId("script-build-version").textContent = "JS v44";
 
     initializeConfirmDialog();
     initializeTabs();
