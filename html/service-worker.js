@@ -1,16 +1,16 @@
 "use strict";
 
 var CACHE_PREFIX = "smart-panel-shell-";
-var CACHE_NAME = CACHE_PREFIX + "34";
+var CACHE_NAME = CACHE_PREFIX + "35";
 var STATIC_FILES = [
   "/",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
-  "/css/styles.css?v=34",
-  "/js/firebase-config.js?v=34",
-  "/js/app.js?v=34"
+  "/css/styles.css?v=35",
+  "/js/firebase-config.js?v=35",
+  "/js/app.js?v=35"
 ];
 
 self.addEventListener("install", function (event) {

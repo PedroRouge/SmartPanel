@@ -16,13 +16,13 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=34">
+  <link rel="stylesheet" href="css/styles.css?v=35">
   <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" defer></script>
-  <script src="js/firebase-config.js?v=34" defer></script>
-  <script src="js/app.js?v=34" defer></script>
+  <script src="js/firebase-config.js?v=35" defer></script>
+  <script src="js/app.js?v=35" defer></script>
 </head>
 <body>
   <script>
@@ -37,7 +37,7 @@
     if ('caches' in window) {
       caches.keys().then(function(keys) {
         keys.forEach(function(key) {
-          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-34') {
+          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-35') {
             caches.delete(key);
           }
         });
@@ -50,10 +50,16 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v34</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
-      <button class="pwa-install-button" id="pwa-install" type="button" aria-label="Instalar Smart Panel" title="Instalar Smart Panel" hidden><span aria-hidden="true">⇩</span><span>Instalar</span></button>
-      <span class="session-user" id="session-user" hidden></span>
-      <button class="api-logout" id="api-logout" type="button" hidden>Cerrar sesión</button>
+      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v35</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
+      <div class="topbar-actions">
+        <button class="notif-bell-btn" id="notif-bell" type="button" aria-label="Notificaciones" title="Notificaciones">
+          <span aria-hidden="true">🔔</span>
+          <span class="notif-bell-badge" id="notif-bell-badge"></span>
+        </button>
+        <button class="pwa-install-button" id="pwa-install" type="button" aria-label="Instalar Smart Panel" title="Instalar Smart Panel" hidden><span aria-hidden="true">⇩</span><span>Instalar</span></button>
+        <span class="session-user" id="session-user" hidden></span>
+        <button class="api-logout" id="api-logout" type="button" hidden>Cerrar sesión</button>
+      </div>
     </header>
 
     <nav class="tab-bar" role="tablist" aria-label="Secciones del panel">
@@ -254,6 +260,17 @@
             <p class="control-feedback">Listo para integrar un sensor local.</p>
           </article>
         </section>
+        <section class="pool-schedule-section panel-surface" aria-labelledby="pool-schedule-heading" style="padding:20px;margin-top:14px;">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">PROGRAMACIÓN</p>
+              <h2 id="pool-schedule-heading">Horarios automáticos</h2>
+            </div>
+            <button class="icon-button" id="pool-schedule-add" type="button" aria-label="Agregar horario" title="Agregar horario">＋</button>
+          </div>
+          <p class="agenda-status" id="pool-schedule-status">Sin horarios configurados. Usa ＋ para agregar uno.</p>
+          <div class="pool-schedule-list" id="pool-schedule-list"></div>
+        </section>
       </section>
 
       <section class="view" id="panel-camaras" role="tabpanel" aria-labelledby="tab-camaras" data-panel="camaras" hidden>
@@ -357,5 +374,45 @@
 
     <footer class="app-footer"><span>SMART PANEL</span><span>CONTROL LOCAL · <span id="footer-time">--:--</span></span></footer>
   </div>
+
+  <!-- SISTEMA DE NOTIFICACIONES: Toasts container -->
+  <div class="notif-toast-container" id="notif-toast-container" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- SISTEMA DE NOTIFICACIONES: Panel lateral -->
+  <div class="notif-panel-backdrop" id="notif-panel-backdrop"></div>
+  <aside class="notif-panel" id="notif-panel" aria-label="Panel de notificaciones" role="complementary">
+    <div class="notif-panel-header">
+      <h2>Notificaciones</h2>
+      <div class="notif-panel-header-actions">
+        <button class="notif-clear-btn" id="notif-clear-btn" type="button">Limpiar todo</button>
+        <button class="notif-panel-close" id="notif-panel-close" type="button" aria-label="Cerrar notificaciones">×</button>
+      </div>
+    </div>
+    <div class="notif-panel-list" id="notif-panel-list"></div>
+  </aside>
+
+  <!-- MODAL: Agregar horario de pileta -->
+  <div class="event-modal" id="pool-schedule-modal" hidden>
+    <div class="event-modal-backdrop" data-close-pool-schedule></div>
+    <section class="event-dialog panel-surface" role="dialog" aria-modal="true" aria-labelledby="pool-schedule-form-title" style="max-width:420px;">
+      <div class="section-heading">
+        <div><p class="eyebrow">PILETA</p><h2 id="pool-schedule-form-title">Nuevo horario</h2></div>
+        <button class="modal-close" type="button" aria-label="Cerrar" data-close-pool-schedule>×</button>
+      </div>
+      <form id="pool-schedule-form" novalidate style="margin-top:16px;">
+        <div class="form-row" style="grid-template-columns:1fr 1fr;">
+          <label class="form-field"><span>Encendido</span><input type="time" name="pool_start" required></label>
+          <label class="form-field"><span>Apagado</span><input type="time" name="pool_end" required></label>
+        </div>
+        <label class="all-day-toggle"><input type="checkbox" name="pool_enabled" checked><span>Activo</span></label>
+        <p class="form-error" id="pool-schedule-form-error" role="alert" hidden></p>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-close-pool-schedule>Cancelar</button>
+          <button class="primary-button" type="submit">Guardar horario</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
 </body>
 </html>

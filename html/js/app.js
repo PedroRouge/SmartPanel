@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "33";
+  var APP_BUILD_VERSION = "35";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -246,6 +246,8 @@
       renderCalendar();
       renderAgendaDay();
       renderTodayEvents();
+      // Verificar notificaciones de agenda cuando llegan los eventos
+      if (typeof checkAgendaNotifications === "function") { checkAgendaNotifications(); }
     });
   }
 
@@ -1520,9 +1522,527 @@
     }
   }
 
+  // =====================================================================
+  //  SISTEMA DE NOTIFICACIONES IN-APP
+  //  - Tipos: "agenda" (eventos), "important" (pileta, etc.), "alert"
+  //  - Toasts auto-dismiss + Panel lateral persistente
+  // =====================================================================
+
+  var NOTIF_STORAGE_KEY = "smart-panel-notifs-v1";
+  var AGENDA_NOTIF_SENT_KEY = "smart-panel-agenda-notif-v1";
+  var notifications = [];
+
+  function loadNotifications() {
+    try {
+      var saved = window.localStorage.getItem(NOTIF_STORAGE_KEY);
+      if (saved) { notifications = JSON.parse(saved) || []; }
+    } catch (e) { notifications = []; }
+  }
+
+  function saveNotifications() {
+    try { window.localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifications)); } catch (e) {}
+  }
+
+  function addNotification(type, icon, label, title, body) {
+    var notif = {
+      id: "n-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+      type: type,     // 'agenda' | 'important' | 'alert'
+      icon: icon,
+      label: label,
+      title: title,
+      body: body,
+      ts: Date.now(),
+      read: false
+    };
+    notifications.unshift(notif);
+    if (notifications.length > 60) { notifications = notifications.slice(0, 60); }
+    saveNotifications();
+    updateNotifBadge();
+    renderNotifPanel();
+    showToast(notif);
+    return notif;
+  }
+
+  function markAllRead() {
+    notifications.forEach(function (n) { n.read = true; });
+    saveNotifications();
+    updateNotifBadge();
+  }
+
+  function dismissNotif(id) {
+    notifications = notifications.filter(function (n) { return n.id !== id; });
+    saveNotifications();
+    updateNotifBadge();
+    renderNotifPanel();
+  }
+
+  function clearAllNotifs() {
+    notifications = [];
+    saveNotifications();
+    updateNotifBadge();
+    renderNotifPanel();
+  }
+
+  function updateNotifBadge() {
+    var badge = byId("notif-bell-badge");
+    if (!badge) { return; }
+    var unread = notifications.filter(function (n) { return !n.read; }).length;
+    badge.classList.toggle("has-unread", unread > 0);
+  }
+
+  // ---- Toast ----
+  var activeToasts = {};
+
+  function showToast(notif, durationMs) {
+    var dur = durationMs || 7000;
+    var container = byId("notif-toast-container");
+    if (!container) { return; }
+
+    var toast = document.createElement("div");
+    toast.className = "notif-toast notif-" + notif.type;
+    toast.setAttribute("role", "status");
+    toast.title = "Abrir notificaciones";
+
+    var iconEl = createTextElement("span", "notif-toast-icon", notif.icon);
+    var content = document.createElement("div");
+    content.className = "notif-toast-content";
+    content.appendChild(createTextElement("span", "notif-toast-label", notif.label));
+    content.appendChild(createTextElement("span", "notif-toast-title", notif.title));
+    if (notif.body) { content.appendChild(createTextElement("span", "notif-toast-body", notif.body)); }
+
+    var closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "notif-toast-close";
+    closeBtn.textContent = "×";
+    closeBtn.setAttribute("aria-label", "Cerrar notificación");
+
+    var bar = document.createElement("span");
+    bar.className = "notif-toast-bar";
+    bar.style.animationDuration = dur + "ms";
+
+    toast.appendChild(iconEl);
+    toast.appendChild(content);
+    toast.appendChild(closeBtn);
+    toast.appendChild(bar);
+    container.appendChild(toast);
+
+    var timer = setTimeout(function () { dismissToast(toast); }, dur);
+    activeToasts[notif.id] = { el: toast, timer: timer };
+
+    closeBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      clearTimeout(timer);
+      dismissToast(toast);
+    });
+    toast.addEventListener("click", function () {
+      clearTimeout(timer);
+      dismissToast(toast);
+      openNotifPanel();
+    });
+  }
+
+  function dismissToast(toast) {
+    if (!toast.parentNode) { return; }
+    toast.classList.add("is-leaving");
+    setTimeout(function () {
+      if (toast.parentNode) { toast.parentNode.removeChild(toast); }
+    }, 280);
+  }
+
+  // ---- Panel lateral ----
+  function openNotifPanel() {
+    var panel = byId("notif-panel");
+    var backdrop = byId("notif-panel-backdrop");
+    if (!panel) { return; }
+    panel.classList.add("is-open");
+    if (backdrop) { backdrop.classList.add("is-visible"); }
+    markAllRead();
+    renderNotifPanel();
+  }
+
+  function closeNotifPanel() {
+    var panel = byId("notif-panel");
+    var backdrop = byId("notif-panel-backdrop");
+    if (panel) { panel.classList.remove("is-open"); }
+    if (backdrop) { backdrop.classList.remove("is-visible"); }
+  }
+
+  function renderNotifPanel() {
+    var list = byId("notif-panel-list");
+    if (!list) { return; }
+    while (list.firstChild) { list.removeChild(list.firstChild); }
+
+    if (!notifications.length) {
+      var empty = document.createElement("div");
+      empty.className = "notif-empty";
+      empty.innerHTML = '<span class="notif-empty-icon" aria-hidden="true">\uD83D\uDD14</span><p>No hay notificaciones por ahora.<br>Los avisos de agenda y pileta<br>aparecerán aquí.</p>';
+      list.appendChild(empty);
+      return;
+    }
+
+    notifications.forEach(function (n) {
+      var item = document.createElement("div");
+      item.className = "notif-item notif-" + n.type + (n.read ? "" : " is-unread");
+
+      var icon = createTextElement("span", "notif-item-icon", n.icon);
+      var content = document.createElement("div");
+      content.className = "notif-item-content";
+      content.appendChild(createTextElement("span", "notif-item-label", n.label));
+      content.appendChild(createTextElement("span", "notif-item-title", n.title));
+      if (n.body) { content.appendChild(createTextElement("span", "notif-item-body", n.body)); }
+
+      var timeAgo = formatTimeAgo(n.ts);
+      content.appendChild(createTextElement("span", "notif-item-time", timeAgo));
+
+      var dismiss = document.createElement("button");
+      dismiss.type = "button";
+      dismiss.className = "notif-item-dismiss";
+      dismiss.textContent = "×";
+      dismiss.setAttribute("aria-label", "Descartar notificación");
+      dismiss.addEventListener("click", (function (id) {
+        return function () { dismissNotif(id); };
+      })(n.id));
+
+      item.appendChild(icon);
+      item.appendChild(content);
+      item.appendChild(dismiss);
+      list.appendChild(item);
+    });
+  }
+
+  function formatTimeAgo(ts) {
+    var diff = Math.floor((Date.now() - ts) / 1000);
+    if (diff < 60) { return "Hace un momento"; }
+    if (diff < 3600) { return "Hace " + Math.floor(diff / 60) + " min"; }
+    if (diff < 86400) { return "Hace " + Math.floor(diff / 3600) + " h"; }
+    return "Hace " + Math.floor(diff / 86400) + " d";
+  }
+
+  function initNotifPanel() {
+    loadNotifications();
+    updateNotifBadge();
+    renderNotifPanel();
+
+    var bell = byId("notif-bell");
+    if (bell) { bell.addEventListener("click", openNotifPanel); }
+
+    var closeBtn = byId("notif-panel-close");
+    if (closeBtn) { closeBtn.addEventListener("click", closeNotifPanel); }
+
+    var clearBtn = byId("notif-clear-btn");
+    if (clearBtn) { clearBtn.addEventListener("click", function () { clearAllNotifs(); }); }
+
+    var backdrop = byId("notif-panel-backdrop");
+    if (backdrop) { backdrop.addEventListener("click", closeNotifPanel); }
+
+    // Cerrar panel con Escape
+    window.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        var panel = byId("notif-panel");
+        if (panel && panel.classList.contains("is-open")) {
+          closeNotifPanel();
+        }
+      }
+    });
+  }
+
+  // =====================================================================
+  //  NOTIFICACIONES DE AGENDA
+  //  - 1 día antes (a las 09:00 del día previo)
+  //  - El mismo día (a las 07:00)
+  // =====================================================================
+
+  var agendaNotifSent = {};
+
+  function loadAgendaNotifSent() {
+    try {
+      var saved = window.localStorage.getItem(AGENDA_NOTIF_SENT_KEY);
+      if (saved) { agendaNotifSent = JSON.parse(saved) || {}; }
+    } catch (e) { agendaNotifSent = {}; }
+  }
+
+  function saveAgendaNotifSent() {
+    try { window.localStorage.setItem(AGENDA_NOTIF_SENT_KEY, JSON.stringify(agendaNotifSent)); } catch (e) {}
+  }
+
+  function checkAgendaNotifications() {
+    if (!calendarEvents.length) { return; }
+    var now = new Date();
+    var todayISO = formatDateISO(now);
+    var tomorrowDate = new Date(now);
+    tomorrowDate.setDate(now.getDate() + 1);
+    var tomorrowISO = formatDateISO(tomorrowDate);
+    var hour = now.getHours();
+
+    // Limpiar enviados de más de 2 días
+    var cutoff = formatDateISO(new Date(now.getTime() - 2 * 86400000));
+    Object.keys(agendaNotifSent).forEach(function (k) {
+      if (k < cutoff) { delete agendaNotifSent[k]; }
+    });
+
+    calendarEvents.forEach(function (ev) {
+      if (!ev.date || !ev.title) { return; }
+
+      // Notificación 1 DÍA ANTES (se envía cuando ya son las 09:00 del día previo)
+      if (ev.date === tomorrowISO && hour >= 9) {
+        var keyBefore = "before-" + ev.id;
+        if (!agendaNotifSent[keyBefore]) {
+          agendaNotifSent[keyBefore] = true;
+          saveAgendaNotifSent();
+          var timeStr = !ev.all_day && ev.start_time ? " a las " + ev.start_time : " (todo el día)";
+          var desc = ev.notes ? ev.notes.split("\n")[0].slice(0, 60) : "";
+          addNotification(
+            "agenda",
+            "📅",
+            "AGENDA · MAÑANA",
+            ev.title,
+            "Mañana" + timeStr + (desc ? " · " + desc : "")
+          );
+        }
+      }
+
+      // Notificación EL MISMO DÍA (07:00 o cuando se carga la app)
+      if (ev.date === todayISO) {
+        var keyToday = "today-" + ev.id;
+        if (!agendaNotifSent[keyToday]) {
+          agendaNotifSent[keyToday] = true;
+          saveAgendaNotifSent();
+          var timeStrToday = !ev.all_day && ev.start_time ? " a las " + ev.start_time : " (todo el día)";
+          var descToday = ev.notes ? ev.notes.split("\n")[0].slice(0, 60) : "";
+          addNotification(
+            "agenda",
+            "📅",
+            "AGENDA · HOY",
+            ev.title,
+            "Hoy" + timeStrToday + (descToday ? " · " + descToday : "")
+          );
+        }
+      }
+    });
+    saveAgendaNotifSent();
+  }
+
+  // =====================================================================
+  //  SISTEMA DE HORARIOS DE PILETA
+  //  Guarda franjas horarias en localStorage y envía comandos automáticamente
+  // =====================================================================
+
+  var POOL_SCHEDULE_KEY = "smart-panel-pool-schedule-v1";
+  var poolSchedules = [];
+  var poolScheduleTimer = null;
+  var lastPoolScheduleState = null;
+
+  function loadPoolSchedules() {
+    try {
+      var saved = window.localStorage.getItem(POOL_SCHEDULE_KEY);
+      if (saved) { poolSchedules = JSON.parse(saved) || []; }
+    } catch (e) { poolSchedules = []; }
+  }
+
+  function savePoolSchedules() {
+    try { window.localStorage.setItem(POOL_SCHEDULE_KEY, JSON.stringify(poolSchedules)); } catch (e) {}
+  }
+
+  function renderPoolSchedules() {
+    var list = byId("pool-schedule-list");
+    var status = byId("pool-schedule-status");
+    if (!list) { return; }
+    while (list.firstChild) { list.removeChild(list.firstChild); }
+
+    var active = poolSchedules.filter(function (s) { return s.enabled; });
+    if (status) {
+      status.hidden = poolSchedules.length > 0;
+    }
+
+    poolSchedules.forEach(function (sch, idx) {
+      var item = document.createElement("div");
+      item.className = "pool-schedule-item" + (sch.enabled ? " is-active" : "");
+
+      var times = document.createElement("div");
+      times.className = "pool-schedule-times";
+      times.appendChild(createTextElement("strong", "", sch.start + " → " + sch.end));
+      times.appendChild(createTextElement("span", "", sch.enabled ? "Activo" : "Inactivo"));
+
+      var toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "state-switch pool-schedule-toggle";
+      toggle.setAttribute("role", "switch");
+      toggle.setAttribute("aria-checked", sch.enabled ? "true" : "false");
+      toggle.setAttribute("aria-label", "Activar horario");
+      var track = document.createElement("span");
+      track.className = "switch-track";
+      var thumb = document.createElement("span");
+      thumb.className = "switch-thumb";
+      track.appendChild(thumb);
+      toggle.appendChild(track);
+      toggle.addEventListener("click", (function (i) {
+        return function () {
+          poolSchedules[i].enabled = !poolSchedules[i].enabled;
+          savePoolSchedules();
+          renderPoolSchedules();
+        };
+      })(idx));
+
+      var remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "pool-schedule-remove";
+      remove.textContent = "×";
+      remove.setAttribute("aria-label", "Eliminar horario");
+      remove.addEventListener("click", (function (i) {
+        return function () {
+          poolSchedules.splice(i, 1);
+          savePoolSchedules();
+          renderPoolSchedules();
+        };
+      })(idx));
+
+      item.appendChild(times);
+      item.appendChild(toggle);
+      item.appendChild(remove);
+      list.appendChild(item);
+    });
+  }
+
+  function timeToMinutes(timeStr) {
+    var parts = (timeStr || "").split(":");
+    if (parts.length < 2) { return -1; }
+    return Number(parts[0]) * 60 + Number(parts[1]);
+  }
+
+  function checkPoolSchedule() {
+    if (!poolSchedules.length) { return; }
+    var now = new Date();
+    var currentMins = now.getHours() * 60 + now.getMinutes();
+    var shouldBeOn = false;
+    var matchedSchedule = null;
+
+    poolSchedules.forEach(function (sch) {
+      if (!sch.enabled) { return; }
+      var start = timeToMinutes(sch.start);
+      var end = timeToMinutes(sch.end);
+      if (start === -1 || end === -1) { return; }
+      if (start <= end) {
+        if (currentMins >= start && currentMins < end) { shouldBeOn = true; matchedSchedule = sch; }
+      } else {
+        // Horario cruzando medianoche
+        if (currentMins >= start || currentMins < end) { shouldBeOn = true; matchedSchedule = sch; }
+      }
+    });
+
+    // Solo actuar si cambia el estado esperado
+    if (shouldBeOn !== lastPoolScheduleState) {
+      lastPoolScheduleState = shouldBeOn;
+
+      if (shouldBeOn) {
+        // Encender la pileta
+        if (!state.poolOn) {
+          sendPoolCommand(true);
+          addNotification(
+            "important",
+            "≈",
+            "PILETA · HORARIO",
+            "Sistema de pileta iniciado",
+            matchedSchedule
+              ? "Horario programado " + matchedSchedule.start + " → " + matchedSchedule.end
+              : "Activación automática por horario"
+          );
+        }
+      } else {
+        // Apagar la pileta
+        if (state.poolOn) {
+          sendPoolCommand(false);
+          addNotification(
+            "important",
+            "≈",
+            "PILETA · HORARIO",
+            "Sistema de pileta finalizado",
+            "El ciclo de circulación automático ha terminado."
+          );
+        }
+      }
+    }
+  }
+
+  function initPoolSchedule() {
+    loadPoolSchedules();
+    renderPoolSchedules();
+
+    var addBtn = byId("pool-schedule-add");
+    if (addBtn) {
+      addBtn.addEventListener("click", function () {
+        byId("pool-schedule-modal").hidden = false;
+      });
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll("[data-close-pool-schedule]"), function (btn) {
+      btn.addEventListener("click", function () {
+        byId("pool-schedule-modal").hidden = true;
+        byId("pool-schedule-form").reset();
+        byId("pool-schedule-form-error").hidden = true;
+      });
+    });
+
+    var form = byId("pool-schedule-form");
+    if (form) {
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var start = form.elements.pool_start.value;
+        var end = form.elements.pool_end.value;
+        var enabled = form.elements.pool_enabled.checked;
+        var errEl = byId("pool-schedule-form-error");
+        if (!start || !end) {
+          errEl.textContent = "Completa los horarios de encendido y apagado.";
+          errEl.hidden = false;
+          return;
+        }
+        poolSchedules.push({ start: start, end: end, enabled: enabled });
+        savePoolSchedules();
+        renderPoolSchedules();
+        byId("pool-schedule-modal").hidden = true;
+        form.reset();
+        errEl.hidden = true;
+
+        addNotification(
+          "important",
+          "⚙",
+          "PILETA · CONFIGURACIÓN",
+          "Horario guardado",
+          "Encendido: " + start + " · Apagado: " + end
+        );
+      });
+    }
+
+    // Revisar horario cada minuto
+    checkPoolSchedule();
+    setInterval(checkPoolSchedule, 60000);
+  }
+
+  // Notificación cuando el usuario enciende/apaga manualmente la pileta
+  var prevPoolStateForNotif = null;
+
+  function watchPoolStateForNotif() {
+    setInterval(function () {
+      if (prevPoolStateForNotif === null) {
+        prevPoolStateForNotif = state.poolOn;
+        return;
+      }
+      if (state.poolOn !== prevPoolStateForNotif) {
+        prevPoolStateForNotif = state.poolOn;
+        // Solo notificar si no es un cambio por horario automático
+        if (lastPoolScheduleState === null) {
+          if (state.poolOn) {
+            addNotification("important", "≈", "PILETA", "Motor de pileta encendido", "Activado manualmente.");
+          } else {
+            addNotification("important", "≈", "PILETA", "Motor de pileta apagado", "Apagado manualmente.");
+          }
+        }
+      }
+    }, 3000);
+  }
+
   function initialize() {
-    byId("frontend-version").textContent = "HTML v34";
-    byId("script-build-version").textContent = "JS v34";
+    byId("frontend-version").textContent = "HTML v35";
+    byId("script-build-version").textContent = "JS v35";
 
     initializeConfirmDialog();
     initializeTabs();
@@ -1551,6 +2071,15 @@
     loadCachedWeather();
     loadWeather();
     setInterval(loadWeather, 30 * 60 * 1000);
+
+    // Inicializar sistema de notificaciones
+    loadAgendaNotifSent();
+    initNotifPanel();
+    initPoolSchedule();
+    watchPoolStateForNotif();
+
+    // Revisar notificaciones de agenda cada 5 minutos
+    setInterval(checkAgendaNotifications, 5 * 60 * 1000);
   }
 
   if (document.readyState === "loading") {
