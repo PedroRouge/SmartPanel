@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "64";
+  var APP_BUILD_VERSION = "65";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -313,8 +313,15 @@
     activeEventsRef.on("value", renderUserEvents, onEventsError);
     activeFirebaseRefs.push(activeEventsRef);
     listen("pushTokens/" + user.uid, renderPushDevices, function (error) {
-      console.warn("[FCM] No se pudo leer la lista de dispositivos:", error);
-      renderPushDevices(null);
+      console.warn("[FCM] No se pudo leer la lista de dispositivos en tiempo real; se consulta por HTTPS:", error);
+      readPushDevicesViaRest(user).catch(function (restError) {
+        console.warn("[FCM] Tampoco se pudo leer la lista por HTTPS:", restError);
+        renderPushDevices(null, restError);
+      });
+    });
+    readPushDevicesViaRest(user).catch(function (error) {
+      console.warn("[FCM] La lectura HTTPS inicial de dispositivos no estuvo disponible:", error);
+      renderPushDevices(null, error);
     });
     activityListenerRef = db.ref("users/" + user.uid + "/activity");
     renderActivityMessage("Cargando el historial de la cuenta...");
@@ -343,6 +350,7 @@
         Promise.all([
           readUserEventsViaRest(user).catch(function (error) { console.warn("[Agenda] HTTPS sync failed:", error); }),
           readUserActivityViaRest(user).catch(function (error) { console.warn("[Actividad] HTTPS sync failed:", error); }),
+          readPushDevicesViaRest(user).catch(function (error) { console.warn("[FCM] HTTPS device sync failed:", error); }),
           syncSharedDeviceStateViaRest(user).catch(function (error) { console.warn("[Estado] HTTPS sync failed:", error); })
         ]).finally(function () { agendaRestSyncBusy = false; });
       }
@@ -432,6 +440,23 @@
     }).then(function (activityData) {
       if (auth && auth.currentUser && auth.currentUser.uid === user.uid) { renderActivity(activityData); }
       return activityData;
+    });
+  }
+
+  function readPushDevicesViaRest(user) {
+    var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
+    if (!config.databaseURL || !user || !user.getIdToken || !window.fetch) {
+      return Promise.reject(new Error("La lectura autenticada de dispositivos no esta configurada."));
+    }
+    return user.getIdToken().then(function (token) {
+      var url = config.databaseURL.replace(/\/+$/, "") + "/pushTokens/" + encodeURIComponent(user.uid) + ".json?auth=" + encodeURIComponent(token);
+      return fetch(url, { cache: "no-store" });
+    }).then(function (response) {
+      if (!response.ok) { throw new Error("Firebase respondio HTTP " + response.status + " al leer dispositivos."); }
+      return response.json();
+    }).then(function (data) {
+      if (auth && auth.currentUser && auth.currentUser.uid === user.uid) { renderPushDevices(data); }
+      return data;
     });
   }
 
@@ -580,7 +605,7 @@
     var mode = firebaseConnectionMode;
     var statusClass = mode === "checking" ? "is-checking" : (mode === "offline" ? "is-error" : "is-online");
     var statusText = mode === "realtime" ? "Conectado" : (mode === "https" ? "Disponible por HTTPS" : (mode === "denied" ? "Firebase responde - revisar permisos" : (mode === "offline" ? "Sin respuesta" : "Comprobando conexi\u00f3n...")));
-    var detailText = mode === "realtime" ? "Realtime Database - sincronizaci\u00f3n en tiempo real" : (mode === "https" ? "Base activa; el canal en tiempo real est\u00e1 reconectando" : (mode === "denied" ? "Servidor activo; Firebase rechaz\u00f3 la lectura con esta sesi\u00f3n" : (mode === "offline" ? "No respondi\u00f3 Realtime Database ni la comprobaci\u00f3n HTTPS" : "Comprobando Realtime Database y HTTPS")));
+    var detailText = mode === "realtime" ? "Realtime Database - sincronizaci\u00f3n en tiempo real" : (mode === "https" ? "La base responde; respaldo HTTPS activo, sincronizacion en vivo en recuperacion" : (mode === "denied" ? "Servidor activo; Firebase rechaz\u00f3 la lectura con esta sesi\u00f3n" : (mode === "offline" ? "No respondi\u00f3 Realtime Database ni la comprobaci\u00f3n HTTPS" : "Comprobando Realtime Database y HTTPS")));
     if (dot) { dot.classList.remove("is-checking", "is-online", "is-error"); dot.classList.add(statusClass); }
     if (label) { label.textContent = statusText; }
     if (meta) { meta.textContent = detailText; }
@@ -723,13 +748,21 @@
     });
   }
 
-  function renderPushDevices(snapshot) {
+  function renderPushDevices(snapshot, loadError) {
     var list = byId("push-device-list");
     if (!list) { return; }
     while (list.firstChild) { list.removeChild(list.firstChild); }
     var data = snapshot && typeof snapshot.val === "function" ? snapshot.val() : snapshot;
+    if (!apiAuthenticated) {
+      list.appendChild(createTextElement("p", "event-empty", "Inicia sesion para consultar tus dispositivos."));
+      return;
+    }
+    if (loadError) {
+      list.appendChild(createTextElement("p", "event-empty", "No se pudieron consultar los dispositivos; se volvera a intentar."));
+      return;
+    }
     if (!data || typeof data !== "object") {
-      list.appendChild(createTextElement("p", "event-empty", auth && auth.currentUser ? "No hay dispositivos Push vinculados a esta cuenta." : "Inicia sesion para consultar tus dispositivos."));
+      list.appendChild(createTextElement("p", "event-empty", "No hay dispositivos Push vinculados a esta cuenta."));
       return;
     }
     Object.keys(data).forEach(function (key) {
@@ -2450,7 +2483,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=64").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=65").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -3184,8 +3217,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v64";
-    byId("script-build-version").textContent = "JS v64";
+    byId("frontend-version").textContent = "HTML v65";
+    byId("script-build-version").textContent = "JS v65";
 
     initializeConfirmDialog();
     initializeTabs();

@@ -11,19 +11,19 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="64">
+  <meta name="smart-panel-version" content="65">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=64">
+  <link rel="stylesheet" href="css/styles.css?v=65">
   <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js" defer></script>
-  <script src="js/firebase-config.js?v=64" defer></script>
-  <script src="js/app.js?v=64" defer></script>
+  <script src="js/firebase-config.js?v=65" defer></script>
+  <script src="js/app.js?v=65" defer></script>
 </head>
 <body>
   <script>
@@ -41,7 +41,7 @@
     if ('caches' in window) {
       caches.keys().then(function(keys) {
         keys.forEach(function(key) {
-          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-64') {
+          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-65') {
             caches.delete(key);
           }
         });
@@ -165,7 +165,7 @@
           <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SESIÓN</p><h2>Cuenta</h2><p class="system-status-value"><i class="status-dot is-checking" id="detail-auth-dot"></i><span id="detail-auth-status">Comprobando sesión…</span></p><p class="system-status-meta" id="detail-auth-meta">Los datos de agenda son personales</p></div></article>
         </section>
         <section class="activity-panel panel-surface" aria-labelledby="activity-heading"><div class="section-heading"><div><p class="eyebrow">REGISTRO DE LA CUENTA</p><h2 id="activity-heading">Historial de actividad</h2></div><span class="activity-retention">Sincronizado entre dispositivos</span></div><p class="activity-description">Acciones del hogar y cambios de agenda, con su resultado y dispositivo de origen.</p><div class="activity-toolbar"><label for="activity-filter">Mostrar</label><select id="activity-filter" class="activity-filter"><option value="all">Toda la actividad</option><option value="errors">Solo errores</option><option value="success">Solo confirmadas</option></select><span id="activity-count" class="activity-count"></span></div><div class="activity-list" id="activity-list" aria-live="polite"><p class="event-empty">Inicia sesion para consultar la actividad.</p></div></section>
-        <section class="activity-panel devices-panel panel-surface" aria-labelledby="push-devices-heading"><div class="section-heading"><div><p class="eyebrow">NOTIFICACIONES</p><h2 id="push-devices-heading">Dispositivos registrados</h2></div><span class="activity-retention">Vinculados a tu cuenta</span></div><p class="activity-description">Cada navegador registrado recibe los avisos de esta cuenta. Puedes quitar dispositivos que ya no uses.</p><div class="push-device-list" id="push-device-list" aria-live="polite"><p class="event-empty">Inicia sesi&#243;n para consultar tus dispositivos.</p></div></section>
+        <section class="activity-panel devices-panel panel-surface" aria-labelledby="push-devices-heading"><div class="section-heading"><div><p class="eyebrow">NOTIFICACIONES</p><h2 id="push-devices-heading">Dispositivos registrados</h2></div><span class="activity-retention">Vinculados a tu cuenta</span></div><p class="activity-description">Cada navegador registrado recibe los avisos de esta cuenta. Puedes quitar dispositivos que ya no uses.</p><div class="push-device-list" id="push-device-list" aria-live="polite"><p class="event-empty">Cargando los dispositivos de tu cuenta...</p></div></section>
       </section>
 
       <section class="view" id="panel-agenda" role="tabpanel" aria-labelledby="tab-agenda" data-panel="agenda" hidden>
