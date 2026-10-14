@@ -11,19 +11,19 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="63">
+  <meta name="smart-panel-version" content="64">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=63">
+  <link rel="stylesheet" href="css/styles.css?v=64">
   <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js" defer></script>
-  <script src="js/firebase-config.js?v=63" defer></script>
-  <script src="js/app.js?v=63" defer></script>
+  <script src="js/firebase-config.js?v=64" defer></script>
+  <script src="js/app.js?v=64" defer></script>
 </head>
 <body>
   <script>
@@ -41,7 +41,7 @@
     if ('caches' in window) {
       caches.keys().then(function(keys) {
         keys.forEach(function(key) {
-          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-63') {
+          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-64') {
             caches.delete(key);
           }
         });
@@ -84,6 +84,7 @@
     </nav>
 
     <main class="main-content">
+      <p class="command-feedback" id="command-feedback" aria-live="polite" hidden></p>
       <section class="view is-visible" id="panel-inicio" role="tabpanel" aria-labelledby="tab-inicio" data-panel="inicio">
         <div class="welcome-row">
           <div>
@@ -130,6 +131,7 @@
               <div class="summary-item"><span class="summary-icon pool-icon" aria-hidden="true">≈</span><span>Motor de pileta</span><strong id="summary-pool">Apagado</strong></div>
               <div class="summary-item"><span class="summary-icon gate-icon" aria-hidden="true">↗</span><span>Portón</span><strong id="summary-gate">Cerrado</strong></div>
             </div>
+            <p class="state-freshness" id="shared-state-freshness">Esperando confirmaci&#243;n de estado del ESP32</p>
           </section>
 
           <section class="forecast-panel panel-surface" aria-labelledby="forecast-heading">
@@ -162,7 +164,8 @@
           <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true">▣</span><div><p class="eyebrow">FRONTEND</p><h2>Servidor web</h2><p class="system-status-value"><i class="status-dot is-online"></i><span>Disponible</span></p><p class="system-status-meta">Smart Panel cargado desde Vercel</p></div></article>
           <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SESIÓN</p><h2>Cuenta</h2><p class="system-status-value"><i class="status-dot is-checking" id="detail-auth-dot"></i><span id="detail-auth-status">Comprobando sesión…</span></p><p class="system-status-meta" id="detail-auth-meta">Los datos de agenda son personales</p></div></article>
         </section>
-        <section class="activity-panel panel-surface" aria-labelledby="activity-heading"><div class="section-heading"><div><p class="eyebrow">REGISTRO DE LA CUENTA</p><h2 id="activity-heading">Historial de actividad</h2></div><span class="activity-retention">Sincronizado entre dispositivos</span></div><p class="activity-description">Acciones del hogar y cambios de agenda, con su resultado y dispositivo de origen.</p><div class="activity-list" id="activity-list" aria-live="polite"><p class="event-empty">Inicia sesión para consultar la actividad.</p></div></section>
+        <section class="activity-panel panel-surface" aria-labelledby="activity-heading"><div class="section-heading"><div><p class="eyebrow">REGISTRO DE LA CUENTA</p><h2 id="activity-heading">Historial de actividad</h2></div><span class="activity-retention">Sincronizado entre dispositivos</span></div><p class="activity-description">Acciones del hogar y cambios de agenda, con su resultado y dispositivo de origen.</p><div class="activity-toolbar"><label for="activity-filter">Mostrar</label><select id="activity-filter" class="activity-filter"><option value="all">Toda la actividad</option><option value="errors">Solo errores</option><option value="success">Solo confirmadas</option></select><span id="activity-count" class="activity-count"></span></div><div class="activity-list" id="activity-list" aria-live="polite"><p class="event-empty">Inicia sesion para consultar la actividad.</p></div></section>
+        <section class="activity-panel devices-panel panel-surface" aria-labelledby="push-devices-heading"><div class="section-heading"><div><p class="eyebrow">NOTIFICACIONES</p><h2 id="push-devices-heading">Dispositivos registrados</h2></div><span class="activity-retention">Vinculados a tu cuenta</span></div><p class="activity-description">Cada navegador registrado recibe los avisos de esta cuenta. Puedes quitar dispositivos que ya no uses.</p><div class="push-device-list" id="push-device-list" aria-live="polite"><p class="event-empty">Inicia sesi&#243;n para consultar tus dispositivos.</p></div></section>
       </section>
 
       <section class="view" id="panel-agenda" role="tabpanel" aria-labelledby="tab-agenda" data-panel="agenda" hidden>
@@ -191,6 +194,7 @@
             <div class="event-list" id="agenda-day-events"></div>
           </section>
         </div>
+        <section class="upcoming-agenda-panel panel-surface" aria-labelledby="upcoming-agenda-heading"><div class="section-heading"><div><p class="eyebrow">LO QUE SIGUE</p><h2 id="upcoming-agenda-heading">Pr&#243;ximos eventos</h2></div><span class="activity-retention">Agenda sincronizada</span></div><div class="upcoming-agenda-list" id="upcoming-agenda-list"><p class="event-empty">No hay pr&#243;ximos eventos.</p></div></section>
       </section>
 
       <section class="view" id="panel-multimedia" role="tabpanel" aria-labelledby="tab-multimedia" data-panel="multimedia" hidden>
@@ -336,11 +340,13 @@
         <form id="event-form" novalidate>
           <label class="form-field"><span>Título</span><input type="text" name="title" maxlength="120" required></label>
           <label class="form-field"><span>Fecha</span><input type="date" name="date" required></label>
+          <label class="form-field"><span>Categor&#237;a</span><select name="category"><option value="personal">Personal</option><option value="hogar">Hogar</option><option value="salud">Salud</option><option value="trabajo">Trabajo</option><option value="otro">Otro</option></select></label>
           <label class="all-day-toggle"><input type="checkbox" name="all_day"><span>Todo el día</span></label>
           <div class="form-row event-time-row" id="event-time-row">
             <label class="form-field"><span>Desde</span><input type="time" name="start_time" required></label>
             <label class="form-field"><span>Hasta</span><input type="time" name="end_time"></label>
           </div>
+          <label class="form-field" id="event-repeat-field"><span>Repetir</span><select name="repeat"><option value="none">No se repite</option><option value="weekly">Cada semana (12 veces)</option><option value="monthly">Cada mes (12 veces)</option></select><small>Al editar una repetici&#243;n, el cambio se aplica solo a esa fecha.</small></label>
           <label class="form-field"><span>Nota (opcional)</span><textarea name="notes" rows="3" maxlength="2000"></textarea></label>
           <p class="form-error" id="event-form-error" role="alert" hidden></p>
           <div class="form-actions event-form-actions">

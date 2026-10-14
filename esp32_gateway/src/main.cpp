@@ -360,7 +360,7 @@ void sendHeartbeat() {
     time_t nowSec = time(nullptr);
     long long nowMs = (nowSec > 100000) ? (long long)nowSec * 1000LL : (long long)millis();
     json.set("last_seen", nowMs);
-    json.set("version", "2.0.0-dualcore");
+    json.set("version", "2.1.0-dualcore");
 
     if (!Firebase.RTDB.setJSON(&fbdo, "/home/gateway/status", &json)) {
         Serial.printf("[Heartbeat] Error: %s\n", fbdo.errorReason().c_str());
@@ -528,6 +528,21 @@ bool executeHttpLocalCommand(const String& url) {
     return success;
 }
 
+// Publica una marca UTC real para que todos los clientes puedan mostrar
+// when the ESP32 last confirmed a physical state.
+void updateStateTimestamp() {
+    time_t nowSec = time(nullptr);
+    if (nowSec <= 100000) {
+        Serial.println("[Estado] NTP not synchronized yet; skipping updatedAt.");
+        return;
+    }
+    FirebaseJson patch;
+    patch.set("updatedAt", (double)nowSec * 1000.0);
+    if (!Firebase.RTDB.updateNode(&fbdo, "/home/state", &patch)) {
+        Serial.printf("[Estado] No se pudo guardar updatedAt: %s\n", fbdo.errorReason().c_str());
+    }
+}
+
 // =========================================================================
 // MANEJADORES (corren en Core 0)
 // =========================================================================
@@ -552,7 +567,11 @@ void handleLightCommand(const String& lightName, bool targetState) {
 
     // Confirmar estado real en Firebase (la web lo lee para el rollback visual)
     String statePath = "/home/state/lights/" + lightName;
-    Firebase.RTDB.setBool(&fbdo, statePath.c_str(), ok ? targetState : !targetState);
+    if (Firebase.RTDB.setBool(&fbdo, statePath.c_str(), ok ? targetState : !targetState)) {
+        updateStateTimestamp();
+    } else {
+        Serial.printf("[Luz] No se pudo publicar estado: %s\n", fbdo.errorReason().c_str());
+    }
 }
 
 void handlePoolCommand(bool targetState) {
@@ -566,13 +585,21 @@ void handlePoolCommand(bool targetState) {
     }
 
     bool ok = executeHttpLocalCommand(url);
-    Firebase.RTDB.setBool(&fbdo, "/home/state/poolOn", ok ? targetState : !targetState);
+    if (Firebase.RTDB.setBool(&fbdo, "/home/state/poolOn", ok ? targetState : !targetState)) {
+        updateStateTimestamp();
+    } else {
+        Serial.printf("[Pileta] No se pudo publicar estado: %s\n", fbdo.errorReason().c_str());
+    }
 }
 
 void handleGateCommand(bool targetState) {
     Serial.println("[Portón] Enviando pulso Wi-Fi...");
     bool ok = executeHttpLocalCommand(GATE_RELAY_PULSE_URL);
-    Firebase.RTDB.setBool(&fbdo, "/home/state/gateOpen", ok ? targetState : !targetState);
+    if (Firebase.RTDB.setBool(&fbdo, "/home/state/gateOpen", ok ? targetState : !targetState)) {
+        updateStateTimestamp();
+    } else {
+        Serial.printf("[Porton] No se pudo publicar estado: %s\n", fbdo.errorReason().c_str());
+    }
 }
 
 void handleTvCommand(const String& targetId, const String& action, const String& value) {

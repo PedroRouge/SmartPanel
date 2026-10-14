@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "63";
+  var APP_BUILD_VERSION = "64";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -23,8 +23,11 @@
   var gatewayDetails = "Esperando heartbeat del ESP32";
   var gatewayReportedOnline = false;
   var gatewayLastSeen = 0;
+  var sharedStateUpdatedAt = 0;
   var holidaysByDate = {};
   var activityListenerRef = null;
+  var activityEntries = [];
+  var activityFilterBound = false;
   var apiAuthenticated = false;
   var currentUsername = "";
   var cameraCredentials = {};
@@ -50,6 +53,7 @@
   var calendarEvents = [];
   var eventEditingId = null;
   var pendingEventId = null;
+  var pendingRecurringEntries = null;
   var deferredInstallPrompt = null;
   var listenersAttached = false;
   var activeFirebaseRefs = [];
@@ -230,6 +234,8 @@
         state.gateOpen = val.gateOpen;
         renderGate();
       }
+      sharedStateUpdatedAt = Number(val.updatedAt) || sharedStateUpdatedAt;
+      updateSharedStateFreshnessUI();
 
       saveState();
       renderSystemStatus();
@@ -253,6 +259,7 @@
       var lastSeen = Number(gateway.last_seen) || 0;
       gatewayLastSeen = lastSeen;
       gatewayReportedOnline = gateway.online === true;
+      updateSharedStateFreshnessUI();
       var diffSec = lastSeen > 0 ? Math.round((now - lastSeen) / 1000) : -1;
       var isRecent = diffSec >= 0 && diffSec < 45; // Heartbeat cada 15s
 
@@ -305,6 +312,10 @@
     // The agenda listener must not wait for an optional legacy migration read.
     activeEventsRef.on("value", renderUserEvents, onEventsError);
     activeFirebaseRefs.push(activeEventsRef);
+    listen("pushTokens/" + user.uid, renderPushDevices, function (error) {
+      console.warn("[FCM] No se pudo leer la lista de dispositivos:", error);
+      renderPushDevices(null);
+    });
     activityListenerRef = db.ref("users/" + user.uid + "/activity");
     renderActivityMessage("Cargando el historial de la cuenta...");
     activityListenerRef.on("value", renderActivity, function (error) {
@@ -348,8 +359,10 @@
     agendaRestSyncBusy = false;
     activeEventsRef = null;
     activityListenerRef = null;
+    activityEntries = [];
     listenersAttached = false;
     calendarEvents = [];
+    renderPushDevices(null);
     renderActivity(null);
     renderCalendar();
     renderAgendaDay();
@@ -469,6 +482,14 @@
     return Promise.race([poll(), timeout]).finally(function () { stopped = true; clearTimeout(timer); });
   }
 
+  function setCommandFeedback(message, status) {
+    var banner = byId("command-feedback");
+    if (!banner) { return; }
+    banner.hidden = !message;
+    banner.textContent = message || "";
+    banner.dataset.status = status || "";
+  }
+
   function requireGatewayConnection(action, feedback) {
     if (!apiAuthenticated || !db) {
       if (feedback) { feedback.textContent = "Inicia sesion para controlar este dispositivo."; }
@@ -478,6 +499,8 @@
     if (gatewayOnline) { return true; }
     var message = "No hay conexi\u00f3n con ESP32. La orden de " + action + " no se envio. Conecta el gateway y vuelve a intentar.";
     if (feedback) { feedback.textContent = message; }
+    setCommandFeedback(message, "error");
+    recordActivity("Orden bloqueada: " + action, "error", message);
     addNotification("alert", "!", "ESP32 SIN CONEXION", "No hay conexi\u00f3n con ESP32", message);
     return false;
   }
@@ -492,6 +515,8 @@
       if (firebaseConnected || !auth || !auth.currentUser || auth.currentUser.uid !== user.uid) { return; }
       var home = values[0];
       if (home && typeof home === "object") {
+        sharedStateUpdatedAt = Number(home.updatedAt) || sharedStateUpdatedAt;
+        updateSharedStateFreshnessUI();
         if (home.lights && typeof home.lights === "object") {
           Object.keys(home.lights).forEach(function (key) { state.lights[key] = home.lights[key] === true; });
           renderLights();
@@ -662,15 +687,30 @@
   function renderActivity(snapshot) {
     var list = byId("activity-list");
     if (!list) { return; }
-    while (list.firstChild) { list.removeChild(list.firstChild); }
     var data = snapshot && typeof snapshot.val === "function" ? snapshot.val() : snapshot;
-    var entries = data ? Object.keys(data).map(function (id) { return data[id]; }).filter(function (entry) { return entry && typeof entry === "object"; }) : [];
-    entries.sort(function (a, b) { return Number(b.timestamp) - Number(a.timestamp); });
-    if (!entries.length) {
+    activityEntries = data ? Object.keys(data).map(function (id) { return data[id]; }).filter(function (entry) { return entry && typeof entry === "object"; }) : [];
+    activityEntries.sort(function (a, b) { return Number(b.timestamp) - Number(a.timestamp); });
+    var filter = byId("activity-filter");
+    if (filter && !activityFilterBound) {
+      activityFilterBound = true;
+      filter.addEventListener("change", function () { renderActivity(activityEntries); });
+    }
+    var selected = filter ? filter.value : "all";
+    var visible = activityEntries.filter(function (entry) {
+      return selected === "errors" ? entry.result !== "ok" : selected === "success" ? entry.result === "ok" : true;
+    });
+    var count = byId("activity-count");
+    if (count) { count.textContent = visible.length + (visible.length === 1 ? " registro" : " registros"); }
+    while (list.firstChild) { list.removeChild(list.firstChild); }
+    if (!activityEntries.length) {
       list.appendChild(createTextElement("p", "event-empty", auth && auth.currentUser ? "Todavía no hay actividad registrada." : "Inicia sesión para consultar la actividad."));
       return;
     }
-    entries.forEach(function (entry) {
+    if (!visible.length) {
+      list.appendChild(createTextElement("p", "event-empty", selected === "errors" ? "No hay errores registrados." : "No hay acciones confirmadas."));
+      return;
+    }
+    visible.slice(0, 100).forEach(function (entry) {
       var row = createTextElement("article", "activity-row");
       row.appendChild(createTextElement("span", "activity-result-dot" + (entry.result === "ok" ? " is-ok" : " is-error"), entry.result === "ok" ? "✓" : "!"));
       var copy = createTextElement("div", "activity-copy");
@@ -681,6 +721,65 @@
       row.appendChild(createTextElement("span", "activity-meta", (entry.device || "Dispositivo desconocido") + " · " + when));
       list.appendChild(row);
     });
+  }
+
+  function renderPushDevices(snapshot) {
+    var list = byId("push-device-list");
+    if (!list) { return; }
+    while (list.firstChild) { list.removeChild(list.firstChild); }
+    var data = snapshot && typeof snapshot.val === "function" ? snapshot.val() : snapshot;
+    if (!data || typeof data !== "object") {
+      list.appendChild(createTextElement("p", "event-empty", auth && auth.currentUser ? "No hay dispositivos Push vinculados a esta cuenta." : "Inicia sesion para consultar tus dispositivos."));
+      return;
+    }
+    Object.keys(data).forEach(function (key) {
+      var device = data[key];
+      if (!device || !device.token) { return; }
+      var row = createTextElement("article", "push-device-row");
+      var icon = createTextElement("span", "push-device-icon", "P");
+      icon.setAttribute("aria-hidden", "true");
+      var copy = createTextElement("div", "push-device-copy");
+      copy.appendChild(createTextElement("strong", "", device.device || device.platform || "Navegador registrado"));
+      var updated = Number(device.updatedAt);
+      copy.appendChild(createTextElement("span", "", "Registrado " + (updated ? new Date(updated).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "en esta cuenta")));
+      var remove = createTextElement("button", "push-device-remove", "Quitar");
+      remove.type = "button";
+      remove.setAttribute("aria-label", "Quitar dispositivo de notificaciones");
+      remove.addEventListener("click", function () { removePushDevice(key, device); });
+      row.appendChild(icon);
+      row.appendChild(copy);
+      row.appendChild(remove);
+      list.appendChild(row);
+    });
+    if (!list.children.length) { list.appendChild(createTextElement("p", "event-empty", "No hay dispositivos Push vinculados a esta cuenta.")); }
+  }
+
+  function removePushDevice(key, device) {
+    var user = auth && auth.currentUser;
+    if (!user || !db || !window.confirm("Este navegador dejara de recibir avisos de Smart Panel. Quieres quitarlo.")) { return; }
+    db.ref("pushTokens/" + user.uid + "/" + key).remove().then(function () {
+      recordActivity("Dispositivo de avisos quitado", "ok", device.device || device.platform || "Navegador");
+      if (!firebase.messaging) { return; }
+      var messaging;
+      try { messaging = firebase.messaging(); } catch (error) { return; }
+      return messaging.getToken().then(function (token) {
+        if (token === device.token) {
+          return messaging.deleteToken().then(function () {
+            try { window.localStorage.removeItem(pushRegistrationKey(user.uid)); } catch (error) {}
+            var button = byId("push-enable");
+            if (button) { button.hidden = false; setPushButtonState("idle", "Activar avisos", "Registra este dispositivo de nuevo cuando quieras."); }
+          });
+        }
+      }).catch(function (error) { console.warn("[FCM] El registro local se puede mantener hasta que se active de nuevo:", error); });
+    }).catch(function (error) {
+      addNotification("alert", "!", "DISPOSITIVOS", "No se pudo quitar el dispositivo", error.message || "Intenta nuevamente.");
+    });
+  }
+
+  function updateSharedStateFreshnessUI() {
+    var target = byId("shared-state-freshness");
+    if (!target) { return; }
+    target.textContent = sharedStateUpdatedAt > 0 ? "Estado confirmado por ESP32 " + formatTimeAgo(sharedStateUpdatedAt).toLowerCase() : "Esperando confirmacion de estado del ESP32";
   }
 
   // Wait for the ESP32 to report the desired state; an initial read may be stale.
@@ -709,7 +808,8 @@
   // --- ENVIAR COMANDOS HACIA FIREBASE (El ESP32 los ejecuta vía Wi-Fi) ---
   function sendLightCommand(lightName, targetState) {
     var card = document.querySelector("[data-device='" + lightName + "']");
-    if (!requireGatewayConnection("la luz", null)) { return; }
+    if (!requireGatewayConnection("la luz", byId("command-feedback"))) { return; }
+    setCommandFeedback("Enviando orden a la luz; esperando confirmaci\u00f3n del ESP32...", "pending");
     if (card && card.classList.contains("is-pending")) { return; }
     if (card) { card.classList.add("is-pending"); }
     var updates = {};
@@ -724,18 +824,21 @@
       renderLights();
       var lightLabels = { living: "Living", kitchen: "Cocina", bedroom: "Dormitorio", garden: "Exterior" };
       recordActivity("Luz " + (confirmedState ? "encendida" : "apagada") + ": " + (lightLabels[lightName] || lightName), "ok", "Estado confirmado por el ESP32");
+      setCommandFeedback("Luz " + (lightLabels[lightName] || lightName) + (confirmedState ? " encendida" : " apagada") + " \u00b7 confirmado por ESP32", "success");
     }).catch(function (error) {
       console.error("No se pudo enviar/confirmar el comando de luz:", error);
       if (card) { card.classList.remove("is-pending"); }
       renderLights();
       recordActivity("Cambio de luz: " + lightName, "error", error.message);
+      setCommandFeedback("No se pudo confirmar la luz: " + error.message, "error");
       addNotification("alert", "!", "ERROR DE DISPOSITIVO", "No se pudo cambiar " + lightName, error.message);
     });
   }
 
   function sendPoolCommand(targetState) {
     var toggle = byId("pool-toggle");
-    if (!requireGatewayConnection("la pileta", null)) { return; }
+    if (!requireGatewayConnection("la pileta", byId("command-feedback"))) { return; }
+    setCommandFeedback("Enviando orden a la pileta; esperando confirmaci\u00f3n del ESP32...", "pending");
     if (toggle && toggle.classList.contains("is-pending")) { return; }
     if (toggle) { toggle.classList.add("is-pending"); }
     var updates = {};
@@ -749,11 +852,13 @@
       saveState();
       renderPool();
       recordActivity("Motor de pileta " + (confirmedState ? "encendido" : "apagado"), "ok", "Estado confirmado por el ESP32");
+      setCommandFeedback("Pileta " + (confirmedState ? "encendida" : "apagada") + " \u00b7 confirmado por ESP32", "success");
     }).catch(function (error) {
       console.error("No se pudo enviar/confirmar el comando de pileta:", error);
       if (toggle) { toggle.classList.remove("is-pending"); }
       renderPool();
       recordActivity("Cambio del motor de pileta", "error", error.message);
+      setCommandFeedback("No se pudo confirmar la pileta: " + error.message, "error");
       addNotification("alert", "!", "ERROR DE DISPOSITIVO", "No se pudo cambiar la pileta", error.message);
     });
   }
@@ -763,6 +868,7 @@
     var button = byId("gate-button");
     var feedbackEl = byId("gate-feedback");
     if (!requireGatewayConnection("el porton", feedbackEl)) { return; }
+    setCommandFeedback("Enviando orden al port\u00f3n; esperando confirmaci\u00f3n del ESP32...", "pending");
     if (button.disabled) { return; }
     button.disabled = true;
     feedbackEl.textContent = targetState ? "Enviando apertura por Wi-Fi..." : "Enviando cierre por Wi-Fi...";
@@ -778,12 +884,14 @@
       saveState();
       renderGate();
       feedbackEl.textContent = "Porton accionado correctamente.";
+      setCommandFeedback("Port\u00f3n " + (confirmedState ? "abierto" : "cerrado") + " \u00b7 confirmado por ESP32", "success");
       button.disabled = false;
       recordActivity("Porton " + (confirmedState ? "abierto" : "cerrado"), "ok", "Estado confirmado por el ESP32");
       setTimeout(function () { feedbackEl.textContent = ""; }, 4000);
     }).catch(function (error) {
       renderGate();
       feedbackEl.textContent = "Error: " + error.message;
+      setCommandFeedback("No se pudo confirmar el port\u00f3n: " + error.message, "error");
       button.disabled = false;
       recordActivity("Accion sobre el porton", "error", error.message);
       addNotification("alert", "!", "ERROR DE DISPOSITIVO", "No se pudo accionar el porton", error.message);
@@ -829,7 +937,8 @@
     }
 
     updateFirebasePaths(updates).then(function () {
-      feedback.textContent = tv.name + " - orden enviada al ESP32 y compartida con tus dispositivos.";
+      feedback.textContent = tv.name + " - orden enviada; el televisor no tiene confirmaci\u00f3n f\u00edsica.";
+      setCommandFeedback("Orden de " + tv.name + " enviada al ESP32; estado f\u00edsico sin sensor de confirmaci\u00f3n.", "pending");
       recordActivity("Comando multimedia: " + tv.name, "ok", "Orden enviada (" + action.replace(/_/g, " ") + "); ejecucion fisica sin sensor de confirmacion");
     }).catch(function (error) {
       tvState.volume = previous.volume;
@@ -841,6 +950,7 @@
       renderTVs();
       renderMedia();
       feedback.textContent = "Error: " + error.message;
+      setCommandFeedback("No se pudo enviar la orden multimedia: " + error.message, "error");
       recordActivity("Comando multimedia: " + tv.name, "error", error.message);
     });
   }
@@ -1135,6 +1245,9 @@
     form.elements.start_time.value = eventData ? (eventData.start_time || "") : "09:00";
     form.elements.end_time.value = eventData ? (eventData.end_time || "") : "";
     form.elements.notes.value = eventData ? (eventData.notes || "") : "";
+    form.elements.category.value = eventData ? (eventData.category || "personal") : "personal";
+    form.elements.repeat.value = "none";
+    byId("event-repeat-field").hidden = !!eventData;
     byId("event-time-row").hidden = form.elements.all_day.checked;
     byId("event-modal").hidden = false;
     form.elements.title.focus();
@@ -1146,6 +1259,7 @@
     byId("event-form-error").hidden = true;
     eventEditingId = null;
     pendingEventId = null;
+    pendingRecurringEntries = null;
   }
 
   // HTTPS fallback for browsers where the RTDB live connection is unavailable.
@@ -1291,6 +1405,68 @@
     });
   }
 
+  function saveRecurringEventsViaRest(user, entries) {
+    var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
+    if (!config.databaseURL || !window.fetch || !user || !user.getIdToken) {
+      return Promise.reject(new Error("No se pudo iniciar el guardado autenticado de las repeticiones."));
+    }
+    var updates = {};
+    entries.forEach(function (entry) { updates[entry.id] = entry.payload; });
+    return user.getIdToken().then(function (idToken) {
+      var url = config.databaseURL.replace(/\/+$/, "") + "/users/" + encodeURIComponent(user.uid) + "/events.json?auth=" + encodeURIComponent(idToken);
+      return fetch(url, { method: "PATCH", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updates) });
+    }).then(function (response) {
+      if (!response.ok) { throw new Error("Firebase respondio HTTP " + response.status + " al guardar los eventos repetidos."); }
+    });
+  }
+
+  function saveRecurringEventsWithFallback(user, eventsRef, entries) {
+    if (!firebaseConnected) { return saveRecurringEventsViaRest(user, entries); }
+    var updates = {};
+    entries.forEach(function (entry) { updates[entry.id] = entry.payload; });
+    var fallbackTimer;
+    var httpsFallback = new Promise(function (resolve, reject) {
+      fallbackTimer = setTimeout(function () {
+        saveRecurringEventsViaRest(user, entries).then(resolve, reject);
+      }, 5000);
+    });
+    var realtimeSave = eventsRef.update(updates).catch(function (error) {
+      clearTimeout(fallbackTimer);
+      console.warn("[Agenda] Fallo la escritura agrupada en tiempo real; se usa HTTPS autenticado.", error);
+      return saveRecurringEventsViaRest(user, entries);
+    });
+    return Promise.race([realtimeSave, httpsFallback]).finally(function () { clearTimeout(fallbackTimer); });
+  }
+
+  function buildRecurringEntries(userEventsRef, firstId, payload, repeat) {
+    var entries = [];
+    var date = parseISODate(payload.date);
+    var originalDay = date.getDate();
+    for (var i = 0; i < 12; i += 1) {
+      if (i > 0) {
+        if (repeat === "weekly") {
+          date.setDate(date.getDate() + 7);
+        } else {
+          date.setDate(1);
+          date.setMonth(date.getMonth() + 1);
+          var lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+          date.setDate(Math.min(originalDay, lastDay));
+        }
+      }
+      var id = i === 0 ? firstId : userEventsRef.push().key;
+      entries.push({
+        id: id,
+        payload: Object.assign({}, payload, {
+          date: formatDateISO(date),
+          repeat: repeat,
+          seriesId: firstId,
+          occurrence: i + 1
+        })
+      });
+    }
+    return entries;
+  }
+
   function saveCalendarEvent(e) {
     e.preventDefault();
     var form = byId("event-form");
@@ -1303,6 +1479,7 @@
       start_time: form.elements.all_day.checked ? null : form.elements.start_time.value,
       end_time: form.elements.all_day.checked ? null : form.elements.end_time.value,
       notes: form.elements.notes.value.trim(),
+      category: form.elements.category.value || "personal",
       updatedAt: Date.now()
     };
 
@@ -1338,6 +1515,14 @@
     var editingId = eventEditingId;
     if (!editingId && !pendingEventId) { pendingEventId = userEventsRef.push().key; }
     var ref = userEventsRef.child(editingId || pendingEventId);
+    var repeat = form.elements.repeat.value;
+    if (!editingId && repeat !== "none" && !pendingRecurringEntries) {
+      pendingRecurringEntries = buildRecurringEntries(userEventsRef, pendingEventId, payload, repeat);
+    }
+    var recurringEntries = !editingId && repeat !== "none" ? pendingRecurringEntries : null;
+    var savePromise = recurringEntries
+      ? saveRecurringEventsWithFallback(user, userEventsRef, recurringEntries)
+      : saveEventWithFallback(user, ref, ref.key, payload);
     submitButton.disabled = true;
     submitButton.textContent = "Guardando...";
     var timeoutId;
@@ -1349,17 +1534,24 @@
         reject(error);
       }, 15000);
     });
-    Promise.race([saveEventWithFallback(user, ref, ref.key, payload), timeoutPromise]).then(function () {
+    Promise.race([savePromise, timeoutPromise]).then(function () {
       clearTimeout(timeoutId);
-      var savedEvent = Object.assign({ id: ref.key }, payload);
-      var existingIndex = calendarEvents.findIndex(function (event) { return event.id === ref.key; });
-      if (existingIndex >= 0) { calendarEvents[existingIndex] = savedEvent; }
-      else { calendarEvents.push(savedEvent); }
+      var savedEvents = recurringEntries
+        ? recurringEntries.map(function (entry) { return Object.assign({ id: entry.id }, entry.payload); })
+        : [Object.assign({ id: ref.key }, payload)];
+      savedEvents.forEach(function (savedEvent) {
+        var existingIndex = calendarEvents.findIndex(function (event) { return event.id === savedEvent.id; });
+        if (existingIndex >= 0) { calendarEvents[existingIndex] = savedEvent; }
+        else { calendarEvents.push(savedEvent); }
+      });
       renderCalendar();
       renderAgendaDay();
       renderTodayEvents();
-      recordActivity(editingId ? "Evento actualizado: " + payload.title : "Evento creado: " + payload.title, "ok", formatAgendaDate(payload.date) + (payload.all_day ? " · Todo el día" : " · " + payload.start_time));
+      var activityAction = recurringEntries ? "Serie de eventos creada: " + payload.title : (editingId ? "Evento actualizado: " + payload.title : "Evento creado: " + payload.title);
+      var activityDetails = recurringEntries ? "12 repeticiones " + (repeat === "weekly" ? "semanales" : "mensuales") : formatAgendaDate(payload.date) + (payload.all_day ? " - todo el dia" : " - " + payload.start_time);
+      recordActivity(activityAction, "ok", activityDetails);
       pendingEventId = null;
+      pendingRecurringEntries = null;
       closeEventForm();
     }).catch(function (err) {
       clearTimeout(timeoutId);
@@ -1549,6 +1741,36 @@
     if (head) {
       head.textContent = formatAgendaDate(selectedAgendaDate, { weekday: "long", day: "numeric", month: "long" });
     }
+    renderUpcomingAgenda();
+  }
+
+  function renderUpcomingAgenda() {
+    var list = byId("upcoming-agenda-list");
+    if (!list) { return; }
+    while (list.firstChild) { list.removeChild(list.firstChild); }
+    var today = formatDateISO(new Date());
+    var items = calendarEvents.filter(function (ev) { return ev && ev.date >= today && ev.title; });
+    Object.keys(holidaysByDate).forEach(function (date) {
+      if (date >= today) { items.push({ id: "holiday-" + date, date: date, title: holidaysByDate[date], category: "holiday", all_day: true }); }
+    });
+    items.sort(function (a, b) {
+      var dayOrder = a.date.localeCompare(b.date);
+      return dayOrder || String(a.start_time || "").localeCompare(String(b.start_time || ""));
+    });
+    if (!items.length) {
+      list.appendChild(createTextElement("p", "event-empty", "No hay proximos eventos. Los nuevos eventos aparecen aqui."));
+      return;
+    }
+    items.slice(0, 8).forEach(function (ev) {
+      var row = createTextElement("article", "upcoming-agenda-row");
+      row.appendChild(createTextElement("time", "upcoming-agenda-date", formatAgendaDate(ev.date, { weekday: "short", day: "numeric", month: "short" })));
+      var copy = createTextElement("div", "upcoming-agenda-copy");
+      copy.appendChild(createTextElement("strong", "", ev.title));
+      var time = ev.all_day ? "Todo el d\u00eda" : (ev.start_time || "Sin hora");
+      copy.appendChild(createTextElement("span", "", ev.category === "holiday" ? "Feriado nacional" : time));
+      row.appendChild(copy);
+      list.appendChild(row);
+    });
   }
 
   function renderTodayEvents() {
@@ -1597,6 +1819,9 @@
       title.textContent = ev.title;
       title.addEventListener("click", function () { openEventForm(ev); });
       copy.appendChild(title);
+      var category = ev.category || "personal";
+      var categoryLabels = { personal: "Personal", hogar: "Hogar", salud: "Salud", trabajo: "Trabajo", otro: "Otro" };
+      copy.appendChild(createTextElement("span", "event-category category-" + category, categoryLabels[category] || "Personal"));
 
       if (ev.end_time) { copy.appendChild(createTextElement("span", "event-end-time", "Hasta " + ev.end_time)); }
       if (ev.notes) { copy.appendChild(createTextElement("p", "", ev.notes)); }
@@ -1626,6 +1851,10 @@
   }
 
   function initializeAgenda() {
+    var repeatSelect = document.querySelector("#event-form select[name='repeat']");
+    if (repeatSelect) {
+      repeatSelect.addEventListener("change", function () { pendingRecurringEntries = null; });
+    }
     Array.prototype.forEach.call(document.querySelectorAll("[data-open-agenda]"), function (btn) {
       btn.addEventListener("click", function () {
         selectedAgendaDate = formatDateISO(new Date());
@@ -2221,7 +2450,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=63").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=64").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -2336,7 +2565,8 @@
         await withTimeout(savePushTokenWithFallback(currentUser, db.ref("pushTokens/" + currentUser.uid + "/" + tokenKey), tokenKey, {
           token: token,
           updatedAt: Date.now(),
-          platform: navigator.userAgent
+          platform: navigator.userAgent,
+          device: currentDeviceLabel()
         }), 15000, "No se pudo guardar el dispositivo en 15 segundos, ni por Realtime Database ni por HTTPS.");
 
         if (!foregroundMessageBound) {
@@ -2954,8 +3184,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v63";
-    byId("script-build-version").textContent = "JS v63";
+    byId("frontend-version").textContent = "HTML v64";
+    byId("script-build-version").textContent = "JS v64";
 
     initializeConfirmDialog();
     initializeTabs();
@@ -2970,6 +3200,7 @@
     renderGate();
     renderSystemStatus();
     setInterval(refreshGatewayFreshness, 5000);
+    setInterval(updateSharedStateFreshnessUI, 30000);
     renderMedia();
 
     updateClock();

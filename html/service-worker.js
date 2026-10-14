@@ -46,16 +46,16 @@ self.addEventListener("notificationclick", function (event) {
 });
 
 var CACHE_PREFIX = "smart-panel-shell-";
-var CACHE_NAME = CACHE_PREFIX + "63";
+var CACHE_NAME = CACHE_PREFIX + "64";
 var STATIC_FILES = [
   "/",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
-  "/css/styles.css?v=63",
-  "/js/firebase-config.js?v=63",
-  "/js/app.js?v=63"
+  "/css/styles.css?v=64",
+  "/js/firebase-config.js?v=64",
+  "/js/app.js?v=64"
 ];
 
 self.addEventListener("install", function (event) {
