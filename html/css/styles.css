@@ -2076,3 +2076,5 @@ button:disabled { filter: saturate(.65); }
   .api-logout { padding-inline: 7px; }
   .version-reader { font-size: 9px; }
 }
+
+.forecast-icon .ui-icon { width: 24px; height: 24px; margin: 0 auto; }

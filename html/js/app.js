@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "67";
+  var APP_BUILD_VERSION = "68";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -1070,10 +1070,10 @@
         if (!passInput) { return; }
         if (passInput.type === "password") {
           passInput.type = "text";
-          if (icon) { icon.replaceChildren(svgIcon("eyeoff")); }
+          if (icon) { icon.textContent = ""; icon.appendChild(svgIcon("eyeoff")); }
         } else {
           passInput.type = "password";
-          if (icon) { icon.replaceChildren(svgIcon("eye")); }
+          if (icon) { icon.textContent = ""; icon.appendChild(svgIcon("eye")); }
         }
       });
     }
@@ -1215,7 +1215,7 @@
       "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_mean" +
       "&forecast_days=7&timezone=auto";
 
-    fetch(url)
+    fetch(url, { cache: "no-store" })
       .then(function (res) {
         if (!res.ok) { throw new Error("HTTP " + res.status); }
         return res.json();
@@ -1224,13 +1224,12 @@
         if (!data.current || !data.daily) { throw new Error("Datos incompletos"); }
         applyWeatherData(data, "Actualizado");
         try { window.localStorage.setItem(WEATHER_STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
+        if (refreshBtn) { refreshBtn.disabled = false; }
       })
       .catch(function (err) {
         console.warn("[Weather] Error al consultar Open-Meteo:", err);
-        if (status) { status.textContent = "Error al actualizar"; }
-        loadCachedWeather();
-      })
-      .finally(function () {
+        var hasCached = loadCachedWeather();
+        if (status) { status.textContent = hasCached ? "Sin conexion: datos guardados" : "No se pudo actualizar"; }
         if (refreshBtn) { refreshBtn.disabled = false; }
       });
   }
@@ -1251,7 +1250,9 @@
 
     byId("weather-temperature").textContent = Math.round(current.temperature_2m) + "°";
     byId("weather-description").textContent = summary[0];
-    byId("weather-symbol").replaceChildren(svgIcon(summary[1], "ui-icon"));
+    var weatherIcon = byId("weather-symbol");
+    weatherIcon.textContent = "";
+    weatherIcon.appendChild(svgIcon(summary[1], "ui-icon"));
     byId("weather-high").textContent = Math.round(daily.temperature_2m_max[0]) + "°";
     byId("weather-low").textContent = Math.round(daily.temperature_2m_min[0]) + "°";
     var updatedAt = current.time && current.time.indexOf("T") >= 0 ? current.time.split("T")[1].slice(0, 5) : "";
@@ -1269,9 +1270,11 @@
         var data = JSON.parse(cached);
         if (data && data.current && data.daily) {
           applyWeatherData(data, "Datos guardados");
+          return true;
         }
       }
     } catch (e) {}
+    return false;
   }
 
   function renderForecast(daily) {
@@ -1286,7 +1289,10 @@
       var item = document.createElement("div");
       item.className = "forecast-item";
       item.appendChild(createTextElement("span", "forecast-time", dayName));
-      item.appendChild(createTextElement("span", "forecast-icon", summary[1]));
+      var forecastIcon = document.createElement("span");
+      forecastIcon.className = "forecast-icon";
+      forecastIcon.appendChild(svgIcon(summary[1], "ui-icon"));
+      item.appendChild(forecastIcon);
       item.appendChild(createTextElement("span", "forecast-temperature", Math.round(daily.temperature_2m_max[i]) + "° / " + Math.round(daily.temperature_2m_min[i]) + "°"));
 
       var rain = daily.precipitation_probability_mean && typeof daily.precipitation_probability_mean[i] === "number" ? daily.precipitation_probability_mean[i] : null;
@@ -1656,7 +1662,7 @@
       if (eyebrowEl) { eyebrowEl.textContent = options.eyebrow || "CONFIRMAR ACCIÓN"; }
       if (confirmBtn) { confirmBtn.textContent = options.confirmText || "Eliminar"; }
       if (cancelBtn) { cancelBtn.textContent = options.cancelText || "Cancelar"; }
-      if (iconEl) { iconEl.replaceChildren(svgIcon("trash")); }
+      if (iconEl) { iconEl.textContent = ""; iconEl.appendChild(svgIcon("trash")); }
 
       modal.hidden = false;
       if (cancelBtn) { cancelBtn.focus(); }
@@ -2515,7 +2521,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=67").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=68").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -3254,7 +3260,7 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v67";
+    byId("frontend-version").textContent = "HTML v68";
     byId("script-build-version").textContent = "JS v65";
 
     initializeConfirmDialog();

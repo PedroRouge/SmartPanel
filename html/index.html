@@ -11,19 +11,19 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="67">
+  <meta name="smart-panel-version" content="68">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=67">
+  <link rel="stylesheet" href="css/styles.css?v=68">
   <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js" defer></script>
-  <script src="js/firebase-config.js?v=67" defer></script>
-  <script src="js/app.js?v=67" defer></script>
+  <script src="js/firebase-config.js?v=68" defer></script>
+  <script src="js/app.js?v=68" defer></script>
 </head>
 <body>
   <script>
@@ -41,7 +41,7 @@
     if ('caches' in window) {
       caches.keys().then(function(keys) {
         keys.forEach(function(key) {
-          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-67') {
+          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-68') {
             caches.delete(key);
           }
         });
@@ -54,7 +54,7 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v67</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v68</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
       <div class="home-quick-status" aria-label="Estado actual de la casa">
         <span class="quick-status-item" title="Conexi&#243;n con el ESP32"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h4l2 3 4-6 2 3h4"/><path d="M7 7h.01M17 17h.01"/></svg><i class="status-dot is-checking" id="quick-esp-dot"></i><span id="quick-esp">ESP32</span></span>
         <span class="quick-status-item" title="Luces encendidas"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M8.2 14.5a7 7 0 1 1 7.6 0c-.9.6-1.3 1.4-1.5 2.5h-4.6c-.2-1.1-.6-1.9-1.5-2.5Z"/></svg><strong id="quick-lights">0</strong></span>
@@ -107,7 +107,7 @@
                 <p class="eyebrow" id="weather-location">AFUERA</p>
                 <h2 id="weather-heading">Clima</h2>
               </div>
-              <button class="weather-refresh" id="weather-refresh" type="button" aria-label="Actualizar clima">↻</button>
+              <button class="weather-refresh" id="weather-refresh" type="button" aria-label="Actualizar clima"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.5 9a7 7 0 0 1 11.7-2L20 12M4 12l2.8 6a7 7 0 0 0 11.7-2"/></svg></button>
             </div>
             <div class="weather-reading"><span class="weather-symbol" id="weather-symbol" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .4-8A6 6 0 0 0 6 9a4.5 4.5 0 0 0 1 9Z"/></svg></span><span id="weather-temperature">--°</span><span class="weather-description" id="weather-description">Consultando Open-Meteo...</span></div>
             <div class="weather-details">
@@ -200,7 +200,7 @@
       <section class="view" id="panel-multimedia" role="tabpanel" aria-labelledby="tab-multimedia" data-panel="multimedia" hidden>
         <div class="page-heading"><p class="eyebrow">ENTRETENIMIENTO</p><h1>Multimedia</h1><p>Selecciona un televisor para abrir sus controles.</p></div>
         <section class="tv-section" aria-labelledby="tv-list-heading">
-          <div class="section-heading"><div><p class="eyebrow">DISPOSITIVOS</p><h2 id="tv-list-heading">Televisores</h2></div><button class="weather-refresh" id="tv-refresh" type="button" aria-label="Buscar televisores">↻</button></div>
+          <div class="section-heading"><div><p class="eyebrow">DISPOSITIVOS</p><h2 id="tv-list-heading">Televisores</h2></div><button class="weather-refresh" id="tv-refresh" type="button" aria-label="Buscar televisores"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.5 9a7 7 0 0 1 11.7-2L20 12M4 12l2.8 6a7 7 0 0 0 11.7-2"/></svg></button></div>
           <p class="tv-api-status" id="tv-api-status" aria-live="polite">Conectando con ESP32-S3 y Firebase...</p>
           <div class="tv-list" id="tv-list" aria-live="polite"></div>
           <div class="tv-list-empty panel-surface" id="tv-list-empty" hidden>No hay televisores detectados.</div>
