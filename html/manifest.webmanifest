@@ -5,10 +5,11 @@
   "description": "Panel de control del hogar",
   "start_url": "/#inicio",
   "scope": "/",
+  "display_override": ["window-controls-overlay", "standalone"],
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0b0f19",
-  "theme_color": "#0b0f19",
+  "background_color": "#090e17",
+  "theme_color": "#090e17",
   "icons": [
     {
       "src": "/icons/icon-192.png",
