@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "47";
+  var APP_BUILD_VERSION = "48";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -47,6 +47,8 @@
   var listenersAttached = false;
   var activeFirebaseRefs = [];
   var activeEventsRef = null;
+  var agendaRestSyncTimer = null;
+  var agendaRestSyncBusy = false;
   var lastRenderedDay = ""; // PERF-03: sólo actualizar date-line cuando cambia el día
 
   var TV_DEVICES = [
@@ -252,47 +254,44 @@
     var user = auth && auth.currentUser;
     if (!user) { return; }
     activeEventsRef = db.ref("users/" + user.uid + "/events");
+    function renderUserEvents(snapshot) { renderUserEventsData(snapshot.val(), user); }
+    var usingLegacyFallback = false;
+    function onEventsError(error) {
+      console.error("[Agenda] Error leyendo los eventos del usuario:", error);
+      if (!auth || !auth.currentUser || auth.currentUser.uid !== user.uid) { return; }
+      if (!usingLegacyFallback && user.email === "pedrorouge2022@gmail.com" && error.code === "PERMISSION_DENIED") {
+        usingLegacyFallback = true;
+        activeEventsRef.off();
+        activeEventsRef = db.ref("home/events");
+        activeEventsRef.on("value", renderUserEvents, onEventsError);
+        activeFirebaseRefs.push(activeEventsRef);
+      }
+    }
+    // The agenda listener must not wait for an optional legacy migration read.
+    activeEventsRef.on("value", renderUserEvents, onEventsError);
+    activeFirebaseRefs.push(activeEventsRef);
+    readUserEventsViaRest(user).catch(function (error) {
+      console.warn("[Agenda] La lectura HTTPS inicial no estuvo disponible:", error);
+    });
+    if (agendaRestSyncTimer) { clearInterval(agendaRestSyncTimer); }
+    agendaRestSyncTimer = setInterval(function () {
+      if (!firebaseConnected && !agendaRestSyncBusy && auth && auth.currentUser && auth.currentUser.uid === user.uid) {
+        agendaRestSyncBusy = true;
+        readUserEventsViaRest(user).catch(function (error) {
+          console.warn("[Agenda] No se pudo sincronizar la agenda por HTTPS:", error);
+        }).finally(function () { agendaRestSyncBusy = false; });
+      }
+    }, 15000);
     migrateLegacyEvents(user).catch(function (error) {
       console.warn("[Agenda] No se pudieron copiar eventos antiguos:", error);
-    }).then(function () {
-      if (!auth || !auth.currentUser || auth.currentUser.uid !== user.uid) { return; }
-      function renderUserEvents(snapshot) {
-        var eventsData = snapshot.val();
-        calendarEvents = [];
-        if (eventsData && typeof eventsData === "object") {
-          Object.keys(eventsData).forEach(function (id) {
-            var ev = eventsData[id];
-            if (ev && typeof ev === "object") {
-              calendarEvents.push(Object.assign({ id: id }, ev));
-            }
-          });
-        }
-        renderCalendar();
-        renderAgendaDay();
-        renderTodayEvents();
-        if (typeof checkAgendaNotifications === "function") { checkAgendaNotifications(); }
-      }
-      var usingLegacyFallback = false;
-      function onEventsError(error) {
-        console.error("[Agenda] Error leyendo los eventos del usuario:", error);
-        if (!auth || !auth.currentUser || auth.currentUser.uid !== user.uid) { return; }
-        // Mantiene la agenda histórica operativa mientras se publican las reglas nuevas.
-        if (!usingLegacyFallback && user.email === "pedrorouge2022@gmail.com" && error.code === "PERMISSION_DENIED") {
-          usingLegacyFallback = true;
-          activeEventsRef.off();
-          activeEventsRef = db.ref("home/events");
-          activeEventsRef.on("value", renderUserEvents, onEventsError);
-          activeFirebaseRefs.push(activeEventsRef);
-        }
-      }
-      activeEventsRef.on("value", renderUserEvents, onEventsError);
-      activeFirebaseRefs.push(activeEventsRef);
     });
   }
 
   function detachFirebaseListeners() {
     activeFirebaseRefs.forEach(function (ref) { ref.off(); });
     activeFirebaseRefs = [];
+    if (agendaRestSyncTimer) { clearInterval(agendaRestSyncTimer); agendaRestSyncTimer = null; }
+    agendaRestSyncBusy = false;
     activeEventsRef = null;
     listenersAttached = false;
     calendarEvents = [];
@@ -309,8 +308,44 @@
       if (snapshots[0].exists() || !snapshots[1].exists()) { return; }
       var legacyEvents = snapshots[1].val();
       if (!legacyEvents || typeof legacyEvents !== "object") { return; }
-      return destination.set(legacyEvents);
+      return destination.transaction(function (currentEvents) {
+        var mergedEvents = Object.assign({}, legacyEvents);
+        if (currentEvents && typeof currentEvents === "object") {
+          Object.keys(currentEvents).forEach(function (id) { mergedEvents[id] = currentEvents[id]; });
+        }
+        return mergedEvents;
+      });
     });
+  }
+
+  function renderUserEventsData(eventsData, user) {
+    if (!auth || !auth.currentUser || auth.currentUser.uid !== user.uid) { return; }
+    calendarEvents = [];
+    if (eventsData && typeof eventsData === "object") {
+      Object.keys(eventsData).forEach(function (id) {
+        var ev = eventsData[id];
+        if (ev && typeof ev === "object") { calendarEvents.push(Object.assign({ id: id }, ev)); }
+      });
+    }
+    renderCalendar();
+    renderAgendaDay();
+    renderTodayEvents();
+    if (typeof checkAgendaNotifications === "function") { checkAgendaNotifications(); }
+  }
+
+  function readUserEventsViaRest(user) {
+    var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
+    if (!config.databaseURL || !user || !user.getIdToken) {
+      return Promise.reject(new Error("No se pudo iniciar la lectura autenticada de la agenda."));
+    }
+    return user.getIdToken().then(function (idToken) {
+      var baseUrl = config.databaseURL.replace(/\/+$/, "");
+      var path = "/users/" + encodeURIComponent(user.uid) + "/events.json";
+      return fetch(baseUrl + path + "?auth=" + encodeURIComponent(idToken), { cache: "no-store" });
+    }).then(function (response) {
+      if (!response.ok) { throw new Error("Firebase respondió HTTP " + response.status + " al leer la agenda."); }
+      return response.json();
+    }).then(function (eventsData) { renderUserEventsData(eventsData, user); });
   }
 
   function updateGatewayStatusUI(isOnline, text) {
@@ -1659,6 +1694,30 @@
     }
   }
 
+  async function getFcmTokenWithRecovery(messaging, registration, vapidKey) {
+    try {
+      return await messaging.getToken({ vapidKey: vapidKey, serviceWorkerRegistration: registration });
+    } catch (firstError) {
+      console.warn("[FCM] Falló el primer registro; limpiando el token/suscripción local antes de reintentar.", firstError);
+      try { await messaging.deleteToken(); } catch (deleteError) {
+        console.warn("[FCM] Firebase no pudo borrar el token anterior; se continuará con limpieza local.", deleteError);
+      }
+      try {
+        var subscription = await registration.pushManager.getSubscription();
+        if (subscription) { await subscription.unsubscribe(); }
+      } catch (unsubscribeError) {
+        console.warn("[FCM] No se pudo limpiar la suscripción Push anterior.", unsubscribeError);
+      }
+      await new Promise(function (resolve) { setTimeout(resolve, 800); });
+      try {
+        return await messaging.getToken({ vapidKey: vapidKey, serviceWorkerRegistration: registration });
+      } catch (retryError) {
+        retryError.firstRegistrationError = firstError && (firstError.code || firstError.message);
+        throw retryError;
+      }
+    }
+  }
+
   function initializePWA() {
     var installButton = byId("pwa-install");
     window.addEventListener("beforeinstallprompt", function (e) {
@@ -1685,7 +1744,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=47").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=48").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -1759,7 +1818,7 @@
             if (staleSubscription) { await staleSubscription.unsubscribe(); }
           }
         }
-        var token = await messaging.getToken({ vapidKey: config.vapidKey, serviceWorkerRegistration: registration });
+        var token = await getFcmTokenWithRecovery(messaging, registration, config.vapidKey);
         if (!token) { throw new Error("Firebase no devolvio un token para este dispositivo."); }
 
         var currentUser = auth.currentUser;
@@ -2371,8 +2430,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v47";
-    byId("script-build-version").textContent = "JS v47";
+    byId("frontend-version").textContent = "HTML v48";
+    byId("script-build-version").textContent = "JS v48";
 
     initializeConfirmDialog();
     initializeTabs();
