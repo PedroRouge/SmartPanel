@@ -1778,3 +1778,65 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .calendar-panel { padding: 12px; }
   .agenda-day-panel { padding: 16px; }
 }
+
+/* Small interaction details across the control surfaces */
+.device-card.is-on {
+  border-color: rgba(242,199,125,.22);
+  background: linear-gradient(115deg, rgba(242,199,125,.07), transparent 58%), var(--surface);
+}
+.state-switch:hover .switch-track { border-color: rgba(116,224,202,.42); }
+.state-switch[aria-checked="true"] .switch-track {
+  border-color: rgba(116,224,202,.65);
+  background: rgba(116,224,202,.3);
+  box-shadow: 0 0 16px rgba(116,224,202,.12);
+}
+.state-switch[aria-checked="true"] .switch-thumb { box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+.gate-panel {
+  border-color: rgba(116,224,202,.15);
+  background: radial-gradient(ellipse at 100% 0%, rgba(116,224,202,.08), transparent 65%), var(--surface);
+}
+.gate-button { min-height: 58px; box-shadow: inset 0 1px rgba(255,255,255,.035); }
+.gate-button:active, .tv-power-button:active, .state-switch:active { transform: scale(.98); }
+.pool-art {
+  border-color: rgba(105,190,220,.17);
+  background: repeating-linear-gradient(0deg, transparent 0, transparent 15px, rgba(105,190,220,.1) 16px, transparent 17px), linear-gradient(120deg, rgba(50,126,155,.2), rgba(24,45,67,.22));
+}
+.temperature-rule { height: 3px; border-radius: 999px; box-shadow: 0 0 14px rgba(115,188,224,.3); }
+.calendar-day:focus-visible { z-index: 1; }
+.event-row { border-color: rgba(170,192,220,.1); }
+.event-actions { opacity: .82; transition: opacity .15s ease; }
+.event-row:hover .event-actions, .event-actions:focus-within { opacity: 1; }
+.event-action { border-radius: 10px; background: rgba(255,255,255,.025); }
+.event-empty {
+  padding: 16px;
+  border: 1px dashed rgba(170,192,220,.14);
+  border-radius: 13px;
+  background: rgba(255,255,255,.018);
+  text-align: center;
+}
+.forecast-item { transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+.forecast-item:hover { transform: translateY(-2px); border-color: rgba(116,224,202,.2); background: rgba(116,224,202,.045); }
+.app-link { min-height: 62px; border-color: rgba(170,192,220,.1); background: linear-gradient(135deg, rgba(255,255,255,.035), transparent), var(--surface); }
+.tv-device.is-selected { box-shadow: inset 0 0 0 1px rgba(116,224,202,.06), 0 8px 22px rgba(0,0,0,.13); }
+.camera-caption { min-height: 72px; }
+.camera-remove { border-radius: 11px; background: rgba(255,255,255,.025); }
+.notif-toast { border-radius: 16px; box-shadow: 0 16px 44px rgba(0,0,0,.35), inset 0 1px rgba(255,255,255,.035); }
+.notif-toast.notif-agenda { border-color: rgba(116,224,202,.27); }
+.notif-toast.notif-important { border-color: rgba(242,199,125,.28); }
+.notif-toast.notif-alert { border-color: rgba(255,133,133,.28); }
+.notif-item.is-unread { background: rgba(255,255,255,.035); border-color: rgba(170,192,220,.17); }
+.notif-clear-btn, .notif-panel-close { min-height: 38px; border-radius: 10px; }
+.notif-item-dismiss { border-radius: 8px; }
+button:disabled { filter: saturate(.65); }
+
+@media (max-width: 700px) {
+  .device-card { min-height: 88px; }
+  .gate-panel, .pool-motor, .water-temperature { padding: 18px; }
+  .event-row { gap: 9px; }
+  .notif-toast { gap: 10px; padding: 13px; }
+}
+
+@media (hover: none) {
+  .device-card:hover, .tv-device:hover, .app-link:hover, .forecast-item:hover { transform: none; }
+  .event-actions { opacity: 1; }
+}
