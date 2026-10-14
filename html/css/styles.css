@@ -150,6 +150,20 @@ a { color: inherit; text-decoration: none; }
 }
 .notif-bell-badge.has-unread { display: block; }
 
+.push-enable-button {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgba(102, 214, 195, .28);
+  border-radius: 10px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.push-enable-button:disabled { opacity: .7; cursor: default; }
+
 .status-dot.is-checking { background: var(--amber); box-shadow: none; }
 .status-dot.is-error { background: var(--red); box-shadow: none; }
 .status-dot.is-online { background: var(--teal); }
@@ -1372,7 +1386,45 @@ h3 { margin-bottom: 5px; font-size: 14px; font-weight: 650; }
    RESPONSIVE: MOBILE SMALL (max 440px)
 ======================================================= */
 @media (max-width: 440px) {
-  .version-reader { max-width: 36%; font-size: 8px; margin-left: 4px; padding: 2px 5px; }
+  .app-shell { width: calc(100% - 20px); }
+  .topbar { gap: 6px; min-height: 58px; }
+  .brand { gap: 6px; font-size: 13px; }
+  .brand-mark { width: 27px; height: 27px; }
+  .version-reader { max-width: 30%; margin-left: 0; font-size: 8px; }
+  .topbar-actions { gap: 4px; }
+  .session-user { display: none; }
+  .push-enable-button { width: 38px; min-height: 38px; overflow: hidden; padding: 0 5px; font-size: 0; }
+  .push-enable-button:before { content: "🔔"; font-size: 15px; }
+  .notif-bell-btn { width: 36px; height: 36px; }
+  .tab-bar { top: 58px; margin: 0 -10px; padding: 7px 10px; gap: 5px; }
+  .tab-button { min-width: 63px; min-height: 46px; padding: 0 9px; gap: 4px; font-size: 11px; }
+  .main-content { padding-top: 18px; }
+  .welcome-row { align-items: flex-start; gap: 8px; }
+  .home-indicator { font-size: 10px; white-space: nowrap; }
+  h1 { font-size: clamp(21px, 6vw, 26px); }
+  .clock-panel, .weather-panel, .summary-panel, .forecast-panel { padding: 16px; }
+  .clock { font-size: clamp(48px, 15vw, 62px); }
+  .weather-reading { gap: 7px; flex-wrap: wrap; }
+  .weather-reading #weather-temperature { font-size: 36px; }
+  .weather-description { max-width: none; flex-basis: 100%; }
+  .section-heading { gap: 8px; }
+  .section-heading .secondary-button { padding: 0 9px; font-size: 11px; }
+  .page-heading { gap: 12px; }
+  .device-grid, .camera-grid, .app-grid, .tv-list { grid-template-columns: minmax(0, 1fr); }
+  .device-card, .media-control { min-width: 0; padding: 15px; }
+  .calendar-toolbar { grid-template-columns: 36px minmax(0, 1fr) 36px; }
+  .calendar-today { grid-column: 1 / -1; min-height: 34px; }
+  .calendar-weekdays, .calendar-grid { gap: 1px; }
+  .calendar-day { min-height: 0; aspect-ratio: 1; font-size: 11px; }
+  .calendar-day.has-events:after { bottom: 3px; width: 4px; height: 4px; right: calc(50% - 2px); }
+  .event-actions { flex-direction: row; flex-wrap: wrap; }
+  .form-actions { flex-wrap: wrap; }
+  .form-actions > button { flex: 1 1 auto; }
+  .pool-layout { grid-template-columns: minmax(0, 1fr); }
+  .notif-toast-container { padding-bottom: env(safe-area-inset-bottom); }
+  .notif-panel { padding-bottom: env(safe-area-inset-bottom); }
+  .app-footer { gap: 8px; font-size: 9px; }
+
   .api-logout { padding: 0 6px; font-size: 9px; }
   .pwa-install-button { width: 38px; flex: 0 0 38px; padding: 0; }
   .pwa-install-button > span:last-child { display: none; }
@@ -1393,6 +1445,12 @@ h3 { margin-bottom: 5px; font-size: 14px; font-weight: 650; }
 
   /* Notif panel mobile: full width */
   .notif-panel { width: 100%; }
+}
+
+@media (min-width: 441px) and (max-width: 599px) {
+  .app-shell { width: calc(100% - 32px); }
+  .device-grid, .camera-grid, .tv-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .calendar-today { min-height: 38px; }
 }
 
 /* =======================================================

@@ -1,0 +1,4 @@
+{
+  "functions": { "source": "functions" },
+  "database": { "rules": "firebase_rules.json" }
+}

@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "35";
+  var APP_BUILD_VERSION = "36";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -13,6 +13,7 @@
   var state = readState();
   var db = null;
   var auth = null;
+  var pushWorkerRegistration = null;
   var firebaseConnected = false;
   var apiAuthenticated = false;
   var currentUsername = "";
@@ -1516,10 +1517,65 @@
     }
 
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/service-worker.js?v=33").then(function (reg) {
+      navigator.serviceWorker.register("/service-worker.js?v=36").then(function (reg) {
+        pushWorkerRegistration = reg;
         reg.update().catch(function () {});
+        initializePushNotifications();
       }).catch(function () {});
     }
+  }
+
+  // El permiso se solicita solo tras una acción explícita del usuario.
+  function initializePushNotifications() {
+    var button = byId("push-enable");
+    if (!button) { return; }
+    if (window.Notification && Notification.permission === "granted") {
+      button.textContent = "Completar activación";
+    }
+    button.addEventListener("click", async function () {
+      if (!window.Notification || !navigator.serviceWorker || !firebase.messaging) {
+        button.textContent = "Push no disponible";
+        return;
+      }
+      if (!auth || !auth.currentUser || !db) {
+        button.textContent = "Iniciá sesión primero";
+        return;
+      }
+      try {
+        var supported = await firebase.messaging.isSupported();
+        if (!supported) { button.textContent = "Push no compatible"; return; }
+        var permission = Notification.permission;
+        if (permission !== "granted") { permission = await Notification.requestPermission(); }
+        if (permission !== "granted") {
+          button.textContent = "Permiso no concedido";
+          return;
+        }
+        var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
+        if (!config.vapidKey || config.vapidKey.indexOf("REEMPLAZAR") === 0) {
+          button.textContent = "Falta configurar VAPID";
+          return;
+        }
+        var registration = pushWorkerRegistration || await navigator.serviceWorker.ready;
+        var token = await firebase.messaging().getToken({ vapidKey: config.vapidKey, serviceWorkerRegistration: registration });
+        if (!token) { throw new Error("FCM no devolvió un token"); }
+        var tokenKey = encodeURIComponent(token);
+        await db.ref("pushTokens/" + auth.currentUser.uid + "/" + tokenKey).set({ token: token, updatedAt: Date.now(), platform: navigator.userAgent });
+        button.textContent = "Avisos activos";
+        button.disabled = true;
+        firebase.messaging().onMessage(function (payload) {
+          var n = payload.notification || payload.data || {};
+          addNotification("agenda", "🔔", "AVISO PUSH", n.title || "Smart Panel", n.body || "Tenés una actualización.");
+          registration.showNotification(n.title || "Smart Panel", {
+            body: n.body || "Tenés una actualización.",
+            icon: "/icons/icon-192.png",
+            data: { url: (payload.fcmOptions && payload.fcmOptions.link) || "/#agenda" }
+          });
+        });
+      } catch (error) {
+        console.error("[FCM] No se pudo activar push:", error);
+        button.textContent = "No se pudo activar";
+      }
+    });
   }
 
   // =====================================================================
@@ -2041,8 +2097,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v35";
-    byId("script-build-version").textContent = "JS v35";
+    byId("frontend-version").textContent = "HTML v36";
+    byId("script-build-version").textContent = "JS v36";
 
     initializeConfirmDialog();
     initializeTabs();

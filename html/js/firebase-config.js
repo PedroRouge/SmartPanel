@@ -11,6 +11,7 @@
     messagingSenderId: "1085885262056",
     appId: "1:1085885262056:web:90373760572ff556f1015d",
     measurementId: "G-Y99C1G3J4F",
+    vapidKey: "BoyXIPOR-LiIe33vfBlH4xiSvOyDeiEucCoeeA5q3u7Rw3GSSFrTui29lirBFrUbwaj2XWTBRtH4iBaWQlw-w2g",
     authDefaultDomain: "smartpanel.local"
   };
 
