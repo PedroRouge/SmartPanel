@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "37";
+  var APP_BUILD_VERSION = "47";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -797,6 +797,58 @@
     pendingEventId = null;
   }
 
+  // HTTPS fallback for browsers where the RTDB live connection is unavailable.
+  // Firebase Auth's ID token still enforces the same per-user database rules.
+  function saveEventViaRest(user, eventId, payload) {
+    var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
+    if (!config.databaseURL || !window.fetch || !user.getIdToken) {
+      return Promise.reject(new Error("No se pudo iniciar el guardado HTTPS de Firebase."));
+    }
+    return user.getIdToken().then(function (idToken) {
+      var baseUrl = config.databaseURL.replace(/\/+$/, "");
+      var path = "/users/" + encodeURIComponent(user.uid) + "/events/" + encodeURIComponent(eventId) + ".json";
+      // Firebase Auth ID tokens authenticate RTDB REST requests via auth=.
+      return fetch(baseUrl + path + "?auth=" + encodeURIComponent(idToken), {
+        method: "PUT",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    }).then(function (response) {
+      return response.text().then(function (body) {
+        var data = null;
+        try { data = body ? JSON.parse(body) : null; } catch (e) {}
+        if (!response.ok) {
+          throw new Error((data && data.error) || ("Firebase respondió HTTP " + response.status + "."));
+        }
+        return data;
+      });
+    });
+  }
+
+  function saveEventWithFallback(user, ref, eventId, payload) {
+    if (!firebaseConnected) {
+      console.warn("[Agenda] RTDB no marcó conexión en tiempo real; guardando por HTTPS autenticado.");
+      return saveEventViaRest(user, eventId, payload);
+    }
+
+    var fallbackTimer;
+    var httpsFallback = new Promise(function (resolve, reject) {
+      fallbackTimer = setTimeout(function () {
+        console.warn("[Agenda] RTDB no confirmó el guardado; intentando HTTPS autenticado.");
+        saveEventViaRest(user, eventId, payload).then(resolve, reject);
+      }, 5000);
+    });
+    var realtimeSave = ref.set(payload).catch(function (realtimeError) {
+      clearTimeout(fallbackTimer);
+      console.warn("[Agenda] Falló el guardado en tiempo real; intentando HTTPS autenticado.", realtimeError);
+      return saveEventViaRest(user, eventId, payload);
+    });
+    return Promise.race([realtimeSave, httpsFallback]).finally(function () {
+      clearTimeout(fallbackTimer);
+    });
+  }
+
   function saveCalendarEvent(e) {
     e.preventDefault();
     var form = byId("event-form");
@@ -838,12 +890,6 @@
       errorEl.hidden = false;
       return;
     }
-    if (!firebaseConnected) {
-      errorEl.textContent = "Firebase no tiene conexión en este momento. Revisa internet y vuelve a intentar; el evento no se envio.";
-      errorEl.hidden = false;
-      return;
-    }
-
     // Resolve the private path from Firebase Auth for every operation. Do not
     // rely on a listener reference that can be stale or not initialized yet.
     var userEventsRef = db.ref("users/" + user.uid + "/events");
@@ -861,8 +907,15 @@
         reject(error);
       }, 15000);
     });
-    Promise.race([ref.set(payload), timeoutPromise]).then(function () {
+    Promise.race([saveEventWithFallback(user, ref, ref.key, payload), timeoutPromise]).then(function () {
       clearTimeout(timeoutId);
+      var savedEvent = Object.assign({ id: ref.key }, payload);
+      var existingIndex = calendarEvents.findIndex(function (event) { return event.id === ref.key; });
+      if (existingIndex >= 0) { calendarEvents[existingIndex] = savedEvent; }
+      else { calendarEvents.push(savedEvent); }
+      renderCalendar();
+      renderAgendaDay();
+      renderTodayEvents();
       pendingEventId = null;
       closeEventForm();
     }).catch(function (err) {
@@ -1583,6 +1636,29 @@
     button.title = detail || label;
   }
 
+  function subscriptionUsesVapidKey(subscription, vapidKey) {
+    try {
+      var encoded = vapidKey.replace(/-/g, "+").replace(/_/g, "/");
+      while (encoded.length % 4) { encoded += "="; }
+      var decoded = atob(encoded);
+      var expected = new Uint8Array(decoded.length);
+      for (var i = 0; i < decoded.length; i++) { expected[i] = decoded.charCodeAt(i); }
+      var currentKey = subscription && subscription.options && subscription.options.applicationServerKey;
+      if (!currentKey) { return false; }
+      var actual = currentKey instanceof ArrayBuffer
+        ? new Uint8Array(currentKey)
+        : new Uint8Array(currentKey.buffer, currentKey.byteOffset, currentKey.byteLength);
+      if (actual.length !== expected.length) { return false; }
+      for (var j = 0; j < expected.length; j++) {
+        if (actual[j] !== expected[j]) { return false; }
+      }
+      return true;
+    } catch (error) {
+      console.warn("[FCM] No se pudo verificar la clave de la suscripción Push actual.", error);
+      return false;
+    }
+  }
+
   function initializePWA() {
     var installButton = byId("pwa-install");
     window.addEventListener("beforeinstallprompt", function (e) {
@@ -1609,7 +1685,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=46").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=47").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -1672,6 +1748,17 @@
         if (!registration) { throw new Error("No se pudo iniciar el Service Worker de notificaciones."); }
         pushWorkerRegistration = registration;
         var messaging = firebase.messaging();
+        var existingSubscription = await registration.pushManager.getSubscription();
+        if (existingSubscription && !subscriptionUsesVapidKey(existingSubscription, config.vapidKey)) {
+          console.info("[FCM] Eliminando la suscripción Push anterior, creada con otra clave VAPID.");
+          try {
+            await messaging.deleteToken();
+          } catch (deleteError) {
+            console.warn("[FCM] No se pudo borrar el token FCM previo; se eliminará la suscripción local.", deleteError);
+            var staleSubscription = await registration.pushManager.getSubscription();
+            if (staleSubscription) { await staleSubscription.unsubscribe(); }
+          }
+        }
         var token = await messaging.getToken({ vapidKey: config.vapidKey, serviceWorkerRegistration: registration });
         if (!token) { throw new Error("Firebase no devolvio un token para este dispositivo."); }
 
@@ -2284,8 +2371,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v46";
-    byId("script-build-version").textContent = "JS v46";
+    byId("frontend-version").textContent = "HTML v47";
+    byId("script-build-version").textContent = "JS v47";
 
     initializeConfirmDialog();
     initializeTabs();
