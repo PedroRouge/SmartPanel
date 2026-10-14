@@ -792,6 +792,8 @@
   function saveCalendarEvent(e) {
     e.preventDefault();
     var form = byId("event-form");
+    var submitButton = byId("event-submit");
+    var errorEl = byId("event-form-error");
     var payload = {
       title: form.elements.title.value.trim(),
       date: form.elements.date.value,
@@ -802,27 +804,51 @@
       updatedAt: Date.now()
     };
 
+    errorEl.hidden = true;
     if (!payload.title) {
-      byId("event-form-error").textContent = "Escribe un título para el evento.";
-      byId("event-form-error").hidden = false;
+      errorEl.textContent = "Escribe un titulo para el evento.";
+      errorEl.hidden = false;
+      form.elements.title.focus();
+      return;
+    }
+    if (!payload.date) {
+      errorEl.textContent = "Selecciona una fecha para el evento.";
+      errorEl.hidden = false;
+      form.elements.date.focus();
+      return;
+    }
+    if (!payload.all_day && !payload.start_time) {
+      errorEl.textContent = "Selecciona una hora de inicio o marca 'Todo el dia'.";
+      errorEl.hidden = false;
+      form.elements.start_time.focus();
       return;
     }
 
-    if (db && apiAuthenticated && activeEventsRef) {
-      var ref = eventEditingId ? activeEventsRef.child(eventEditingId) : activeEventsRef.push();
-      ref.set(payload).then(function () {
-        closeEventForm();
-      }).catch(function (err) {
-        console.error("Error guardando evento en Firebase:", err);
-        var detail = err.code ? " (" + err.code + ")" : "";
-        var uid = auth && auth.currentUser ? auth.currentUser.uid : "{uid}";
-        byId("event-form-error").textContent = "No se pudo guardar en Firebase" + detail + ": " + err.message + ". Revisa los permisos de users/" + uid + "/events.";
-        byId("event-form-error").hidden = false;
-      });
-    } else {
-      byId("event-form-error").textContent = "Iniciá sesión para guardar eventos en tu agenda.";
-      byId("event-form-error").hidden = false;
+    var user = auth && auth.currentUser;
+    if (!db || !user) {
+      errorEl.textContent = "La sesion de Firebase no esta activa. Inicia sesion nuevamente para guardar.";
+      errorEl.hidden = false;
+      return;
     }
+
+    // Resolve the private path from Firebase Auth for every operation. Do not
+    // rely on a listener reference that can be stale or not initialized yet.
+    var userEventsRef = db.ref("users/" + user.uid + "/events");
+    var editingId = eventEditingId;
+    var ref = editingId ? userEventsRef.child(editingId) : userEventsRef.push();
+    submitButton.disabled = true;
+    submitButton.textContent = "Guardando...";
+    ref.set(payload).then(function () {
+      closeEventForm();
+    }).catch(function (err) {
+      console.error("Error guardando evento en Firebase:", err);
+      var detail = err.code ? " (" + err.code + ")" : "";
+      errorEl.textContent = "No se pudo guardar" + detail + ": " + err.message;
+      errorEl.hidden = false;
+    }).finally(function () {
+      submitButton.disabled = false;
+      submitButton.textContent = editingId ? "Guardar cambios" : "Guardar evento";
+    });
   }
 
   // --- DIÁLOGO DE CONFIRMACIÓN MODAL PERSONALIZADO ---
@@ -1541,7 +1567,7 @@
     }
 
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/service-worker.js?v=40").then(function (reg) {
+      navigator.serviceWorker.register("/service-worker.js?v=41").then(function (reg) {
         pushWorkerRegistration = reg;
         reg.update().catch(function () {});
         initializePushNotifications();
@@ -2131,8 +2157,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v40";
-    byId("script-build-version").textContent = "JS v40";
+    byId("frontend-version").textContent = "HTML v41";
+    byId("script-build-version").textContent = "JS v41";
 
     initializeConfirmDialog();
     initializeTabs();
