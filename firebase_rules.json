@@ -2,29 +2,41 @@
   "rules": {
     "home": {
       "state": {
-        ".read":  "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || auth.token.email == 'esp32@smartpanel.local')",
-        ".write": "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || auth.token.email == 'esp32@smartpanel.local')"
+        ".read": "auth != null",
+        ".write": "auth != null && auth.token.email == 'esp32@smartpanel.local'"
       },
       "commands": {
-        ".read":  "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || auth.token.email == 'esp32@smartpanel.local')",
-        ".write": "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || auth.token.email == 'esp32@smartpanel.local')",
+        ".read": "auth != null",
+        ".write": "auth != null",
         "timestamp": {
           ".validate": "newData.isNumber() && newData.val() > 0"
         }
       },
       "gateway": {
         "status": {
-          ".read":  "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || auth.token.email == 'esp32@smartpanel.local')",
+          ".read": "auth != null",
           ".write": "auth != null && auth.token.email == 'esp32@smartpanel.local'"
         }
       },
       "tvs": {
-        ".read":  "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || auth.token.email == 'esp32@smartpanel.local')",
-        ".write": "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || auth.token.email == 'esp32@smartpanel.local')"
+        ".read": "auth != null",
+        ".write": "auth != null"
       },
       "events": {
-        ".read":  "auth != null && auth.token.email == 'pedrorouge2022@gmail.com'",
+        ".read": "auth != null && auth.token.email == 'pedrorouge2022@gmail.com'",
         ".write": "auth != null && auth.token.email == 'pedrorouge2022@gmail.com'"
+      },
+      "pushAlerts": {
+        ".read": false,
+        ".write": "auth != null && auth.token.email == 'esp32@smartpanel.local'"
+      }
+    },
+    "users": {
+      "$uid": {
+        "events": {
+          ".read": "auth != null && auth.uid == $uid",
+          ".write": "auth != null && auth.uid == $uid"
+        }
       }
     },
     "pushTokens": {

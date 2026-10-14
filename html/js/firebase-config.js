@@ -35,5 +35,10 @@
     customConfig = null;
   }
 
-  window.SMART_PANEL_FIREBASE_CONFIG = customConfig || window.SMART_PANEL_FIREBASE_CONFIG || DEFAULT_CONFIG;
+  window.SMART_PANEL_FIREBASE_CONFIG = Object.assign(
+    {},
+    DEFAULT_CONFIG,
+    window.SMART_PANEL_FIREBASE_CONFIG || {},
+    customConfig || {}
+  );
 })();

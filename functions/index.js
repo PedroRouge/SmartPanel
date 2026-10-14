@@ -25,16 +25,9 @@ function nextISO(iso) {
   return day.toISOString().slice(0, 10);
 }
 
-async function sendToAll(title, body) {
-  const snapshot = await db.ref("pushTokens").get();
-  const targets = [];
-  snapshot.forEach((userSnapshot) => userSnapshot.forEach((tokenSnapshot) => {
-    const value = tokenSnapshot.val();
-    if (value && value.token) targets.push({ token: value.token, path: tokenSnapshot.ref });
-  }));
-
-  for (let offset = 0; offset < targets.length; offset += 500) {
-    const batch = targets.slice(offset, offset + 500);
+async function sendToTokens(tokens, title, body) {
+  for (let offset = 0; offset < tokens.length; offset += 500) {
+    const batch = tokens.slice(offset, offset + 500);
     const result = await messaging.sendEachForMulticast({
       tokens: batch.map((target) => target.token),
       notification: { title, body },
@@ -51,30 +44,57 @@ async function sendToAll(title, body) {
   }
 }
 
+async function getTokensForUser(uid) {
+  const snapshot = await db.ref(`pushTokens/${uid}`).get();
+  const targets = [];
+  snapshot.forEach((tokenSnapshot) => {
+    const value = tokenSnapshot.val();
+    if (value && value.token) targets.push({ token: value.token, path: tokenSnapshot.ref });
+  });
+  return targets;
+}
+
+async function sendToUser(uid, title, body) {
+  return sendToTokens(await getTokensForUser(uid), title, body);
+}
+
+async function sendToAll(title, body) {
+  const snapshot = await db.ref("pushTokens").get();
+  const targets = [];
+  snapshot.forEach((userSnapshot) => userSnapshot.forEach((tokenSnapshot) => {
+    const value = tokenSnapshot.val();
+    if (value && value.token) targets.push({ token: value.token, path: tokenSnapshot.ref });
+  }));
+  return sendToTokens(targets, title, body);
+}
+
 exports.calendarPush = onSchedule({ schedule: "every 5 minutes", timeZone: TZ }, async () => {
   const now = new Date();
   const currentISO = localISO(now);
   const tomorrowISO = nextISO(currentISO);
   const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "2-digit", hourCycle: "h23" }).format(now));
-  const events = (await db.ref("home/events").get()).val() || {};
+  const users = (await db.ref("users").get()).val() || {};
 
-  for (const [id, event] of Object.entries(events)) {
-    if (!event || !event.title || !event.date) continue;
-    let kind = "";
-    if (event.date === tomorrowISO && hour >= 9) kind = "before";
-    if (event.date === currentISO && hour >= 7) kind = "today";
-    if (!kind) continue;
+  for (const [uid, userData] of Object.entries(users)) {
+    const events = userData && userData.events || {};
+    for (const [id, event] of Object.entries(events)) {
+      if (!event || !event.title || !event.date) continue;
+      let kind = "";
+      if (event.date === tomorrowISO && hour >= 9) kind = "before";
+      if (event.date === currentISO && hour >= 7) kind = "today";
+      if (!kind) continue;
 
-    const sentRef = db.ref(`pushSent/${kind}_${id}_${event.date}`);
-    const claim = await sentRef.transaction((value) => value ? undefined : { sentAt: Date.now() });
-    if (!claim.committed) continue;
-    const time = !event.all_day && event.start_time ? ` a las ${event.start_time}` : " (todo el día)";
-    const prefix = kind === "before" ? "Mañana" : "Hoy";
-    try {
-      await sendToAll(kind === "before" ? `Agenda · Mañana: ${event.title}` : `Agenda · Hoy: ${event.title}`, `${prefix}${time}`);
-    } catch (error) {
-      await sentRef.remove();
-      throw error;
+      const sentRef = db.ref(`pushSent/${uid}/${kind}_${id}_${event.date}`);
+      const claim = await sentRef.transaction((value) => value ? undefined : { sentAt: Date.now() });
+      if (!claim.committed) continue;
+      const time = !event.all_day && event.start_time ? ` a las ${event.start_time}` : " (todo el día)";
+      const prefix = kind === "before" ? "Mañana" : "Hoy";
+      try {
+        await sendToUser(uid, kind === "before" ? `Agenda · Mañana: ${event.title}` : `Agenda · Hoy: ${event.title}`, `${prefix}${time}`);
+      } catch (error) {
+        await sentRef.remove();
+        throw error;
+      }
     }
   }
 });

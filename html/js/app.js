@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "36";
+  var APP_BUILD_VERSION = "37";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -42,6 +42,8 @@
   var eventEditingId = null;
   var deferredInstallPrompt = null;
   var listenersAttached = false;
+  var activeFirebaseRefs = [];
+  var activeEventsRef = null;
   var lastRenderedDay = ""; // PERF-03: sólo actualizar date-line cuando cambia el día
 
   var TV_DEVICES = [
@@ -130,7 +132,7 @@
           } else {
             console.log("[Firebase Auth] Sesión no iniciada (acceso restringido por reglas).");
             apiAuthenticated = false;
-            listenersAttached = false;
+            detachFirebaseListeners();
             showAuthGate();
           }
         });
@@ -146,8 +148,15 @@
     listenersAttached = true;
     console.log("[Firebase] Conectando listeners en tiempo real con credenciales válidas...");
 
+    function listen(path, callback, onError) {
+      var ref = db.ref(path);
+      ref.on("value", callback, onError);
+      activeFirebaseRefs.push(ref);
+      return ref;
+    }
+
     // 1. Estado de Luces, Pileta y Portón en tiempo real
-    db.ref("home/state").on("value", function (snapshot) {
+    listen("home/state", function (snapshot) {
       var val = snapshot.val();
       if (!val) { return; }
 
@@ -174,7 +183,7 @@
     });
 
     // 2. Gateway ESP32-S3 Status (Heartbeat del hardware local)
-    db.ref("home/gateway/status").on("value", function (snapshot) {
+    listen("home/gateway/status", function (snapshot) {
       var gateway = snapshot.val();
       if (!gateway) {
         updateGatewayStatusUI(false, "ESP32 no detectado");
@@ -209,7 +218,7 @@
     });
 
     // 3. TVs en tiempo real
-    db.ref("home/tvs").on("value", function (snapshot) {
+    listen("home/tvs", function (snapshot) {
       var tvsData = snapshot.val();
       if (tvsData && typeof tvsData === "object") {
         var list = [];
@@ -232,23 +241,68 @@
       }
     });
 
-    // 4. Agenda / Eventos en tiempo real
-    db.ref("home/events").on("value", function (snapshot) {
-      var eventsData = snapshot.val();
-      calendarEvents = [];
-      if (eventsData && typeof eventsData === "object") {
-        Object.keys(eventsData).forEach(function (id) {
-          var ev = eventsData[id];
-          if (ev && typeof ev === "object") {
-            calendarEvents.push(Object.assign({ id: id }, ev));
-          }
-        });
+    // 4. Agenda privada, sincronizada entre todos los dispositivos del usuario.
+    var user = auth && auth.currentUser;
+    if (!user) { return; }
+    activeEventsRef = db.ref("users/" + user.uid + "/events");
+    migrateLegacyEvents(user).catch(function (error) {
+      console.warn("[Agenda] No se pudieron copiar eventos antiguos:", error);
+    }).then(function () {
+      if (!auth || !auth.currentUser || auth.currentUser.uid !== user.uid) { return; }
+      function renderUserEvents(snapshot) {
+        var eventsData = snapshot.val();
+        calendarEvents = [];
+        if (eventsData && typeof eventsData === "object") {
+          Object.keys(eventsData).forEach(function (id) {
+            var ev = eventsData[id];
+            if (ev && typeof ev === "object") {
+              calendarEvents.push(Object.assign({ id: id }, ev));
+            }
+          });
+        }
+        renderCalendar();
+        renderAgendaDay();
+        renderTodayEvents();
+        if (typeof checkAgendaNotifications === "function") { checkAgendaNotifications(); }
       }
-      renderCalendar();
-      renderAgendaDay();
-      renderTodayEvents();
-      // Verificar notificaciones de agenda cuando llegan los eventos
-      if (typeof checkAgendaNotifications === "function") { checkAgendaNotifications(); }
+      var usingLegacyFallback = false;
+      function onEventsError(error) {
+        console.error("[Agenda] Error leyendo los eventos del usuario:", error);
+        if (!auth || !auth.currentUser || auth.currentUser.uid !== user.uid) { return; }
+        // Mantiene la agenda histórica operativa mientras se publican las reglas nuevas.
+        if (!usingLegacyFallback && user.email === "pedrorouge2022@gmail.com" && error.code === "PERMISSION_DENIED") {
+          usingLegacyFallback = true;
+          activeEventsRef.off();
+          activeEventsRef = db.ref("home/events");
+          activeEventsRef.on("value", renderUserEvents, onEventsError);
+          activeFirebaseRefs.push(activeEventsRef);
+        }
+      }
+      activeEventsRef.on("value", renderUserEvents, onEventsError);
+      activeFirebaseRefs.push(activeEventsRef);
+    });
+  }
+
+  function detachFirebaseListeners() {
+    activeFirebaseRefs.forEach(function (ref) { ref.off(); });
+    activeFirebaseRefs = [];
+    activeEventsRef = null;
+    listenersAttached = false;
+    calendarEvents = [];
+    renderCalendar();
+    renderAgendaDay();
+    renderTodayEvents();
+  }
+
+  // La ruta antigua solo era accesible por su propietario histórico.
+  function migrateLegacyEvents(user) {
+    if (!user || user.email !== "pedrorouge2022@gmail.com") { return Promise.resolve(); }
+    var destination = db.ref("users/" + user.uid + "/events");
+    return Promise.all([destination.once("value"), db.ref("home/events").once("value")]).then(function (snapshots) {
+      if (snapshots[0].exists() || !snapshots[1].exists()) { return; }
+      var legacyEvents = snapshots[1].val();
+      if (!legacyEvents || typeof legacyEvents !== "object") { return; }
+      return destination.set(legacyEvents);
     });
   }
 
@@ -596,6 +650,10 @@
           submit.textContent = "Iniciar sesión";
           var msg = "Error al autenticar: " + error.message;
           if (error.code === "auth/wrong-password") { msg = "Contraseña incorrecta."; }
+          if (error.code === "auth/invalid-credential" || error.code === "auth/user-not-found") { msg = "Usuario/email o contraseña incorrectos."; }
+          if (error.code === "auth/unauthorized-domain") { msg = "Firebase bloqueó este dominio. Agrega smart-panel-beryl.vercel.app en Authentication → Settings → Authorized domains."; }
+          if (error.code === "auth/operation-not-allowed") { msg = "Habilita Email/Password en Firebase Authentication → Sign-in method."; }
+          if (error.code === "auth/network-request-failed") { msg = "No se pudo conectar con Firebase. Verifica internet y vuelve a intentar."; }
           if (error.code === "auth/too-many-requests") { msg = "Demasiados intentos. Espera unos minutos."; }
           errorEl.textContent = msg;
           errorEl.hidden = false;
@@ -607,7 +665,7 @@
       if (auth) {
         auth.signOut().then(function () {
           apiAuthenticated = false;
-          listenersAttached = false;
+          detachFirebaseListeners();
           showAuthGate("Sesión cerrada correctamente.");
         });
       } else {
@@ -792,8 +850,8 @@
       return;
     }
 
-    if (db && apiAuthenticated) {
-      var ref = eventEditingId ? db.ref("home/events/" + eventEditingId) : db.ref("home/events").push();
+    if (db && apiAuthenticated && activeEventsRef) {
+      var ref = eventEditingId ? activeEventsRef.child(eventEditingId) : activeEventsRef.push();
       ref.set(payload).then(function () {
         closeEventForm();
       }).catch(function (err) {
@@ -801,7 +859,8 @@
         byId("event-form-error").hidden = false;
       });
     } else {
-      closeEventForm();
+      byId("event-form-error").textContent = "Iniciá sesión para guardar eventos en tu agenda.";
+      byId("event-form-error").hidden = false;
     }
   }
 
@@ -874,8 +933,8 @@
     }).then(function (confirmed) {
       if (!confirmed) { return; }
       if (typeof onDeleted === "function") { onDeleted(); }
-      if (db && apiAuthenticated && eventData.id) {
-        db.ref("home/events/" + eventData.id).remove().catch(function (err) {
+      if (db && apiAuthenticated && activeEventsRef && eventData.id) {
+        activeEventsRef.child(eventData.id).remove().catch(function (err) {
           console.error("Error al eliminar evento:", err);
         });
       }
@@ -1517,11 +1576,18 @@
     }
 
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/service-worker.js?v=36").then(function (reg) {
+      navigator.serviceWorker.register("/service-worker.js?v=39").then(function (reg) {
         pushWorkerRegistration = reg;
         reg.update().catch(function () {});
         initializePushNotifications();
-      }).catch(function () {});
+      }).catch(function (error) {
+        console.error("[PWA] No se pudo registrar el Service Worker:", error);
+        var pushButton = byId("push-enable");
+        if (pushButton) {
+          pushButton.textContent = "Error del worker";
+          pushButton.title = error.message || String(error);
+        }
+      });
     }
   }
 
@@ -1573,7 +1639,10 @@
         });
       } catch (error) {
         console.error("[FCM] No se pudo activar push:", error);
-        button.textContent = "No se pudo activar";
+        var pushError = error.code || error.message || String(error);
+        button.textContent = pushError.indexOf("PERMISSION_DENIED") !== -1 ? "Reglas Firebase" : "Error push";
+        button.title = pushError;
+        addNotification("alert", "🔔", "ERROR DE NOTIFICACIONES", "No se pudo activar el push", pushError);
       }
     });
   }
@@ -2097,8 +2166,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v36";
-    byId("script-build-version").textContent = "JS v36";
+    byId("frontend-version").textContent = "HTML v39";
+    byId("script-build-version").textContent = "JS v39";
 
     initializeConfirmDialog();
     initializeTabs();
