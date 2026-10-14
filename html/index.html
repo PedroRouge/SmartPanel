@@ -16,13 +16,13 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=33">
+  <link rel="stylesheet" href="css/styles.css?v=34">
   <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" defer></script>
-  <script src="js/firebase-config.js?v=33" defer></script>
-  <script src="js/app.js?v=33" defer></script>
+  <script src="js/firebase-config.js?v=34" defer></script>
+  <script src="js/app.js?v=34" defer></script>
 </head>
 <body>
   <script>
@@ -37,7 +37,7 @@
     if ('caches' in window) {
       caches.keys().then(function(keys) {
         keys.forEach(function(key) {
-          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-33') {
+          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-34') {
             caches.delete(key);
           }
         });
@@ -50,7 +50,7 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span class="status-dot is-checking" id="backend-health-dot"></span><span id="frontend-version">HTML v33</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v34</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
       <button class="pwa-install-button" id="pwa-install" type="button" aria-label="Instalar Smart Panel" title="Instalar Smart Panel" hidden><span aria-hidden="true">⇩</span><span>Instalar</span></button>
       <span class="session-user" id="session-user" hidden></span>
       <button class="api-logout" id="api-logout" type="button" hidden>Cerrar sesión</button>
@@ -336,6 +336,25 @@
         </form>
       </section>
     </div>
+
+    <div class="confirm-modal" id="confirm-modal" hidden>
+      <div class="confirm-modal-backdrop" id="confirm-modal-backdrop"></div>
+      <section class="confirm-dialog panel-surface" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-message">
+        <div class="confirm-header">
+          <span class="confirm-icon" id="confirm-modal-icon" aria-hidden="true">🗑</span>
+          <div>
+            <p class="eyebrow" id="confirm-modal-eyebrow">AGENDA</p>
+            <h2 id="confirm-modal-title">¿Eliminar evento?</h2>
+          </div>
+        </div>
+        <p class="confirm-message" id="confirm-modal-message">¿Estás seguro de que deseas eliminar este evento? Esta acción no se puede deshacer.</p>
+        <div class="form-actions confirm-actions">
+          <button class="secondary-button" id="confirm-modal-cancel" type="button">Cancelar</button>
+          <button class="danger-button" id="confirm-modal-confirm" type="button">Eliminar</button>
+        </div>
+      </section>
+    </div>
+
     <footer class="app-footer"><span>SMART PANEL</span><span>CONTROL LOCAL · <span id="footer-time">--:--</span></span></footer>
   </div>
 </body>

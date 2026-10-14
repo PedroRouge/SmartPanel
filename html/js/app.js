@@ -181,15 +181,29 @@
       }
 
       var now = Date.now();
-      var lastSeen = gateway.last_seen || 0;
-      var diffSec = Math.round((now - lastSeen) / 1000);
-      var isRecent = diffSec < 45; // Heartbeat cada 15s
+      var lastSeen = Number(gateway.last_seen) || 0;
+      var diffSec = lastSeen > 0 ? Math.round((now - lastSeen) / 1000) : -1;
+      var isRecent = diffSec >= 0 && diffSec < 45; // Heartbeat cada 15s
 
       if (gateway.online && isRecent) {
         var info = "ESP32-S3 LAN (" + (gateway.ip || "Wi-Fi") + ") · " + (gateway.rssi ? gateway.rssi + "dBm" : "Online");
         updateGatewayStatusUI(true, info);
       } else {
-        updateGatewayStatusUI(false, "ESP32 offline · Últ. hace " + (diffSec > 0 ? diffSec + "s" : "desconocido"));
+        var timeText = "Sin conexión previa";
+        if (lastSeen > 0 && diffSec >= 0) {
+          if (diffSec < 60) {
+            timeText = "Últ. hace " + diffSec + "s";
+          } else if (diffSec < 3600) {
+            timeText = "Últ. hace " + Math.floor(diffSec / 60) + "m";
+          } else if (diffSec < 86400) {
+            timeText = "Últ. hace " + Math.floor(diffSec / 3600) + "h";
+          } else if (diffSec < 86400 * 30) {
+            timeText = "Últ. hace " + Math.floor(diffSec / 86400) + "d";
+          } else {
+            timeText = "Desconectado";
+          }
+        }
+        updateGatewayStatusUI(false, "ESP32 offline · " + timeText);
       }
     });
 
@@ -788,13 +802,81 @@
     }
   }
 
-  function deleteCalendarEvent(eventData) {
-    if (!window.confirm("¿Eliminar el evento “" + eventData.title + "”?")) { return; }
-    if (db && apiAuthenticated && eventData.id) {
-      db.ref("home/events/" + eventData.id).remove().catch(function (err) {
-        alert("Error al eliminar: " + err.message);
-      });
+  // --- DIÁLOGO DE CONFIRMACIÓN MODAL PERSONALIZADO ---
+  var confirmDialogState = null;
+
+  function showConfirmDialog(options) {
+    return new Promise(function (resolve) {
+      var modal = byId("confirm-modal");
+      var titleEl = byId("confirm-modal-title");
+      var msgEl = byId("confirm-modal-message");
+      var eyebrowEl = byId("confirm-modal-eyebrow");
+      var confirmBtn = byId("confirm-modal-confirm");
+      var cancelBtn = byId("confirm-modal-cancel");
+      var iconEl = byId("confirm-modal-icon");
+
+      if (!modal) {
+        resolve(window.confirm((options && options.message) || "¿Confirmar acción?"));
+        return;
+      }
+
+      confirmDialogState = { resolve: resolve };
+
+      if (titleEl) { titleEl.textContent = options.title || "¿Confirmar?"; }
+      if (msgEl) { msgEl.textContent = options.message || "¿Estás seguro de continuar?"; }
+      if (eyebrowEl) { eyebrowEl.textContent = options.eyebrow || "CONFIRMAR ACCIÓN"; }
+      if (confirmBtn) { confirmBtn.textContent = options.confirmText || "Eliminar"; }
+      if (cancelBtn) { cancelBtn.textContent = options.cancelText || "Cancelar"; }
+      if (iconEl && options.icon) { iconEl.textContent = options.icon; }
+
+      modal.hidden = false;
+      if (cancelBtn) { cancelBtn.focus(); }
+    });
+  }
+
+  function closeConfirmDialog(result) {
+    var modal = byId("confirm-modal");
+    if (modal) { modal.hidden = true; }
+    if (confirmDialogState && typeof confirmDialogState.resolve === "function") {
+      var resolveFn = confirmDialogState.resolve;
+      confirmDialogState = null;
+      resolveFn(Boolean(result));
     }
+  }
+
+  function initializeConfirmDialog() {
+    var confirmBtn = byId("confirm-modal-confirm");
+    var cancelBtn = byId("confirm-modal-cancel");
+    var backdrop = byId("confirm-modal-backdrop");
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener("click", function () { closeConfirmDialog(true); });
+    }
+    if (cancelBtn) {
+      cancelBtn.addEventListener("click", function () { closeConfirmDialog(false); });
+    }
+    if (backdrop) {
+      backdrop.addEventListener("click", function () { closeConfirmDialog(false); });
+    }
+  }
+
+  function deleteCalendarEvent(eventData, onDeleted) {
+    showConfirmDialog({
+      title: "¿Eliminar evento?",
+      message: "¿Estás seguro de que deseas eliminar el evento “" + (eventData.title || "Sin título") + "”? Esta acción no se puede deshacer.",
+      eyebrow: "AGENDA",
+      confirmText: "Eliminar",
+      cancelText: "Cancelar",
+      icon: "🗑"
+    }).then(function (confirmed) {
+      if (!confirmed) { return; }
+      if (typeof onDeleted === "function") { onDeleted(); }
+      if (db && apiAuthenticated && eventData.id) {
+        db.ref("home/events/" + eventData.id).remove().catch(function (err) {
+          console.error("Error al eliminar evento:", err);
+        });
+      }
+    });
   }
 
   function eventsForDate(dateValue) {
@@ -956,8 +1038,9 @@
     byId("event-delete").addEventListener("click", function () {
       var ev = calendarEvents.find(function (it) { return it.id === eventEditingId; });
       if (ev) {
-        closeEventForm();
-        deleteCalendarEvent(ev);
+        deleteCalendarEvent(ev, function () {
+          closeEventForm();
+        });
       }
     });
 
@@ -1144,10 +1227,19 @@
     remove.className = "camera-remove";
     remove.textContent = "×";
     remove.addEventListener("click", function () {
-      if (!window.confirm("¿Eliminar la cámara “" + camera.name + "”?")) { return; }
-      state.cameras = state.cameras.filter(function (c) { return c.id !== camera.id; });
-      saveState();
-      renderCameras();
+      showConfirmDialog({
+        title: "¿Eliminar cámara?",
+        message: "¿Estás seguro de que deseas eliminar la cámara “" + camera.name + "”? Dejará de mostrarse en este panel.",
+        eyebrow: "SEGURIDAD",
+        confirmText: "Eliminar",
+        cancelText: "Cancelar",
+        icon: "📷"
+      }).then(function (confirmed) {
+        if (!confirmed) { return; }
+        state.cameras = state.cameras.filter(function (c) { return c.id !== camera.id; });
+        saveState();
+        renderCameras();
+      });
     });
     actions.appendChild(remove);
     caption.appendChild(actions);
@@ -1299,6 +1391,11 @@
     // A11Y-02: Cerrar modales con tecla Escape
     window.addEventListener("keydown", function (e) {
       if (e.key === "Escape") {
+        var confirmModal = byId("confirm-modal");
+        if (confirmModal && !confirmModal.hidden) {
+          closeConfirmDialog(false);
+          return;
+        }
         var cameraModal = byId("camera-modal");
         var eventModal = byId("event-modal");
         if (cameraModal && !cameraModal.hidden) {
@@ -1424,9 +1521,10 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v33";
-    byId("script-build-version").textContent = "JS v33";
+    byId("frontend-version").textContent = "HTML v34";
+    byId("script-build-version").textContent = "JS v34";
 
+    initializeConfirmDialog();
     initializeTabs();
     initializePWA();
     initializeControls();
