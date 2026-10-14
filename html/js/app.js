@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "58";
+  var APP_BUILD_VERSION = "59";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -17,6 +17,12 @@
   var pushWorkerPromise = null;
   var foregroundMessageBound = false;
   var firebaseConnected = false;
+  var gatewayOnline = false;
+  var gatewayDetails = "Esperando heartbeat del ESP32";
+  var gatewayReportedOnline = false;
+  var gatewayLastSeen = 0;
+  var holidaysByDate = {};
+  var activityListenerRef = null;
   var apiAuthenticated = false;
   var currentUsername = "";
   var cameraCredentials = {};
@@ -110,7 +116,7 @@
     var config = window.SMART_PANEL_FIREBASE_CONFIG;
     if (!config || !window.firebase) {
       console.warn("[Firebase] SDK o configuración no disponibles aún.");
-      updateGatewayStatusUI(false, "Firebase no configurado");
+      renderSystemStatus();
       return;
     }
 
@@ -129,6 +135,7 @@
           firebaseConnected = isConnected;
           console.info("[Firebase] Realtime Database " + (isConnected ? "conectada" : "sin conexión"));
         }
+        renderSystemStatus();
       });
 
       // Observer de autenticación de Firebase
@@ -138,17 +145,21 @@
             console.log("[Firebase Auth] Usuario autenticado:", user.email || user.uid);
             var name = user.email ? user.email.split("@")[0] : "admin";
             acceptSession(name);
+            updateAccountStatus(user);
           } else {
             console.log("[Firebase Auth] Sesión no iniciada (acceso restringido por reglas).");
             apiAuthenticated = false;
             detachFirebaseListeners();
             showAuthGate();
+            updateAccountStatus(null);
           }
         });
       }
     } catch (error) {
       console.error("[Firebase] Error al inicializar:", error);
-      updateGatewayStatusUI(false, "Error Firebase: " + error.message);
+      firebaseConnected = false;
+      renderSystemStatus();
+      console.error("[Firebase] Estado de conexión: " + error.message);
     }
   }
 
@@ -187,6 +198,7 @@
       }
 
       saveState();
+      renderSystemStatus();
     }, function (error) {
       console.warn("[Firebase] Error al leer home/state (comprueba reglas):", error);
     });
@@ -195,17 +207,25 @@
     listen("home/gateway/status", function (snapshot) {
       var gateway = snapshot.val();
       if (!gateway) {
+        gatewayOnline = false;
+        gatewayReportedOnline = false;
+        gatewayLastSeen = 0;
+        gatewayDetails = "ESP32 no detectado";
         updateGatewayStatusUI(false, "ESP32 no detectado");
         return;
       }
 
       var now = Date.now();
       var lastSeen = Number(gateway.last_seen) || 0;
+      gatewayLastSeen = lastSeen;
+      gatewayReportedOnline = gateway.online === true;
       var diffSec = lastSeen > 0 ? Math.round((now - lastSeen) / 1000) : -1;
       var isRecent = diffSec >= 0 && diffSec < 45; // Heartbeat cada 15s
 
       if (gateway.online && isRecent) {
         var info = "ESP32-S3 LAN (" + (gateway.ip || "Wi-Fi") + ") · " + (gateway.rssi ? gateway.rssi + "dBm" : "Online");
+        gatewayOnline = true;
+        gatewayDetails = info;
         updateGatewayStatusUI(true, info);
       } else {
         var timeText = "Sin conexión previa";
@@ -222,6 +242,8 @@
             timeText = "Desconectado";
           }
         }
+        gatewayOnline = false;
+        gatewayDetails = "Último contacto: " + timeText;
         updateGatewayStatusUI(false, "ESP32 offline · " + timeText);
       }
     });
@@ -270,6 +292,12 @@
     // The agenda listener must not wait for an optional legacy migration read.
     activeEventsRef.on("value", renderUserEvents, onEventsError);
     activeFirebaseRefs.push(activeEventsRef);
+    activityListenerRef = db.ref("users/" + user.uid + "/activity");
+    activityListenerRef.on("value", renderActivity, function (error) {
+      console.warn("[Actividad] No se pudo leer el historial:", error);
+      renderActivity(null);
+    });
+    activeFirebaseRefs.push(activityListenerRef);
     readUserEventsViaRest(user).catch(function (error) {
       console.warn("[Agenda] La lectura HTTPS inicial no estuvo disponible:", error);
     });
@@ -293,8 +321,10 @@
     if (agendaRestSyncTimer) { clearInterval(agendaRestSyncTimer); agendaRestSyncTimer = null; }
     agendaRestSyncBusy = false;
     activeEventsRef = null;
+    activityListenerRef = null;
     listenersAttached = false;
     calendarEvents = [];
+    renderActivity(null);
     renderCalendar();
     renderAgendaDay();
     renderTodayEvents();
@@ -349,6 +379,7 @@
   }
 
   function updateGatewayStatusUI(isOnline, text) {
+    gatewayOnline = isOnline;
     var dot = byId("backend-health-dot");
     var label = byId("backend-version");
     if (dot) {
@@ -358,6 +389,98 @@
     if (label) {
       label.textContent = text;
     }
+    var detailDot = byId("detail-esp-dot");
+    var detailLabel = byId("detail-esp-status");
+    var detailMeta = byId("detail-esp-meta");
+    if (detailDot) { detailDot.classList.remove("is-checking", "is-online", "is-error"); detailDot.classList.add(isOnline ? "is-online" : "is-error"); }
+    if (detailLabel) { detailLabel.textContent = isOnline ? "Conectado" : "Desconectado"; }
+    if (detailMeta) { detailMeta.textContent = text; }
+    var quickDot = byId("quick-esp-dot");
+    var quickLabel = byId("quick-esp");
+    if (quickDot) { quickDot.classList.remove("is-checking", "is-online", "is-error"); quickDot.classList.add(isOnline ? "is-online" : "is-error"); }
+    if (quickLabel) { quickLabel.textContent = isOnline ? "ESP32" : "Offline"; }
+    renderSystemStatus();
+  }
+
+  function renderSystemStatus() {
+    var dot = byId("detail-firebase-dot");
+    var label = byId("detail-firebase-status");
+    if (dot) { dot.classList.remove("is-checking", "is-online", "is-error"); dot.classList.add(firebaseConnected ? "is-online" : "is-error"); }
+    if (label) { label.textContent = firebaseConnected ? "Conectado" : "Sin conexión"; }
+    var meta = byId("detail-firebase-meta");
+    if (meta) { meta.textContent = firebaseConnected ? "Realtime Database · sincronización activa" : "Realtime Database · esperando reconexión"; }
+    var lights = byId("quick-lights");
+    if (lights) { lights.textContent = String(Object.keys(state.lights).filter(function (key) { return state.lights[key] === true; }).length); }
+    var pool = byId("quick-pool");
+    if (pool) { pool.textContent = state.poolOn ? "Encendida" : "Apagada"; }
+    var poolDot = byId("quick-pool-dot");
+    if (poolDot) { poolDot.classList.remove("is-checking", "is-online", "is-error"); poolDot.classList.add(state.poolOn ? "is-online" : "is-error"); }
+    var gate = byId("quick-gate");
+    if (gate) { gate.textContent = state.gateOpen ? "Abierto" : "Cerrado"; }
+    var gateDot = byId("quick-gate-dot");
+    if (gateDot) { gateDot.classList.remove("is-checking", "is-online", "is-error"); gateDot.classList.add(state.gateOpen ? "is-error" : "is-online"); }
+  }
+
+  function updateAccountStatus(user) {
+    var dot = byId("detail-auth-dot");
+    var label = byId("detail-auth-status");
+    var meta = byId("detail-auth-meta");
+    if (dot) { dot.classList.remove("is-checking", "is-online", "is-error"); dot.classList.add(user ? "is-online" : "is-error"); }
+    if (label) { label.textContent = user ? "Sesión iniciada" : "Sin sesión"; }
+    if (meta) { meta.textContent = user ? (user.email || user.uid) : "Inicia sesión para sincronizar tus datos"; }
+  }
+
+  function refreshGatewayFreshness() {
+    if (!gatewayLastSeen || !gatewayReportedOnline) { return; }
+    var age = Math.max(0, Math.floor((Date.now() - gatewayLastSeen) / 1000));
+    var isOnline = age < 45;
+    if (isOnline === gatewayOnline) { return; }
+    if (isOnline) {
+      updateGatewayStatusUI(true, gatewayDetails);
+      return;
+    }
+    var ageText = age < 3600 ? Math.floor(age / 60) + "m" : Math.floor(age / 3600) + "h";
+    updateGatewayStatusUI(false, "ESP32 offline · Últ. hace " + ageText);
+  }
+
+  function currentDeviceLabel() {
+    var platform = navigator.userAgentData && navigator.userAgentData.platform || navigator.platform || "Dispositivo";
+    var ua = navigator.userAgent || "";
+    var browser = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Navegador";
+    return browser + " · " + platform;
+  }
+
+  function recordActivity(action, result, details) {
+    var user = auth && auth.currentUser;
+    if (!db || !user) { return; }
+    db.ref("users/" + user.uid + "/activity").push().set({
+      action: action, result: result, details: details || "", device: currentDeviceLabel(),
+      timestamp: firebase.database.ServerValue.TIMESTAMP
+    }).catch(function (error) { console.warn("[Actividad] No se pudo guardar el registro:", error); });
+  }
+
+  function renderActivity(snapshot) {
+    var list = byId("activity-list");
+    if (!list) { return; }
+    while (list.firstChild) { list.removeChild(list.firstChild); }
+    var data = snapshot && snapshot.val();
+    var entries = data ? Object.keys(data).map(function (id) { return data[id]; }).filter(function (entry) { return entry && typeof entry === "object"; }) : [];
+    entries.sort(function (a, b) { return Number(b.timestamp) - Number(a.timestamp); });
+    if (!entries.length) {
+      list.appendChild(createTextElement("p", "event-empty", auth && auth.currentUser ? "Todavía no hay actividad registrada." : "Inicia sesión para consultar la actividad."));
+      return;
+    }
+    entries.forEach(function (entry) {
+      var row = createTextElement("article", "activity-row");
+      row.appendChild(createTextElement("span", "activity-result-dot" + (entry.result === "ok" ? " is-ok" : " is-error"), entry.result === "ok" ? "✓" : "!"));
+      var copy = createTextElement("div", "activity-copy");
+      copy.appendChild(createTextElement("strong", "", entry.action || "Acción del sistema"));
+      if (entry.details) { copy.appendChild(createTextElement("span", "", entry.details)); }
+      row.appendChild(copy);
+      var when = Number(entry.timestamp) ? new Date(Number(entry.timestamp)).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "Ahora";
+      row.appendChild(createTextElement("span", "activity-meta", (entry.device || "Dispositivo desconocido") + " · " + when));
+      list.appendChild(row);
+    });
   }
 
   // Wait for the ESP32 to report the desired state; an initial read may be stale.
@@ -410,12 +533,15 @@
       state.lights[lightName] = confirmedState === true;
       saveState();
       renderLights();
+      var lightLabels = { living: "Living", kitchen: "Cocina", bedroom: "Dormitorio", garden: "Exterior" };
+      recordActivity("Luz " + (confirmedState ? "encendida" : "apagada") + ": " + (lightLabels[lightName] || lightName), "ok", gatewayOnline ? "Confirmado por el ESP32" : "Estado confirmado en Firebase");
     }).catch(function (error) {
       console.error("No se pudo enviar/confirmar el comando de luz:", error);
       if (card) { card.classList.remove("is-pending"); }
       state.lights[lightName] = prevState;
       saveState();
       renderLights();
+      recordActivity("Cambio de luz: " + lightName, "error", error.message);
       addNotification("alert", "⚠", "ERROR DE DISPOSITIVO", "No se pudo cambiar " + lightName, error.message);
     });
   }
@@ -445,12 +571,14 @@
       state.poolOn = confirmedState === true;
       saveState();
       renderPool();
+      recordActivity("Motor de pileta " + (confirmedState ? "encendido" : "apagado"), "ok", gatewayOnline ? "Confirmado por el ESP32" : "Estado confirmado en Firebase");
     }).catch(function (error) {
       console.error("No se pudo enviar/confirmar el comando de pileta:", error);
       if (toggle) { toggle.classList.remove("is-pending"); }
       state.poolOn = prevState;
       saveState();
       renderPool();
+      recordActivity("Cambio del motor de pileta", "error", error.message);
       addNotification("alert", "⚠", "ERROR DE DISPOSITIVO", "No se pudo cambiar la pileta", error.message);
     });
   }
@@ -483,6 +611,7 @@
       renderGate();
       feedbackEl.textContent = "Portón accionado correctamente.";
       button.disabled = false;
+      recordActivity("Portón " + (confirmedState ? "abierto" : "cerrado"), "ok", gatewayOnline ? "Confirmado por el ESP32" : "Estado confirmado en Firebase");
       setTimeout(function () { feedbackEl.textContent = ""; }, 4000);
     }).catch(function (error) {
       state.gateOpen = prevState;
@@ -490,6 +619,7 @@
       renderGate();
       feedbackEl.textContent = "Error: " + error.message;
       button.disabled = false;
+      recordActivity("Acción sobre el portón", "error", error.message);
       addNotification("alert", "⚠", "ERROR DE DISPOSITIVO", "No se pudo accionar el portón", error.message);
     });
   }
@@ -536,8 +666,10 @@
 
       db.ref().update(updates).then(function () {
         byId("media-feedback").textContent = tv.name + " · comando Wi-Fi enviado al ESP32.";
+        recordActivity("Comando multimedia: " + tv.name, "ok", "Orden enviada (" + action.replace(/_/g, " ") + "); ejecución física no confirmada");
       }).catch(function (err) {
         byId("media-feedback").textContent = "Error: " + err.message;
+        recordActivity("Comando multimedia: " + tv.name, "error", err.message);
       });
     } else {
       byId("media-feedback").textContent = tv.name + " · modo demo (inicia sesión para enviar comandos).";
@@ -1045,11 +1177,13 @@
       renderCalendar();
       renderAgendaDay();
       renderTodayEvents();
+      recordActivity(editingId ? "Evento actualizado: " + payload.title : "Evento creado: " + payload.title, "ok", formatAgendaDate(payload.date) + (payload.all_day ? " · Todo el día" : " · " + payload.start_time));
       pendingEventId = null;
       closeEventForm();
     }).catch(function (err) {
       clearTimeout(timeoutId);
       console.error("Error guardando evento en Firebase:", err);
+      recordActivity(editingId ? "No se pudo actualizar el evento: " + payload.title : "No se pudo crear el evento: " + payload.title, "error", err.message);
       var detail = err.code ? " (" + err.code + ")" : "";
       errorEl.textContent = "No se pudo guardar" + detail + ": " + err.message;
       errorEl.hidden = false;
@@ -1135,9 +1269,11 @@
           renderCalendar();
           renderAgendaDay();
           renderTodayEvents();
+          recordActivity("Evento eliminado: " + (eventData.title || "Evento"), "ok", formatAgendaDate(eventData.date));
           if (typeof onDeleted === "function") { onDeleted(); }
         }).catch(function (err) {
           console.error("Error al eliminar evento:", err);
+          recordActivity("No se pudo eliminar el evento: " + (eventData.title || "Evento"), "error", err.message);
           addNotification("alert", "⚠", "NO SE PUDO ELIMINAR", eventData.title || "Evento", err.message);
         });
       } else {
@@ -1151,6 +1287,30 @@
       if (a.all_day !== b.all_day) { return a.all_day ? -1 : 1; }
       return String(a.start_time || "").localeCompare(String(b.start_time || ""));
     });
+  }
+
+  function loadArgentinaHolidays(year) {
+    var cacheKey = "smart-panel-holidays-ar-v2-" + year;
+    try {
+      var cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
+      if (cached && Array.isArray(cached.items) && cached.items.length && Date.now() - cached.savedAt < 7 * 86400000) {
+        cached.items.forEach(function (holiday) { holidaysByDate[holiday.date] = holiday.name; });
+        renderCalendar(); renderAgendaDay(); renderTodayEvents();
+        return;
+      }
+    } catch (e) {}
+    fetch("https://date.nager.at/api/v3/PublicHolidays/" + year + "/AR", { cache: "force-cache" }).then(function (response) {
+      if (!response.ok) { throw new Error("HTTP " + response.status); }
+      return response.json();
+    }).then(function (holidays) {
+      if (!Array.isArray(holidays)) { return; }
+      var nationalHolidays = holidays.filter(function (holiday) { return holiday.date && holiday.localName && holiday.global === true; });
+      nationalHolidays.forEach(function (holiday) {
+        holidaysByDate[holiday.date] = holiday.localName;
+      });
+      try { localStorage.setItem(cacheKey, JSON.stringify({ savedAt: Date.now(), items: nationalHolidays.map(function (holiday) { return { date: holiday.date, name: holiday.localName }; }) })); } catch (e) {}
+      renderCalendar(); renderAgendaDay(); renderTodayEvents();
+    }).catch(function (error) { console.warn("[Agenda] No se pudieron cargar los feriados nacionales:", error); });
   }
 
   function renderCalendar() {
@@ -1172,6 +1332,7 @@
       day.setDate(start.getDate() + i);
       var dayISO = formatDateISO(day);
       var events = eventsForDate(dayISO);
+      var holidayName = holidaysByDate[dayISO];
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "calendar-day";
@@ -1180,14 +1341,17 @@
       if (dayISO === today) { btn.classList.add("is-today"); }
       if (dayISO === selectedAgendaDate) { btn.classList.add("is-selected"); }
       if (events.length) { btn.classList.add("has-events"); }
+      if (holidayName) { btn.classList.add("has-holiday"); btn.title = holidayName; }
 
       btn.textContent = String(day.getDate());
+      if (holidayName) { btn.setAttribute("aria-label", day.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" }) + " · Feriado: " + holidayName); }
       btn.addEventListener("click", (function (d) {
         return function () {
           selectedAgendaDate = d;
           var selDate = parseISODate(d);
           if (selDate.getMonth() !== calendarMonth.getMonth() || selDate.getFullYear() !== calendarMonth.getFullYear()) {
             calendarMonth = new Date(selDate.getFullYear(), selDate.getMonth(), 1);
+            loadArgentinaHolidays(calendarMonth.getFullYear());
           }
           renderCalendar();
           renderAgendaDay();
@@ -1218,12 +1382,24 @@
     while (list.firstChild) { list.removeChild(list.firstChild); }
 
     var events = eventsForDate(dateValue);
+    var holidayName = holidaysByDate[dateValue];
     if (status) {
       status.textContent = formatAgendaDate(dateValue, { weekday: "long", day: "numeric", month: "long" }) +
-        (events.length ? " · " + events.length + (events.length === 1 ? " evento" : " eventos") : "");
+        (events.length ? " · " + events.length + (events.length === 1 ? " evento" : " eventos") : "") +
+        (holidayName ? " · Feriado nacional" : "");
     }
 
-    if (!events.length) {
+    if (holidayName) {
+      var holidayRow = createTextElement("article", "event-row holiday-row");
+      holidayRow.appendChild(createTextElement("span", "event-time", "FERIADO"));
+      var holidayCopy = createTextElement("div", "event-copy");
+      holidayCopy.appendChild(createTextElement("strong", "holiday-title", holidayName));
+      holidayCopy.appendChild(createTextElement("span", "event-end-time", "Feriado nacional de Argentina"));
+      holidayRow.appendChild(holidayCopy);
+      list.appendChild(holidayRow);
+    }
+
+    if (!events.length && !holidayName) {
       list.appendChild(createTextElement("p", "event-empty", "No hay eventos para esta fecha."));
       return;
     }
@@ -1284,15 +1460,18 @@
     byId("new-event-for-day").addEventListener("click", function () { openEventForm(null); });
     byId("calendar-previous").addEventListener("click", function () {
       calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1);
+      loadArgentinaHolidays(calendarMonth.getFullYear());
       renderCalendar();
     });
     byId("calendar-next").addEventListener("click", function () {
       calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1);
+      loadArgentinaHolidays(calendarMonth.getFullYear());
       renderCalendar();
     });
     byId("calendar-today").addEventListener("click", function () {
       selectedAgendaDate = formatDateISO(new Date());
       calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+      loadArgentinaHolidays(calendarMonth.getFullYear());
       renderCalendar();
       renderAgendaDay();
     });
@@ -1320,6 +1499,7 @@
     });
 
     renderCalendar();
+    loadArgentinaHolidays(calendarMonth.getFullYear());
     renderAgendaDay();
     renderTodayEvents();
   }
@@ -1342,6 +1522,7 @@
     });
     byId("summary-lights").textContent = String(count);
     byId("lights-count").textContent = count + (count === 1 ? " encendida" : " encendidas");
+    renderSystemStatus();
   }
 
   function renderPool() {
@@ -1353,6 +1534,7 @@
     }
     byId("pool-description").textContent = state.poolOn ? "El motor está en funcionamiento (control Wi-Fi)." : "El motor está apagado.";
     byId("summary-pool").textContent = state.poolOn ? "Encendido" : "Apagado";
+    renderSystemStatus();
   }
 
   function renderGate() {
@@ -1360,6 +1542,7 @@
     byId("gate-button-label").textContent = state.gateOpen ? "Cerrar portón" : "Abrir portón";
     byId("gate-button").classList.toggle("is-open", state.gateOpen);
     byId("summary-gate").textContent = state.gateOpen ? "Abierto" : "Cerrado";
+    renderSystemStatus();
   }
 
   // --- MULTIMEDIA / TV ---
@@ -1865,7 +2048,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=58").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=59").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -2596,8 +2779,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v58";
-    byId("script-build-version").textContent = "JS v58";
+    byId("frontend-version").textContent = "HTML v59";
+    byId("script-build-version").textContent = "JS v59";
 
     initializeConfirmDialog();
     initializeTabs();
@@ -2610,6 +2793,8 @@
     renderLights();
     renderPool();
     renderGate();
+    renderSystemStatus();
+    setInterval(refreshGatewayFreshness, 5000);
     renderMedia();
 
     updateClock();

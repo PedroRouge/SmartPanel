@@ -383,6 +383,35 @@ h3 { margin-bottom: 5px; font-size: 14px; font-weight: 650; }
 .pool-icon { color: #73bce0; }
 .gate-icon { color: var(--teal); }
 
+/* Estado resumido en la barra superior */
+.home-quick-status { min-width: 0; display: flex; align-items: center; gap: 7px; overflow-x: auto; scrollbar-width: none; }
+.home-quick-status::-webkit-scrollbar { display: none; }
+.quick-status-item { min-height: 31px; display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; padding: 0 8px; border: 1px solid var(--surface-border); border-radius: 9px; background: rgba(255,255,255,.025); color: var(--muted); font-size: 10px; white-space: nowrap; }
+.quick-status-item > span:first-child { color: var(--teal); font-size: 14px; }
+.quick-status-item strong { color: var(--text); font-size: 11px; }
+.quick-status-item .status-dot { width: 6px; height: 6px; flex-basis: 6px; }
+
+/* Diagnóstico e historial */
+.system-status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.system-status-card { min-width: 0; padding: 18px; display: flex; align-items: flex-start; gap: 13px; }
+.system-status-icon { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; border: 1px solid rgba(102,214,195,.18); border-radius: 13px; background: var(--teal-soft); color: var(--teal); font-size: 20px; }
+.system-status-card .eyebrow { margin-bottom: 5px; }
+.system-status-card h2 { margin-bottom: 9px; }
+.system-status-value { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--text); font-size: 12px; font-weight: 650; }
+.system-status-meta { margin: 7px 0 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.activity-panel { margin-top: 16px; padding: 20px; }
+.activity-panel > .section-heading { margin-bottom: 5px; }
+.activity-retention { color: var(--quiet); font-size: 10px; white-space: nowrap; }
+.activity-description { margin: 0 0 10px; color: var(--muted); font-size: 11px; }
+.activity-list { display: grid; }
+.activity-row { min-width: 0; display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 12px 0; border-top: 1px solid var(--surface-border); }
+.activity-result-dot { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: rgba(237,121,121,.12); color: var(--red); font-size: 12px; font-weight: 800; }
+.activity-result-dot.is-ok { background: rgba(102,214,195,.12); color: var(--teal); }
+.activity-copy { min-width: 0; display: grid; gap: 3px; }
+.activity-copy strong { font-size: 12px; }
+.activity-copy > span { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.activity-meta { color: var(--quiet); font-size: 10px; text-align: right; }
+
 /* Forecast */
 .forecast-list {
   display: flex;
@@ -459,6 +488,12 @@ h3 { margin-bottom: 5px; font-size: 14px; font-weight: 650; }
 .calendar-weekdays, .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
 .calendar-weekdays { margin-bottom: 4px; color: var(--quiet); font-size: 10px; text-align: center; }
 .calendar-weekdays span { padding: 6px 0; }
+.calendar-legend { margin: 0 0 6px; color: var(--quiet); font-size: 10px; }
+.calendar-legend-dot { width: 7px; height: 7px; display: inline-block; margin-right: 4px; border-radius: 50%; background: var(--amber); }
+.calendar-day.has-holiday::before { content: ""; position: absolute; top: 7px; right: 7px; width: 5px; height: 5px; border-radius: 50%; background: var(--amber); }
+.holiday-row { border: 1px solid rgba(241,189,112,.18); border-radius: 11px; padding: 11px; background: rgba(241,189,112,.045); }
+.holiday-row + .event-row { margin-top: 5px; }
+.holiday-row .event-time, .holiday-title { color: var(--amber); }
 .calendar-day {
   position: relative;
   min-width: 0;
@@ -1457,6 +1492,23 @@ body.notifications-open { overflow: hidden; }
 
   /* Notif panel mobile: full width */
   .notif-panel { width: 100%; }
+}
+
+@media (max-width: 700px) {
+  .version-reader { display: none; }
+  .home-quick-status { flex: 1 1 auto; gap: 4px; }
+  .quick-status-item { min-height: 29px; gap: 4px; padding: 0 6px; font-size: 9px; }
+  .quick-status-item > span:first-child { font-size: 12px; }
+  .quick-status-item strong { font-size: 10px; }
+}
+
+@media (max-width: 599px) {
+  .system-status-grid { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+  .system-status-card { padding: 14px; }
+  .activity-panel { padding: 15px; }
+  .activity-row { grid-template-columns: 22px minmax(0, 1fr); }
+  .activity-meta { grid-column: 2; text-align: left; }
+  .activity-retention { font-size: 9px; }
 }
 
 @media (min-width: 441px) and (max-width: 599px) {

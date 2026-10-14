@@ -11,19 +11,19 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="58">
+  <meta name="smart-panel-version" content="59">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=58">
+  <link rel="stylesheet" href="css/styles.css?v=59">
   <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js" defer></script>
-  <script src="js/firebase-config.js?v=58" defer></script>
-  <script src="js/app.js?v=58" defer></script>
+  <script src="js/firebase-config.js?v=59" defer></script>
+  <script src="js/app.js?v=59" defer></script>
 </head>
 <body>
   <script>
@@ -41,7 +41,7 @@
     if ('caches' in window) {
       caches.keys().then(function(keys) {
         keys.forEach(function(key) {
-          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-58') {
+          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-59') {
             caches.delete(key);
           }
         });
@@ -55,6 +55,12 @@
         <span>Smart Panel</span>
       </a>
       <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v44</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
+      <div class="home-quick-status" aria-label="Estado actual de la casa">
+        <span class="quick-status-item" title="Conexión con el ESP32"><span aria-hidden="true">⌁</span><i class="status-dot is-checking" id="quick-esp-dot"></i><span id="quick-esp">ESP32</span></span>
+        <span class="quick-status-item" title="Luces encendidas"><span aria-hidden="true">✳</span><strong id="quick-lights">0</strong></span>
+        <span class="quick-status-item" title="Motor de pileta"><span aria-hidden="true">≈</span><i class="status-dot is-checking" id="quick-pool-dot"></i><span id="quick-pool">--</span></span>
+        <span class="quick-status-item" title="Portón"><span aria-hidden="true">⇧</span><i class="status-dot is-checking" id="quick-gate-dot"></i><span id="quick-gate">--</span></span>
+      </div>
       <div class="topbar-actions">
         <button class="push-enable-button" id="push-enable" type="button" aria-label="Activar notificaciones push">Activar avisos</button>
         <button class="notif-bell-btn" id="notif-bell" type="button" aria-label="Notificaciones" title="Notificaciones">
@@ -74,6 +80,7 @@
       <button class="tab-button" type="button" role="tab" id="tab-hogar" aria-controls="panel-hogar" aria-selected="false" data-tab="hogar" tabindex="-1"><span aria-hidden="true">⌂</span> Hogar</button>
       <button class="tab-button" type="button" role="tab" id="tab-pileta" aria-controls="panel-pileta" aria-selected="false" data-tab="pileta" tabindex="-1"><span aria-hidden="true">≈</span> Pileta</button>
       <button class="tab-button" type="button" role="tab" id="tab-camaras" aria-controls="panel-camaras" aria-selected="false" data-tab="camaras" tabindex="-1"><span aria-hidden="true">▧</span> Cámaras</button>
+      <button class="tab-button" type="button" role="tab" id="tab-estado" aria-controls="panel-estado" aria-selected="false" data-tab="estado" tabindex="-1"><span aria-hidden="true">ⓘ</span> Estado</button>
     </nav>
 
     <main class="main-content">
@@ -146,6 +153,17 @@
         </div>
       </section>
 
+      <section class="view" id="panel-estado" role="tabpanel" aria-labelledby="tab-estado" data-panel="estado" hidden>
+        <div class="page-heading"><p class="eyebrow">INFORMACIÓN DEL SISTEMA</p><h1>Estado</h1><p>Diagnóstico de conexión y actividad reciente. Esta sección es solo informativa.</p></div>
+        <section class="system-status-grid" aria-label="Conexiones del sistema">
+          <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true">⌁</span><div><p class="eyebrow">DOMÓTICA LOCAL</p><h2>ESP32</h2><p class="system-status-value"><i class="status-dot is-checking" id="detail-esp-dot"></i><span id="detail-esp-status">Esperando estado…</span></p><p class="system-status-meta" id="detail-esp-meta">Heartbeat del gateway</p></div></article>
+          <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true">☁</span><div><p class="eyebrow">BASE DE DATOS</p><h2>Firebase</h2><p class="system-status-value"><i class="status-dot is-checking" id="detail-firebase-dot"></i><span id="detail-firebase-status">Comprobando conexión…</span></p><p class="system-status-meta" id="detail-firebase-meta">Realtime Database</p></div></article>
+          <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true">▣</span><div><p class="eyebrow">FRONTEND</p><h2>Servidor web</h2><p class="system-status-value"><i class="status-dot is-online"></i><span>Disponible</span></p><p class="system-status-meta">Smart Panel cargado desde Vercel</p></div></article>
+          <article class="system-status-card panel-surface"><span class="system-status-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SESIÓN</p><h2>Cuenta</h2><p class="system-status-value"><i class="status-dot is-checking" id="detail-auth-dot"></i><span id="detail-auth-status">Comprobando sesión…</span></p><p class="system-status-meta" id="detail-auth-meta">Los datos de agenda son personales</p></div></article>
+        </section>
+        <section class="activity-panel panel-surface" aria-labelledby="activity-heading"><div class="section-heading"><div><p class="eyebrow">REGISTRO DE LA CUENTA</p><h2 id="activity-heading">Historial de actividad</h2></div><span class="activity-retention">Sincronizado entre dispositivos</span></div><p class="activity-description">Acciones del hogar y cambios de agenda, con su resultado y dispositivo de origen.</p><div class="activity-list" id="activity-list" aria-live="polite"><p class="event-empty">Inicia sesión para consultar la actividad.</p></div></section>
+      </section>
+
       <section class="view" id="panel-agenda" role="tabpanel" aria-labelledby="tab-agenda" data-panel="agenda" hidden>
         <div class="page-heading agenda-page-heading">
           <div><p class="eyebrow">PLANIFICACIÓN</p><h1>Agenda</h1><p>Eventos sincronizados en la nube en tiempo real.</p></div>
@@ -160,6 +178,7 @@
               <button class="calendar-today" id="calendar-today" type="button">Hoy</button>
             </div>
             <div class="calendar-weekdays" aria-hidden="true"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div>
+            <p class="calendar-legend"><span class="calendar-legend-dot"></span> Feriado nacional · Argentina</p>
             <div class="calendar-grid" id="calendar-grid" role="grid" aria-label="Días del mes"></div>
           </section>
           <section class="agenda-day-panel" aria-labelledby="agenda-day-heading">
