@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "50";
+  var APP_BUILD_VERSION = "51";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -906,6 +906,52 @@
     });
   }
 
+  function savePushTokenViaRest(user, tokenKey, payload) {
+    var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
+    if (!config.databaseURL || !window.fetch || !user || !user.getIdToken) {
+      return Promise.reject(new Error("No se pudo iniciar el guardado HTTPS del dispositivo."));
+    }
+    return user.getIdToken().then(function (idToken) {
+      var baseUrl = config.databaseURL.replace(/\/+$/, "");
+      var path = "/pushTokens/" + encodeURIComponent(user.uid) + "/" + encodeURIComponent(tokenKey) + ".json";
+      return fetch(baseUrl + path + "?auth=" + encodeURIComponent(idToken), {
+        method: "PUT",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    }).then(function (response) {
+      return response.text().then(function (body) {
+        var data = null;
+        try { data = body ? JSON.parse(body) : null; } catch (e) {}
+        if (!response.ok) { throw new Error((data && data.error) || ("Firebase respondió HTTP " + response.status + " al guardar el dispositivo.")); }
+      });
+    });
+  }
+
+  function savePushTokenWithFallback(user, ref, tokenKey, payload) {
+    if (!firebaseConnected) { return savePushTokenViaRest(user, tokenKey, payload); }
+    var timer;
+    var httpsFallback = new Promise(function (resolve, reject) {
+      timer = setTimeout(function () { savePushTokenViaRest(user, tokenKey, payload).then(resolve, reject); }, 4000);
+    });
+    var realtimeSave = ref.set(payload).catch(function (error) {
+      clearTimeout(timer);
+      console.warn("[FCM] No respondió el guardado RTDB del dispositivo; usando HTTPS autenticado.", error);
+      return savePushTokenViaRest(user, tokenKey, payload);
+    });
+    return Promise.race([realtimeSave, httpsFallback]).finally(function () { clearTimeout(timer); });
+  }
+
+  function clearStalePushErrors() {
+    notifications = notifications.filter(function (item) {
+      return !(item.type === "alert" && item.label === "ERROR DE NOTIFICACIONES" && item.title === "No se pudieron activar los avisos");
+    });
+    saveNotifications();
+    updateNotifBadge();
+    renderNotifPanel();
+  }
+
   function saveEventWithFallback(user, ref, eventId, payload) {
     if (!firebaseConnected) {
       console.warn("[Agenda] RTDB no marcó conexión en tiempo real; guardando por HTTPS autenticado.");
@@ -1795,7 +1841,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=50").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=51").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -1882,11 +1928,11 @@
 
         var currentUser = auth.currentUser;
         var tokenKey = encodeURIComponent(token);
-        await withTimeout(db.ref("pushTokens/" + currentUser.uid + "/" + tokenKey).set({
+        await withTimeout(savePushTokenWithFallback(currentUser, db.ref("pushTokens/" + currentUser.uid + "/" + tokenKey), tokenKey, {
           token: token,
           updatedAt: Date.now(),
           platform: navigator.userAgent
-        }), 15000, "Firebase tardó demasiado en guardar el dispositivo.");
+        }), 15000, "No se pudo guardar el dispositivo en 15 segundos, ni por Realtime Database ni por HTTPS.");
 
         if (!foregroundMessageBound) {
           foregroundMessageBound = true;
@@ -1898,14 +1944,13 @@
           });
         }
         setPushButtonState("active", "Dispositivo listo", "Permiso y registro FCM confirmados en este dispositivo.");
-        addNotification("important", "\uD83D\uDD14", "PRUEBA DE NOTIFICACIONES", "Dispositivo registrado", "Permiso y token guardados. Los recordatorios automaticos con la app cerrada requieren el servicio push del servidor.");
-        var nativeShown = await showNativeNotification("Smart Panel", "La notificacion de prueba llego correctamente.", "/#agenda", "smart-panel-test");
-        if (!nativeShown) { throw new Error("El navegador no pudo mostrar la notificacion nativa de prueba."); }
+        clearStalePushErrors();
+        addNotification("important", "\uD83D\uDD14", "NOTIFICACIONES", "Dispositivo registrado", "Este navegador quedó asociado a tu cuenta.");
       } catch (error) {
         console.error("[FCM] No se pudo activar push:", error);
         var detail = error.code ? error.code + ": " + error.message : error.message || String(error);
         if (error.name === "AbortError" && /push service|permission denied/i.test(error.message || "")) {
-          detail = "El navegador rechazó el registro en su servicio Push. Restablece el permiso de notificaciones de este sitio, cierra todas sus pestañas y vuelve a tocar Revisar avisos. Si persiste, prueba otro navegador actualizado en HTTPS.";
+          detail = "El permiso del sitio está concedido, pero el servicio Push del navegador rechazó registrar esta suscripción. Prueba sin VPN/proxy o desde otra red; el permiso visible del navegador no garantiza que el servicio Push acepte el registro.";
         }
         var blocked = Notification.permission === "denied";
         setPushButtonState(blocked ? "blocked" : "error", blocked ? "Avisos bloqueados" : "Reintentar avisos", detail);
@@ -2492,8 +2537,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v50";
-    byId("script-build-version").textContent = "JS v50";
+    byId("frontend-version").textContent = "HTML v51";
+    byId("script-build-version").textContent = "JS v51";
 
     initializeConfirmDialog();
     initializeTabs();
