@@ -14,6 +14,8 @@
   var db = null;
   var auth = null;
   var pushWorkerRegistration = null;
+  var pushWorkerPromise = null;
+  var foregroundMessageBound = false;
   var firebaseConnected = false;
   var apiAuthenticated = false;
   var currentUsername = "";
@@ -1548,6 +1550,15 @@
   }
 
 
+  function setPushButtonState(stateName, label, detail) {
+    var button = byId("push-enable");
+    if (!button) { return; }
+    button.dataset.pushState = stateName;
+    button.textContent = label;
+    button.setAttribute("aria-label", label);
+    button.title = detail || label;
+  }
+
   function initializePWA() {
     var installButton = byId("pwa-install");
     window.addEventListener("beforeinstallprompt", function (e) {
@@ -1566,74 +1577,112 @@
       });
     }
 
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/service-worker.js?v=41").then(function (reg) {
-        pushWorkerRegistration = reg;
-        reg.update().catch(function () {});
-        initializePushNotifications();
-      }).catch(function (error) {
-        console.error("[PWA] No se pudo registrar el Service Worker:", error);
-        var pushButton = byId("push-enable");
-        if (pushButton) {
-          pushButton.textContent = "Error del worker";
-          pushButton.title = error.message || String(error);
-        }
-      });
+    if (!("serviceWorker" in navigator)) {
+      setPushButtonState("unsupported", "Push no disponible", "Este navegador no admite Service Workers.");
+      return;
     }
+
+    // Bind the control immediately so a fast first click is not lost while the
+    // Service Worker is still installing.
+    initializePushNotifications();
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=43").then(function (reg) {
+      pushWorkerRegistration = reg;
+      reg.update().catch(function () {});
+      return reg;
+    }).catch(function (error) {
+      console.error("[PWA] No se pudo registrar el Service Worker:", error);
+      setPushButtonState("error", "Error del worker", error.message || String(error));
+      return null;
+    });
   }
 
-  // El permiso se solicita solo tras una acción explícita del usuario.
+  // Ask permission only after an explicit user gesture.
   function initializePushNotifications() {
     var button = byId("push-enable");
-    if (!button) { return; }
-    if (window.Notification && Notification.permission === "granted") {
-      button.textContent = "Completar activación";
+    if (!button || button.dataset.pushBound === "true") { return; }
+    button.dataset.pushBound = "true";
+
+    if (!window.Notification || !navigator.serviceWorker || !firebase.messaging) {
+      setPushButtonState("unsupported", "Push no disponible", "Este navegador no admite notificaciones web push.");
+      return;
     }
+    if (Notification.permission === "denied") {
+      setPushButtonState("blocked", "Avisos bloqueados", "Cambia el permiso de notificaciones en los ajustes del sitio.");
+    } else if (Notification.permission === "granted") {
+      setPushButtonState("ready", "Completar avisos", "Toca para registrar este dispositivo en tu cuenta.");
+    } else {
+      setPushButtonState("idle", "Activar avisos", "Activa avisos nativos en este dispositivo.");
+    }
+
     button.addEventListener("click", async function () {
-      if (!window.Notification || !navigator.serviceWorker || !firebase.messaging) {
-        button.textContent = "Push no disponible";
-        return;
-      }
+      if (button.dataset.pushBusy === "true") { return; }
       if (!auth || !auth.currentUser || !db) {
-        button.textContent = "Iniciá sesión primero";
+        setPushButtonState("error", "Inicia sesion primero", "Inicia sesion en Smart Panel y vuelve a activar los avisos.");
+        addNotification("alert", "\uD83D\uDD14", "NOTIFICACIONES", "Inicia sesion primero", "Los avisos se asocian a tu cuenta para sincronizar tus dispositivos.");
         return;
       }
+
+      button.dataset.pushBusy = "true";
+      button.disabled = true;
+      setPushButtonState("loading", "Activando...", "Solicitando permiso y registrando este dispositivo.");
       try {
-        var supported = await firebase.messaging.isSupported();
-        if (!supported) { button.textContent = "Push no compatible"; return; }
+        if (Notification.permission === "denied") {
+          throw new Error("El permiso esta bloqueado. Abre los ajustes del sitio en el navegador y permite Notificaciones.");
+        }
+        // Call requestPermission before any await so browsers still recognize
+        // the current click as a user gesture.
         var permission = Notification.permission;
         if (permission !== "granted") { permission = await Notification.requestPermission(); }
         if (permission !== "granted") {
-          button.textContent = "Permiso no concedido";
+          setPushButtonState("blocked", "Permiso no concedido", "Permite las notificaciones del sitio desde los ajustes del navegador.");
+          addNotification("alert", "\uD83D\uDD14", "PERMISO DE NOTIFICACIONES", "No se concedio el permiso", "Puedes activarlo mas tarde desde los ajustes del sitio.");
           return;
         }
+        if (!firebase.messaging || !(await firebase.messaging.isSupported())) {
+          throw new Error("Este navegador o dispositivo no es compatible con Firebase Web Push.");
+        }
+
         var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
         if (!config.vapidKey || config.vapidKey.indexOf("REEMPLAZAR") === 0) {
-          button.textContent = "Falta configurar VAPID";
-          return;
+          throw new Error("Falta configurar la clave publica Web Push (VAPID).");
         }
-        var registration = pushWorkerRegistration || await navigator.serviceWorker.ready;
-        var token = await firebase.messaging().getToken({ vapidKey: config.vapidKey, serviceWorkerRegistration: registration });
-        if (!token) { throw new Error("FCM no devolvió un token"); }
+        var registration = pushWorkerRegistration || (pushWorkerPromise ? await pushWorkerPromise : await navigator.serviceWorker.ready);
+        if (!registration) { throw new Error("No se pudo iniciar el Service Worker de notificaciones."); }
+        pushWorkerRegistration = registration;
+        var messaging = firebase.messaging();
+        var token = await messaging.getToken({ vapidKey: config.vapidKey, serviceWorkerRegistration: registration });
+        if (!token) { throw new Error("Firebase no devolvio un token para este dispositivo."); }
+
+        var currentUser = auth.currentUser;
         var tokenKey = encodeURIComponent(token);
-        await db.ref("pushTokens/" + auth.currentUser.uid + "/" + tokenKey).set({ token: token, updatedAt: Date.now(), platform: navigator.userAgent });
-        button.textContent = "Avisos activos";
-        button.disabled = true;
-        firebase.messaging().onMessage(function (payload) {
-          var n = payload.notification || payload.data || {};
-          addNotification("agenda", "🔔", "AVISO PUSH", n.title || "Smart Panel", n.body || "Tenés una actualización.");
-          registration.showNotification(n.title || "Smart Panel", {
-            body: n.body || "Tenés una actualización.",
-            icon: "/icons/icon-192.png",
-            data: { url: (payload.fcmOptions && payload.fcmOptions.link) || "/#agenda" }
-          });
+        await db.ref("pushTokens/" + currentUser.uid + "/" + tokenKey).set({
+          token: token,
+          updatedAt: Date.now(),
+          platform: navigator.userAgent
         });
+
+        if (!foregroundMessageBound) {
+          foregroundMessageBound = true;
+          messaging.onMessage(function (payload) {
+            var data = payload.notification || payload.data || {};
+            var title = data.title || "Smart Panel";
+            var body = data.body || "Tienes una actualizacion.";
+            addNotification("agenda", "\uD83D\uDD14", "AVISO PUSH", title, body, true);
+          });
+        }
+        setPushButtonState("active", "Dispositivo listo", "Permiso y registro FCM confirmados en este dispositivo.");
+        addNotification("important", "\uD83D\uDD14", "PRUEBA DE NOTIFICACIONES", "Dispositivo registrado", "Permiso y token guardados. Los recordatorios automaticos con la app cerrada requieren el servicio push del servidor.");
+        var nativeShown = await showNativeNotification("Smart Panel", "La notificacion de prueba llego correctamente.", "/#agenda", "smart-panel-test");
+        if (!nativeShown) { throw new Error("El navegador no pudo mostrar la notificacion nativa de prueba."); }
       } catch (error) {
         console.error("[FCM] No se pudo activar push:", error);
-        var pushError = error.code || error.message || String(error);
-        button.textContent = pushError.indexOf("PERMISSION_DENIED") !== -1 ? "Reglas Firebase" : "Error push";
-        button.title = pushError;
-        addNotification("alert", "🔔", "ERROR DE NOTIFICACIONES", "No se pudo activar el push", pushError);
+        var detail = error.code ? error.code + ": " + error.message : error.message || String(error);
+        var blocked = Notification.permission === "denied";
+        setPushButtonState(blocked ? "blocked" : "error", blocked ? "Avisos bloqueados" : "Reintentar avisos", detail);
+        addNotification("alert", "\uD83D\uDD14", "ERROR DE NOTIFICACIONES", "No se pudieron activar los avisos", detail);
+      } finally {
+        button.disabled = false;
+        button.dataset.pushBusy = "false";
       }
     });
   }
@@ -1659,7 +1708,27 @@
     try { window.localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifications)); } catch (e) {}
   }
 
-  function addNotification(type, icon, label, title, body) {
+  function showNativeNotification(title, body, url, tag) {
+    if (!window.Notification || Notification.permission !== "granted") { return Promise.resolve(false); }
+    var options = {
+      body: body || "Tienes una actualizacion.",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: tag || "smart-panel-" + Date.now(),
+      data: { url: url || "/#agenda" }
+    };
+    if (pushWorkerRegistration) {
+      return pushWorkerRegistration.showNotification(title || "Smart Panel", options).then(function () { return true; }).catch(function (error) {
+        console.warn("[Notificaciones] No se pudo mostrar la notificacion del sistema:", error);
+        return false;
+      });
+    } else {
+      try { new Notification(title || "Smart Panel", options); return Promise.resolve(true); }
+      catch (error) { console.warn("[Notificaciones] API nativa no disponible:", error); return Promise.resolve(false); }
+    }
+  }
+
+  function addNotification(type, icon, label, title, body, nativeNotification) {
     var notif = {
       id: "n-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
       type: type,     // 'agenda' | 'important' | 'alert'
@@ -1676,6 +1745,9 @@
     updateNotifBadge();
     renderNotifPanel();
     showToast(notif);
+    if (nativeNotification || (document.visibilityState === "hidden" && type !== "alert")) {
+      showNativeNotification(title, body, "/#agenda", notif.id);
+    }
     return notif;
   }
 
@@ -1704,6 +1776,10 @@
     if (!badge) { return; }
     var unread = notifications.filter(function (n) { return !n.read; }).length;
     badge.classList.toggle("has-unread", unread > 0);
+    var bell = byId("notif-bell");
+    if (bell) { bell.setAttribute("aria-label", unread ? "Notificaciones, " + unread + " sin leer" : "Notificaciones"); }
+    var clearButton = byId("notif-clear-btn");
+    if (clearButton) { clearButton.disabled = notifications.length === 0; }
   }
 
   // ---- Toast ----
@@ -1771,16 +1847,29 @@
     var backdrop = byId("notif-panel-backdrop");
     if (!panel) { return; }
     panel.classList.add("is-open");
+    panel.setAttribute("aria-hidden", "false");
+    panel.inert = false;
+    document.body.classList.add("notifications-open");
+    var appShell = document.querySelector(".app-shell");
+    if (appShell) { appShell.inert = true; appShell.setAttribute("aria-hidden", "true"); }
     if (backdrop) { backdrop.classList.add("is-visible"); }
     markAllRead();
     renderNotifPanel();
+    var closeButton = byId("notif-panel-close");
+    if (closeButton) { closeButton.focus(); }
   }
 
   function closeNotifPanel() {
     var panel = byId("notif-panel");
     var backdrop = byId("notif-panel-backdrop");
     if (panel) { panel.classList.remove("is-open"); }
+    if (panel) { panel.setAttribute("aria-hidden", "true"); panel.inert = true; }
+    document.body.classList.remove("notifications-open");
+    var appShell = document.querySelector(".app-shell");
+    if (appShell) { appShell.inert = false; appShell.removeAttribute("aria-hidden"); }
     if (backdrop) { backdrop.classList.remove("is-visible"); }
+    var bell = byId("notif-bell");
+    if (bell) { bell.focus(); }
   }
 
   function renderNotifPanel() {
@@ -1858,6 +1947,20 @@
         if (panel && panel.classList.contains("is-open")) {
           closeNotifPanel();
         }
+      } else if (e.key === "Tab") {
+        var openPanel = byId("notif-panel");
+        if (!openPanel || !openPanel.classList.contains("is-open")) { return; }
+        var focusable = openPanel.querySelectorAll("button:not(:disabled), [href], [tabindex]:not([tabindex='-1'])");
+        if (!focusable.length) { e.preventDefault(); return; }
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     });
   }
@@ -1912,7 +2015,8 @@
             "📅",
             "AGENDA · MAÑANA",
             ev.title,
-            "Mañana" + timeStr + (desc ? " · " + desc : "")
+            "Mañana" + timeStr + (desc ? " · " + desc : ""),
+            true
           );
         }
       }
@@ -1930,7 +2034,8 @@
             "📅",
             "AGENDA · HOY",
             ev.title,
-            "Hoy" + timeStrToday + (descToday ? " · " + descToday : "")
+            "Hoy" + timeStrToday + (descToday ? " · " + descToday : ""),
+            true
           );
         }
       }
@@ -2157,8 +2262,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v41";
-    byId("script-build-version").textContent = "JS v41";
+    byId("frontend-version").textContent = "HTML v43";
+    byId("script-build-version").textContent = "JS v43";
 
     initializeConfirmDialog();
     initializeTabs();

@@ -29,29 +29,33 @@ try {
   console.warn("[FCM] Messaging no disponible en este navegador.", error);
 }
 self.addEventListener("notificationclick", function (event) {
-  var notificationUrl = event.notification.data && event.notification.data.url;
-  if (!notificationUrl) { return; }
+  var notificationUrl = event.notification.data && event.notification.data.url || "/#inicio";
   event.notification.close();
   var target = new URL(notificationUrl, self.location.origin).href;
   event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (clients) {
     for (var i = 0; i < clients.length; i++) {
-      if (clients[i].url === target && "focus" in clients[i]) { return clients[i].focus(); }
+      if (new URL(clients[i].url).origin === self.location.origin && "focus" in clients[i]) {
+        if ("navigate" in clients[i]) {
+          return clients[i].navigate(target).then(function (client) { return client && client.focus(); });
+        }
+        return clients[i].focus();
+      }
     }
     return self.clients.openWindow(target);
   }));
 });
 
 var CACHE_PREFIX = "smart-panel-shell-";
-var CACHE_NAME = CACHE_PREFIX + "41";
+var CACHE_NAME = CACHE_PREFIX + "43";
 var STATIC_FILES = [
   "/",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
-  "/css/styles.css?v=41",
-  "/js/firebase-config.js?v=41",
-  "/js/app.js?v=41"
+  "/css/styles.css?v=43",
+  "/js/firebase-config.js?v=43",
+  "/js/app.js?v=43"
 ];
 
 self.addEventListener("install", function (event) {

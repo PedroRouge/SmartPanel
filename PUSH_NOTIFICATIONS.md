@@ -16,13 +16,13 @@ La PWA conserva un solo Service Worker (`html/service-worker.js`) para caché y 
    firebase deploy --only database,functions
    ```
 
-   El plan Blaze puede ser necesario para Cloud Functions y Cloud Scheduler. FCM no requiere guardar una clave privada en el frontend.
+   El SDK web tambien requiere que la API FCM Registration este habilitada en Google Cloud Console. En este proyecto, el despliegue de Cloud Functions quedo pendiente porque Firebase exige el plan Blaze para activar Cloud Build; por eso los avisos en segundo plano/con la web cerrada no se envian hasta desplegar esas funciones. La interfaz comprueba el permiso, registra el token y envia una notificacion nativa de prueba para validar cada dispositivo. FCM no requiere guardar una clave privada en el frontend.
 7. Desplegá el frontend en Vercel. Abrí la web mediante HTTPS, iniciá sesión y tocá **Activar avisos**. El permiso se pide desde ese gesto; el token queda asociado a `pushTokens/{uid}`.
 8. Para verificar la recepción, Firebase Console → Messaging → crear un mensaje de prueba y seleccionar el token FCM guardado. Probá con la PWA en segundo plano y cerrada.
 
 ## Mensajes de agenda y sistema
 
-`functions/index.js` escanea `home/events` cada cinco minutos. Envía una alerta el día anterior desde las 09:00 y el día del evento desde las 07:00, hora de Argentina, y registra cada envío en `/pushSent` para no repetirlo. Requiere que las fechas de agenda estén en `YYYY-MM-DD` y que cada evento tenga `title` y `date`.
+`functions/index.js` escanea `users/{uid}/events` cada cinco minutos. Envía una alerta el día anterior desde las 09:00 y el día del evento desde las 07:00, hora de Argentina, y registra cada envío en `/pushSent` para no repetirlo. Requiere que las fechas de agenda estén en `YYYY-MM-DD` y que cada evento tenga `title` y `date`.
 
 Para disparar una alerta de sistema desde una Cloud Function o servidor confiable, escribí en Realtime Database:
 
