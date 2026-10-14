@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "60";
+  var APP_BUILD_VERSION = "61";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -176,6 +176,8 @@
 
   function attachFirebaseListeners() {
     if (!db || !apiAuthenticated || listenersAttached) { return; }
+    var user = auth && auth.currentUser;
+    if (!user) { return; }
     listenersAttached = true;
     console.log("[Firebase] Conectando listeners en tiempo real con credenciales válidas...");
 
@@ -283,9 +285,7 @@
       }
     });
 
-    // 4. Agenda privada, sincronizada entre todos los dispositivos del usuario.
-    var user = auth && auth.currentUser;
-    if (!user) { return; }
+    // 4. Agenda privada para la cuenta actual.
     activeEventsRef = db.ref("users/" + user.uid + "/events");
     function renderUserEvents(snapshot) { renderUserEventsData(snapshot.val(), user); }
     var usingLegacyFallback = false;
@@ -304,11 +304,19 @@
     activeEventsRef.on("value", renderUserEvents, onEventsError);
     activeFirebaseRefs.push(activeEventsRef);
     activityListenerRef = db.ref("users/" + user.uid + "/activity");
+    renderActivityMessage("Cargando el historial de la cuenta...");
     activityListenerRef.on("value", renderActivity, function (error) {
-      console.warn("[Actividad] No se pudo leer el historial:", error);
-      renderActivity(null);
+      console.warn("[Actividad] Realtime listener failed; trying HTTPS:", error);
+      readUserActivityViaRest(user).catch(function (restError) {
+        console.warn("[Actividad] HTTPS history read failed:", restError);
+        renderActivityError(user);
+      });
     });
     activeFirebaseRefs.push(activityListenerRef);
+    readUserActivityViaRest(user).catch(function (error) {
+      console.warn("[Actividad] Initial HTTPS history read failed:", error);
+      renderActivityError(user);
+    });
     readUserEventsViaRest(user).catch(function (error) {
       console.warn("[Agenda] La lectura HTTPS inicial no estuvo disponible:", error);
     });
@@ -316,9 +324,10 @@
     agendaRestSyncTimer = setInterval(function () {
       if (!firebaseConnected && !agendaRestSyncBusy && auth && auth.currentUser && auth.currentUser.uid === user.uid) {
         agendaRestSyncBusy = true;
-        readUserEventsViaRest(user).catch(function (error) {
-          console.warn("[Agenda] No se pudo sincronizar la agenda por HTTPS:", error);
-        }).finally(function () { agendaRestSyncBusy = false; });
+        Promise.all([
+          readUserEventsViaRest(user).catch(function (error) { console.warn("[Agenda] HTTPS sync failed:", error); }),
+          readUserActivityViaRest(user).catch(function (error) { console.warn("[Actividad] HTTPS sync failed:", error); })
+        ]).finally(function () { agendaRestSyncBusy = false; });
       }
     }, 15000);
     migrateLegacyEvents(user).catch(function (error) {
@@ -387,6 +396,24 @@
       if (!response.ok) { throw new Error("Firebase respondió HTTP " + response.status + " al leer la agenda."); }
       return response.json();
     }).then(function (eventsData) { renderUserEventsData(eventsData, user); });
+  }
+
+  function readUserActivityViaRest(user) {
+    var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
+    if (!config.databaseURL || !user || !user.getIdToken || !window.fetch) {
+      return Promise.reject(new Error("History read is not configured."));
+    }
+    return user.getIdToken().then(function (idToken) {
+      var baseUrl = config.databaseURL.replace(/\/+$/, "");
+      var path = "/users/" + encodeURIComponent(user.uid) + "/activity.json";
+      return fetch(baseUrl + path + "?auth=" + encodeURIComponent(idToken), { cache: "no-store" });
+    }).then(function (response) {
+      if (!response.ok) { throw new Error("Firebase HTTP " + response.status + " while reading history."); }
+      return response.json();
+    }).then(function (activityData) {
+      if (auth && auth.currentUser && auth.currentUser.uid === user.uid) { renderActivity(activityData); }
+      return activityData;
+    });
   }
 
   function updateGatewayStatusUI(isOnline, text) {
@@ -512,11 +539,23 @@
     }).catch(function (error) { console.warn("[Actividad] No se pudo guardar el registro:", error); });
   }
 
+  function renderActivityMessage(message) {
+    var list = byId("activity-list");
+    if (!list) { return; }
+    while (list.firstChild) { list.removeChild(list.firstChild); }
+    list.appendChild(createTextElement("p", "event-empty", message));
+  }
+
+  function renderActivityError(user) {
+    if (!auth || !auth.currentUser || !user || auth.currentUser.uid !== user.uid) { return; }
+    renderActivityMessage("No se pudo cargar el historial. Se volvera a intentar automaticamente.");
+  }
+
   function renderActivity(snapshot) {
     var list = byId("activity-list");
     if (!list) { return; }
     while (list.firstChild) { list.removeChild(list.firstChild); }
-    var data = snapshot && snapshot.val();
+    var data = snapshot && typeof snapshot.val === "function" ? snapshot.val() : snapshot;
     var entries = data ? Object.keys(data).map(function (id) { return data[id]; }).filter(function (entry) { return entry && typeof entry === "object"; }) : [];
     entries.sort(function (a, b) { return Number(b.timestamp) - Number(a.timestamp); });
     if (!entries.length) {
@@ -2113,7 +2152,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=60").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=61").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -2844,8 +2883,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v60";
-    byId("script-build-version").textContent = "JS v60";
+    byId("frontend-version").textContent = "HTML v61";
+    byId("script-build-version").textContent = "JS v61";
 
     initializeConfirmDialog();
     initializeTabs();
