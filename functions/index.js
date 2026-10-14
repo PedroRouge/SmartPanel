@@ -11,18 +11,16 @@ const TZ = "America/Argentina/Buenos_Aires";
 // Reemplazá por el dominio público real configurado en Vercel.
 const APP_URL = "https://smart-panel-beryl.vercel.app";
 
-function localISO(date) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit"
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
-function nextISO(iso) {
-  const day = new Date(`${iso}T12:00:00Z`);
-  day.setUTCDate(day.getUTCDate() + 1);
-  return day.toISOString().slice(0, 10);
+function eventStartAt(event) {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(event.date || "");
+  if (!dateMatch) return null;
+  const time = event.all_day ? "09:00" : (event.start_time || "09:00");
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!timeMatch) return null;
+  const [, year, month, day] = dateMatch;
+  const [, hour, minute] = timeMatch;
+  // Buenos Aires uses UTC-03:00. All-day events use 09:00 local time.
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour) + 3, Number(minute)));
 }
 
 async function sendToTokens(tokens, title, body) {
@@ -70,30 +68,34 @@ async function sendToAll(title, body) {
 
 exports.calendarPush = onSchedule({ schedule: "every 5 minutes", timeZone: TZ }, async () => {
   const now = new Date();
-  const currentISO = localISO(now);
-  const tomorrowISO = nextISO(currentISO);
-  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "2-digit", hourCycle: "h23" }).format(now));
   const users = (await db.ref("users").get()).val() || {};
 
   for (const [uid, userData] of Object.entries(users)) {
     const events = userData && userData.events || {};
     for (const [id, event] of Object.entries(events)) {
       if (!event || !event.title || !event.date) continue;
-      let kind = "";
-      if (event.date === tomorrowISO && hour >= 9) kind = "before";
-      if (event.date === currentISO && hour >= 7) kind = "today";
-      if (!kind) continue;
-
-      const sentRef = db.ref(`pushSent/${uid}/${kind}_${id}_${event.date}`);
-      const claim = await sentRef.transaction((value) => value ? undefined : { sentAt: Date.now() });
-      if (!claim.committed) continue;
-      const time = !event.all_day && event.start_time ? ` a las ${event.start_time}` : " (todo el día)";
-      const prefix = kind === "before" ? "Mañana" : "Hoy";
-      try {
-        await sendToUser(uid, kind === "before" ? `Agenda · Mañana: ${event.title}` : `Agenda · Hoy: ${event.title}`, `${prefix}${time}`);
-      } catch (error) {
-        await sentRef.remove();
-        throw error;
+      const startsAt = eventStartAt(event);
+      if (!startsAt || startsAt <= now) continue;
+      const reminders = [
+        { kind: "24h", offset: 24 * 60 * 60 * 1000, label: "Mañana" },
+        { kind: "2h", offset: 2 * 60 * 60 * 1000, label: "En 2 horas" }
+      ];
+      for (const reminder of reminders) {
+        const dueAt = startsAt.getTime() - reminder.offset;
+        // The function runs every five minutes; allow a ten-minute catch-up window.
+        if (now.getTime() < dueAt || now.getTime() >= dueAt + 10 * 60 * 1000) continue;
+        const targets = await getTokensForUser(uid);
+        if (!targets.length) continue;
+        const sentRef = db.ref(`pushSent/${uid}/${reminder.kind}_${id}_${event.date}`);
+        const claim = await sentRef.transaction((value) => value ? undefined : { sentAt: Date.now() });
+        if (!claim.committed) continue;
+        const time = !event.all_day && event.start_time ? ` a las ${event.start_time}` : " a las 09:00";
+        try {
+          await sendToTokens(targets, `Agenda · ${reminder.label}: ${event.title}`, `${reminder.label}${time}`);
+        } catch (error) {
+          await sentRef.remove();
+          throw error;
+        }
       }
     }
   }

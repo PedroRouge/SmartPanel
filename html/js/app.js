@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "52";
+  var APP_BUILD_VERSION = "53";
   var STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
@@ -678,6 +678,7 @@
   function acceptSession(username) {
     apiAuthenticated = true;
     currentUsername = username || "admin";
+    syncPushButtonForUser(auth && auth.currentUser);
 
     byId("auth-gate").hidden = true;
     byId("api-logout").hidden = false;
@@ -700,6 +701,8 @@
   function showAuthGate(msg) {
     byId("auth-gate").hidden = false;
     byId("api-logout").hidden = true;
+    var pushButton = byId("push-enable");
+    if (pushButton) { pushButton.hidden = false; }
     var userEl = byId("session-user");
     if (userEl) { userEl.hidden = true; }
     var errorEl = byId("auth-error");
@@ -1768,6 +1771,31 @@
     button.title = detail || label;
   }
 
+  function pushRegistrationKey(uid) {
+    return "smart-panel-push-registered-v1-" + uid;
+  }
+
+  function isPhonePushUi() {
+    var smallViewport = window.matchMedia && window.matchMedia("(max-width: 700px)").matches;
+    var mobileDevice = /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || "");
+    return !!(smallViewport || mobileDevice);
+  }
+
+  function syncPushButtonForUser(user) {
+    var button = byId("push-enable");
+    if (!button) { return; }
+    button.hidden = false;
+    if (!user || !isPhonePushUi()) { return; }
+    try {
+      if (window.localStorage.getItem(pushRegistrationKey(user.uid)) === "1") {
+        button.hidden = true;
+        clearStalePushErrors();
+      }
+    } catch (error) {
+      console.warn("[FCM] No se pudo recuperar el estado local del dispositivo registrado.", error);
+    }
+  }
+
   function subscriptionUsesVapidKey(subscription, vapidKey) {
     try {
       var encoded = vapidKey.replace(/-/g, "+").replace(/_/g, "/");
@@ -1834,7 +1862,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=52").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=53").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -1937,8 +1965,12 @@
           });
         }
         setPushButtonState("active", "Dispositivo listo", "Permiso y registro FCM confirmados en este dispositivo.");
+        try { window.localStorage.setItem(pushRegistrationKey(currentUser.uid), "1"); } catch (storageError) {
+          console.warn("[FCM] El dispositivo quedó registrado, pero no se pudo guardar el estado local de la UI.", storageError);
+        }
         clearStalePushErrors();
         addNotification("important", "\uD83D\uDD14", "NOTIFICACIONES", "Dispositivo registrado", "Este navegador quedó asociado a tu cuenta.");
+        if (isPhonePushUi()) { button.hidden = true; }
       } catch (error) {
         console.error("[FCM] No se pudo activar push:", error);
         var detail = error.code ? error.code + ": " + error.message : error.message || String(error);
@@ -2530,8 +2562,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v52";
-    byId("script-build-version").textContent = "JS v52";
+    byId("frontend-version").textContent = "HTML v53";
+    byId("script-build-version").textContent = "JS v53";
 
     initializeConfirmDialog();
     initializeTabs();
