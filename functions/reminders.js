@@ -27,4 +27,9 @@ function reminderTaskId(uid, eventId, kind) {
   return Buffer.from(`${uid}/${eventId}/${kind}`).toString("base64url");
 }
 
-module.exports = { eventStartAt, reminderTaskId };
+function reminderTaskUpdate(existing, task) {
+  if (existing && Number(existing.dueAt) === Number(task.dueAt)) return undefined;
+  return { ...task, lockUntil: 0, nextAttemptAt: task.dueAt };
+}
+
+module.exports = { eventStartAt, reminderTaskId, reminderTaskUpdate };

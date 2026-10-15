@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const { eventStartAt, reminderTaskId } = require("../../functions/reminders");
+const { eventStartAt, reminderTaskId, reminderTaskUpdate } = require("../../functions/reminders");
 
 test("los recordatorios interpretan fechas y horas como horario de Buenos Aires", () => {
   assert.equal(
@@ -39,6 +39,17 @@ test("las claves de recordatorio son estables, seguras para RTDB y distintas por
   assert.equal(reminderTaskId("user-1", "event-2", "24h"), reminder);
   assert.notEqual(reminderTaskId("user-1", "event-2", "2h"), reminder);
   assert.notEqual(reminderTaskId("user-2", "event-2", "24h"), reminder);
+});
+
+test("los reintentos de agenda conservan el bloqueo cuando la fecha no cambió", () => {
+  const inFlight = { dueAt: 5000, lockUntil: 9000, nextAttemptAt: 9000 };
+  assert.equal(reminderTaskUpdate(inFlight, { uid: "u", eventId: "e", kind: "24h", dueAt: 5000 }), undefined);
+  assert.deepEqual(reminderTaskUpdate(null, { uid: "u", eventId: "e", kind: "24h", dueAt: 5000 }), {
+    uid: "u", eventId: "e", kind: "24h", dueAt: 5000, lockUntil: 0, nextAttemptAt: 5000
+  });
+  assert.deepEqual(reminderTaskUpdate(inFlight, { uid: "u", eventId: "e", kind: "24h", dueAt: 6000 }), {
+    uid: "u", eventId: "e", kind: "24h", dueAt: 6000, lockUntil: 0, nextAttemptAt: 6000
+  });
 });
 
 test("la cola de recordatorios reintenta fallos transitorios al guardar eventos", () => {

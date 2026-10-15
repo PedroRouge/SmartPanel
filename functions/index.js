@@ -3,7 +3,7 @@ const { getDatabase } = require("firebase-admin/database");
 const { getMessaging } = require("firebase-admin/messaging");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onValueCreated, onValueWritten } = require("firebase-functions/v2/database");
-const { eventStartAt, reminderTaskId } = require("./reminders");
+const { eventStartAt, reminderTaskId, reminderTaskUpdate } = require("./reminders");
 
 initializeApp();
 const db = getDatabase();
@@ -84,7 +84,7 @@ exports.scheduleEventReminders = onValueWritten(
     const dueAt = startsAt.getTime() - offset;
     const ref = tasksRef.child(reminderTaskId(uid, eventId, kind));
     if (dueAt < now - REMINDER_CATCH_UP_MS || startsAt.getTime() <= now) return ref.remove();
-    return ref.set({ uid, eventId, kind, dueAt, lockUntil: 0, nextAttemptAt: dueAt });
+    return ref.transaction((existing) => reminderTaskUpdate(existing, { uid, eventId, kind, dueAt }));
   }));
   },
 );
