@@ -107,8 +107,8 @@ textarea {
 .auth-mark {
   border: 1px solid var(--accent);
   border-radius: 0 !important;
-  background: var(--surface) !important;
-  color: var(--accent) !important;
+  background: var(--accent) !important;
+  color: var(--on-accent) !important;
 }
 
 .version-reader,
@@ -423,7 +423,66 @@ textarea {
 .launch-mark .ui-icon { width: 15px; height: 15px; }
 .device-symbol .ui-icon { width: 22px; height: 22px; }
 
+/* Inline icon system: consistent Lucide-style strokes, zero font assets, theme by currentColor. */
+:root {
+  --icon-size-default: 18px;
+  --icon-size-primary: 20px;
+  --icon-stroke-width: 1.8;
+}
+svg[viewBox="0 0 24 24"] {
+  display: block;
+  flex: 0 0 auto;
+  color: inherit;
+  stroke: currentColor;
+  stroke-width: var(--icon-stroke-width);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ui-icon { width: var(--icon-size-primary); height: var(--icon-size-primary); }
+.tab-icon { width: var(--icon-size-default); height: var(--icon-size-default); }
+.topbar-icon,
+.quick-status-icon { width: var(--icon-size-default); height: var(--icon-size-default); }
+.theme-icon,
+.push-enable-icon { width: var(--icon-size-primary); height: var(--icon-size-primary); }
+.brand-mark,
+.sidebar-brand .brand-mark,
+.auth-mark { font-weight: 800; }
+
+@media (hover: hover) and (pointer: fine) {
+  .theme-toggle:hover .theme-icon,
+  .notif-bell-btn:hover .topbar-icon,
+  .weather-refresh:hover .ui-icon,
+  .modal-close:hover .ui-icon,
+  .notif-panel-close:hover .ui-icon,
+  .icon-button:hover .ui-icon,
+  .camera-remove:hover .ui-icon {
+    color: var(--accent);
+    transform: scale(1.06);
+  }
+  .theme-icon,
+  .topbar-icon,
+  .weather-refresh .ui-icon,
+  .modal-close .ui-icon,
+  .notif-panel-close .ui-icon,
+  .icon-button .ui-icon,
+  .camera-remove .ui-icon { transition: color .14s ease, transform .14s ease; }
+}
+
 @media (max-width: 760px) {
+  :root { --icon-size-default: 20px; --icon-size-primary: 22px; }
+  .tab-icon { width: 20px; height: 20px; }
+  .quick-status-icon { width: 20px; height: 20px; }
+  .weather-refresh,
+  .calendar-nav,
+  .calendar-today,
+  .theme-toggle,
+  .notif-bell-btn,
+  .modal-close,
+  .notif-panel-close,
+  .icon-button,
+  .event-action,
+  .camera-remove { min-width: 44px; min-height: 44px; }
+  .push-enable-button { min-width: 44px; min-height: 44px; }
   .app-shell { width: calc(100% - 24px); }
   .dashboard-grid > .clock-panel,
   .dashboard-grid > .weather-panel,
@@ -441,6 +500,26 @@ textarea {
 @media (max-width: 700px) {
   .tab-bar { display: flex; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
   .tab-bar .tab-button { flex: 0 0 44px; min-width: 44px; }
+}
+
+@media (pointer: coarse) {
+  .tab-button,
+  .weather-refresh,
+  .calendar-nav,
+  .calendar-today,
+  .theme-toggle,
+  .notif-bell-btn,
+  .modal-close,
+  .notif-panel-close,
+  .icon-button,
+  .event-action,
+  .camera-remove,
+  .remote-key,
+  .notif-toast-close,
+  .notif-item-dismiss,
+  .pool-schedule-remove,
+  .push-device-remove { min-width: 44px; min-height: 44px; }
+  .push-enable-button { min-width: 44px; min-height: 44px; }
 }
 
 @media (display-mode: window-controls-overlay) {

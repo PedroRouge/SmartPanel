@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "80";
+  var APP_BUILD_VERSION = "81";
   var STORAGE_KEY = "smart-panel-state-v3";
   var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
@@ -137,6 +137,7 @@
       calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
       alert: '<path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5m0 3h.01"/>',
       close: '<path d="M18 6 6 18M6 6l12 12"/>',
+      edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/>',
       tv: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="m8 2 4 3 4-3"/>',
       camera: '<path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3.5"/>',
       eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
@@ -151,6 +152,8 @@
     };
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "24");
+    svg.setAttribute("height", "24");
     svg.setAttribute("fill", "none");
     svg.setAttribute("stroke", "currentColor");
     svg.setAttribute("stroke-width", "1.8");
@@ -874,6 +877,7 @@
       var remove = createTextElement("button", "push-device-remove", "Quitar");
       remove.type = "button";
       remove.setAttribute("aria-label", "Quitar dispositivo de notificaciones");
+      remove.title = "Quitar dispositivo de notificaciones";
       remove.addEventListener("click", function () { removePushDevice(key, device); });
       row.appendChild(icon);
       row.appendChild(copy);
@@ -1970,12 +1974,16 @@
         var edit = document.createElement("button");
         edit.type = "button";
         edit.className = "event-action";
-        edit.textContent = "✎";
+        edit.appendChild(svgIcon("edit"));
+        edit.setAttribute("aria-label", "Editar evento: " + ev.title);
+        edit.title = "Editar evento: " + ev.title;
         edit.addEventListener("click", function () { openEventForm(ev); });
         var remove = document.createElement("button");
         remove.type = "button";
         remove.className = "event-action is-delete";
         remove.appendChild(svgIcon("close"));
+        remove.setAttribute("aria-label", "Eliminar evento: " + ev.title);
+        remove.title = "Eliminar evento: " + ev.title;
         remove.addEventListener("click", function () { deleteCalendarEvent(ev); });
         actions.appendChild(edit);
         actions.appendChild(remove);
@@ -2238,6 +2246,8 @@
     remove.type = "button";
     remove.className = "camera-remove";
     remove.appendChild(svgIcon("close"));
+    remove.setAttribute("aria-label", "Eliminar cámara: " + camera.name);
+    remove.title = "Eliminar cámara: " + camera.name;
     remove.addEventListener("click", function () {
       showConfirmDialog({
         title: "¿Eliminar cámara?",
@@ -2498,7 +2508,9 @@
     var button = byId("push-enable");
     if (!button) { return; }
     button.dataset.pushState = stateName;
-    button.textContent = label;
+    var visibleLabel = button.querySelector(".push-enable-label");
+    if (visibleLabel) { visibleLabel.textContent = label; }
+    else { button.textContent = label; }
     button.setAttribute("aria-label", label);
     button.title = detail || label;
   }
@@ -2597,7 +2609,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=80").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=81").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -2876,6 +2888,7 @@
     closeBtn.className = "notif-toast-close";
     closeBtn.appendChild(svgIcon("close"));
     closeBtn.setAttribute("aria-label", "Cerrar notificación");
+    closeBtn.title = "Cerrar notificación";
 
     var bar = document.createElement("span");
     bar.className = "notif-toast-bar";
@@ -2974,6 +2987,7 @@
       dismiss.className = "notif-item-dismiss";
       dismiss.appendChild(svgIcon("close"));
       dismiss.setAttribute("aria-label", "Descartar notificación");
+      dismiss.title = "Descartar notificación";
       dismiss.addEventListener("click", (function (id) {
         return function () { dismissNotif(id); };
       })(n.id));
@@ -3179,6 +3193,7 @@
       remove.className = "pool-schedule-remove";
       remove.appendChild(svgIcon("close"));
       remove.setAttribute("aria-label", "Eliminar horario");
+      remove.title = "Eliminar horario";
       remove.addEventListener("click", (function (i) {
         return function () {
           poolSchedules.splice(i, 1);
@@ -3334,8 +3349,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v80";
-    byId("script-build-version").textContent = "JS v80";
+    byId("frontend-version").textContent = "HTML v81";
+    byId("script-build-version").textContent = "JS v81";
 
     initializeConfirmDialog();
     initializeTabs();

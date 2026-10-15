@@ -27,7 +27,7 @@ test("abre el dashboard y conserva una única pestaña seleccionada", async ({ p
   await expect(page).toHaveTitle("Smart Panel");
   await expect(page.locator('[data-panel="inicio"]')).toBeVisible();
   await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
-  await expect(page.locator("#frontend-version")).toHaveText("HTML v80");
+  await expect(page.locator("#frontend-version")).toHaveText("HTML v81");
 });
 
 test("respeta el tema del sistema y guarda el tema elegido", async ({ page }) => {
@@ -91,6 +91,68 @@ test("las pestañas móviles conservan objetivos táctiles y se pueden desplazar
   expect(scrollable).toBe(true);
   await lastTab.scrollIntoViewIfNeeded();
   await expect(lastTab).toBeInViewport();
+});
+
+test("los iconos inline usan currentColor y los controles de icono son táctiles", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const icons = page.locator('svg[viewBox="0 0 24 24"]');
+  expect(await icons.count()).toBeGreaterThan(0);
+  for (let index = 0; index < await icons.count(); index += 1) {
+    const icon = icons.nth(index);
+    await expect(icon).toHaveAttribute("width", "24");
+    await expect(icon).toHaveAttribute("height", "24");
+    await expect(icon).toHaveAttribute("aria-hidden", "true");
+  }
+
+  await expect(page.locator("#weather-refresh")).toHaveAttribute("title", "Actualizar clima");
+  for (const selector of ["#theme-toggle", "#notif-bell", "#weather-refresh"]) {
+    const box = await page.locator(selector).boundingBox();
+    expect(box.width, `${selector}: ancho táctil`).toBeGreaterThanOrEqual(44);
+    expect(box.height, `${selector}: alto táctil`).toBeGreaterThanOrEqual(44);
+  }
+
+  const colorsFollowTheme = await page.locator(".ui-icon").first().evaluate((icon) => {
+    const computed = getComputedStyle(icon);
+    return computed.stroke === computed.color;
+  });
+  expect(colorsFollowTheme).toBe(true);
+
+  const unlabeledIconButtons = await page.locator("button").evaluateAll((buttons) => buttons
+    .filter((button) => button.querySelector("svg") && !button.textContent.trim())
+    .filter((button) => !button.getAttribute("aria-label") || !button.title)
+    .map((button) => button.id || button.className));
+  expect(unlabeledIconButtons).toEqual([]);
+});
+
+test("un iPad en horizontal conserva áreas táctiles de 44px", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 1024, height: 768 },
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  await page.route(/^https:\/\//, (route) => route.abort());
+  await page.goto("/");
+  for (const selector of ["#theme-toggle", "#notif-bell", "#weather-refresh"]) {
+    const box = await page.locator(selector).boundingBox();
+    expect(box.width, `${selector}: ancho táctil iPad`).toBeGreaterThanOrEqual(44);
+    expect(box.height, `${selector}: alto táctil iPad`).toBeGreaterThanOrEqual(44);
+  }
+  await context.close();
+});
+
+test("el manifest y los fallbacks PWA sirven todos los iconos declarados", async ({ page }) => {
+  const manifestResponse = await page.request.get("/manifest.webmanifest");
+  expect(manifestResponse.ok()).toBe(true);
+  const manifest = await manifestResponse.json();
+  for (const icon of manifest.icons) {
+    const response = await page.request.get(icon.src);
+    expect(response.ok(), icon.src).toBe(true);
+    expect(response.headers()["content-type"]).toContain("image/png");
+  }
+  for (const path of ["/icons/favicon.ico", "/icons/favicon-32.png", "/icons/apple-touch-icon.png", "/icons/app-icon-light.svg", "/icons/app-icon-dark.svg"]) {
+    const response = await page.request.get(path);
+    expect(response.ok(), path).toBe(true);
+  }
 });
 
 test("la UI evita filtros de desenfoque en superficies pesadas", async ({ page }) => {
