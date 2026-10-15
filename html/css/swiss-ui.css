@@ -41,8 +41,9 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --page: #0a0e1a;
-  --surface: rgba(255, 255, 255, .055);
-  --surface-raised: rgba(255, 255, 255, .1);
+  /* Matte surfaces are the safe default; capable desktop browsers get the blur layer below. */
+  --surface: rgba(20, 27, 42, .9);
+  --surface-raised: rgba(20, 27, 42, .96);
   --surface-border: rgba(255, 255, 255, .085);
   --text: #f3f5fa;
   --muted: rgba(222, 230, 247, .72);
@@ -350,10 +351,37 @@ svg[viewBox="0 0 24 24"] {
 .tab-icon, .topbar-icon, .quick-status-icon { width: var(--icon-size-default); height: var(--icon-size-default); }
 .theme-icon, .push-enable-icon { width: var(--icon-size-primary); height: var(--icon-size-primary); }
 
-/* Keep expensive backdrop blur off touch devices; translucency retains the glass layers. */
+/* Matte glass is the baseline. Restrict backdrop blur to capable desktop pointers. */
 @supports (backdrop-filter: blur(1px)) {
   @media (hover: hover) and (pointer: fine) and (min-width: 900px) {
-    .topbar, .tab-bar { backdrop-filter: blur(12px) saturate(1.25); -webkit-backdrop-filter: blur(12px) saturate(1.25); }
+    :root[data-theme="dark"] { --surface: rgba(255, 255, 255, .055); --surface-raised: rgba(255, 255, 255, .1); }
+    .topbar, .tab-bar, .panel-surface, .device-card, .tv-device, .camera-card,
+    .app-link, .pool-motor, .water-temperature, .quick-action, .agenda-day-panel,
+    .notif-item, .confirm-dialog, .auth-dialog, .event-dialog, .notif-panel,
+    .forecast-day, .system-status-card, .activity-panel, .upcoming-agenda-panel,
+    .form-field input, .form-field textarea, .form-field select {
+      backdrop-filter: blur(14px) saturate(1.25);
+      -webkit-backdrop-filter: blur(14px) saturate(1.25);
+    }
+    .command-feedback { backdrop-filter: blur(12px) saturate(1.2); -webkit-backdrop-filter: blur(12px) saturate(1.2); }
+    .confirm-modal-backdrop, .event-modal-backdrop, .camera-modal-backdrop,
+    .pwa-install-backdrop, .notif-panel-backdrop, .auth-gate {
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+  }
+  @media (hover: hover) and (pointer: fine) and (min-width: 900px) and (prefers-reduced-transparency: reduce) {
+    :root[data-theme="dark"] { --surface: rgba(20, 27, 42, .9); --surface-raised: rgba(20, 27, 42, .96); }
+    .topbar, .tab-bar, .panel-surface, .device-card, .tv-device, .camera-card,
+    .app-link, .pool-motor, .water-temperature, .quick-action, .agenda-day-panel,
+    .notif-item, .confirm-dialog, .auth-dialog, .event-dialog, .notif-panel,
+    .forecast-day, .system-status-card, .activity-panel, .upcoming-agenda-panel,
+    .form-field input, .form-field textarea, .form-field select,
+    .confirm-modal-backdrop, .event-modal-backdrop, .camera-modal-backdrop,
+    .pwa-install-backdrop, .notif-panel-backdrop, .auth-gate {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
   }
 }
 
@@ -399,10 +427,13 @@ svg[viewBox="0 0 24 24"] {
   .tab-button { min-width: 48px; }
 }
 @media (max-width: 700px) {
-  .tab-bar { display: flex; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
-  .tab-bar .tab-button { flex: 0 0 auto; min-width: 48px; }
+  .tab-bar { display: flex; overflow-x: hidden; overflow-y: hidden; gap: 0; }
+  .tab-bar .tab-button { width: auto; min-width: 0; flex: 1 1 0; }
   .home-quick-status { display: flex; overflow-x: auto; gap: 7px; padding-bottom: 3px; }
   .home-quick-status > * { flex: 0 0 auto; }
+}
+@media (max-width: 380px) {
+  .tab-bar { padding-inline: 0; }
 }
 @media (pointer: coarse) {
   .tab-button, .weather-refresh, .calendar-nav, .calendar-today,
