@@ -22,6 +22,55 @@ test("HTML contiene referencias locales existentes y no repite IDs", () => {
   }
 });
 
+test("el sistema de iconos PWA tiene fallbacks, tamaños y propósito seguros", () => {
+  const html = read("html/index.html");
+  const manifest = JSON.parse(read("html/manifest.webmanifest"));
+  assert.match(html, /rel="icon"[^>]*href="\/icons\/favicon\.ico"/);
+  assert.match(html, /type="image\/svg\+xml"[^>]*media="\(prefers-color-scheme: dark\)"/);
+  assert.match(html, /rel="apple-touch-icon"[^>]*sizes="180x180"[^>]*href="\/icons\/apple-touch-icon\.png"/);
+  assert.match(html, /rel="manifest"[^>]*href="\/manifest\.webmanifest"/);
+  assert.match(html, /rel="mask-icon"[^>]*href="\/icons\/app-icon-mask\.svg"/);
+  assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192" && icon.purpose === "any"));
+  assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512" && icon.purpose === "any"));
+  assert.ok(manifest.icons.some((icon) => icon.src === "/icons/icon-maskable.png" && icon.purpose === "maskable"));
+
+  for (const icon of manifest.icons) {
+    assert.ok(fs.existsSync(path.join(root, "html", icon.src.slice(1))), `no existe el icono declarado ${icon.src}`);
+  }
+  for (const [file, size] of [["icon-192.png", 192], ["icon-512.png", 512], ["icon-maskable.png", 512], ["icon-512-dark.png", 512], ["apple-touch-icon.png", 180]]) {
+    const png = fs.readFileSync(path.join(root, "html/icons", file));
+    assert.equal(png.readUInt32BE(0), 0x89504e47, `${file} no es PNG`);
+    assert.equal(png.readUInt32BE(16), size, `${file} tiene ancho incorrecto`);
+    assert.equal(png.readUInt32BE(20), size, `${file} tiene alto incorrecto`);
+  }
+  const ico = fs.readFileSync(path.join(root, "html/icons/favicon.ico"));
+  assert.equal(ico.readUInt16LE(0), 0);
+  assert.equal(ico.readUInt16LE(2), 1);
+  assert.equal(ico.readUInt16LE(4), 3);
+  assert.deepEqual([ico[6], ico[22], ico[38]], [16, 32, 48]);
+  const worker = read("html/service-worker.js");
+  for (const file of ["icon-192.png", "icon-512.png", "icon-maskable.png", "apple-touch-icon.png", "favicon.ico", "favicon-32.png", "app-icon-light.svg", "app-icon-dark.svg", "app-icon-mask.svg"]) {
+    assert.ok(worker.includes(`/icons/${file}`), `el service worker no precarga ${file}`);
+  }
+  assert.match(read("html/icons/app-icon-maskable.svg"), /translate\(10 5\.5\) scale\(\.8\)/);
+
+  const svgs = [...html.matchAll(/<svg\b([^>]*)>/gi)].map((match) => match[1]);
+  assert.ok(svgs.length > 0);
+  for (const attrs of svgs) {
+    assert.match(attrs, /\bviewBox="0 0 24 24"/i);
+    assert.match(attrs, /\bwidth="24"/i);
+    assert.match(attrs, /\bheight="24"/i);
+    assert.match(attrs, /\baria-hidden="true"/i);
+  }
+  assert.match(read("html/js/app.js"), /setAttribute\("width", "24"\)/);
+  assert.match(read("html/js/app.js"), /setAttribute\("height", "24"\)/);
+  assert.match(read("html/js/app.js"), /button\.querySelector\("\.push-enable-label"\)/);
+  assert.match(read("html/css/swiss-ui.css"), /stroke:\s*currentColor/);
+  assert.match(read("html/css/swiss-ui.css"), /--icon-stroke-width:\s*1\.8/);
+  assert.doesNotMatch(read("html/css/styles.css"), /data:image\/svg\+xml/);
+  assert.doesNotMatch(read("html/js/app.js"), /textContent\s*=\s*["']✎/);
+});
+
 test("la política web mantiene CSP sin scripts inline y el build coincide", () => {
   const html = read("html/index.html");
   const policy = JSON.parse(read("vercel.json"));

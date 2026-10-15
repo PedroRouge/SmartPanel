@@ -26,6 +26,14 @@ Tokens live in `html/css/swiss-ui.css`. Apply `data-theme` before stylesheets lo
 - Maintain visible keyboard focus, semantic labels, a skip link, and reduced-motion support.
 - The mobile viewport currently disables pinch zoom by explicit product preference. Revisit that choice if accessibility requirements change.
 
+## Iconography and app identity
+
+- Dashboard controls use inline 24 × 24 SVG with a 1.8 px rounded stroke and `currentColor`; the icon follows its text color in either theme.
+- Use 18–20 px icons on desktop and 20–22 px on touch layouts. Icon-only controls keep visible labels for assistive technology and at least 44 × 44 px hit areas on mobile/tablet.
+- The launcher mark is a high-contrast geometric “S” on the Swiss red field. Keep the maskable artwork inside the central 65% safe region; let iOS apply its own rounded mask.
+- Source artwork and generated platform files live in `html/icons/`, matching this static site's `/icons/` URL. Run `npm run icons:generate` to regenerate PNG and ICO derivatives from the SVG masters.
+- Do not add icon fonts or remote icon libraries.
+
 ## Performance constraints
 
 - No `backdrop-filter`, blur, stacked shadows, heavy animation libraries, or continuous decorative motion.
