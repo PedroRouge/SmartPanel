@@ -54,6 +54,10 @@ test("el firmware conserva validaciones explícitas para órdenes TV y reloj", (
   const firmware = read("esp32_gateway/src/main.cpp");
   assert.match(firmware, /bool isValidTvCommand\(/);
   assert.match(firmware, /isCommandFresh\(/);
+  assert.match(firmware, /isPrivateLanUrl\(/);
+  assert.match(firmware, /first == 10/);
+  assert.match(firmware, /second >= 16 && second <= 31/);
+  assert.match(firmware, /first == 192 && second == 168/);
   assert.match(firmware, /NTP|time\(nullptr\)|time\(&/i);
   assert.match(firmware, /CMD_QUEUE_SIZE/);
 });
