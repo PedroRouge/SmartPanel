@@ -1,0 +1,29 @@
+filters:
+  and:
+    - file.hasTag("proyecto/smart-panel")
+    - 'file.ext == "md"'
+
+properties:
+  tipo:
+    displayName: Tipo
+  modulo:
+    displayName: Módulo
+  estado:
+    displayName: Estado
+  fecha:
+    displayName: Actualizado
+
+views:
+  - type: table
+    name: Arquitectura y decisiones
+    order:
+      - file.name
+      - tipo
+      - modulo
+      - estado
+      - fecha
+  - type: list
+    name: Notas del sistema
+    order:
+      - file.name
+      - modulo
