@@ -1,0 +1,353 @@
+/* Swiss editorial system for Smart Panel. Loaded after the legacy component sheet. */
+:root {
+  color-scheme: light;
+  --page: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-raised: #F7F7F8;
+  --surface-border: #D6D6D6;
+  --text: #171717;
+  --muted: #575757;
+  --quiet: #707070;
+  --teal: #E4002B;
+  --teal-soft: #FBE5E9;
+  --amber: #805900;
+  --red: #E4002B;
+  --radius: 2px;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  background: var(--page);
+  color: var(--text);
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--page) !important;
+  color: var(--text);
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  font-family: inherit;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  width: min(calc(100% - 40px), 1440px);
+}
+
+.topbar,
+.tab-bar {
+  border-color: var(--surface-border) !important;
+  background: #FFFFFF !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.topbar { border-bottom: 1px solid var(--surface-border); }
+.tab-bar { border-bottom: 1px solid var(--surface-border); }
+.brand-mark,
+.sidebar-brand .brand-mark,
+.auth-mark {
+  border: 1px solid #E4002B;
+  border-radius: 0 !important;
+  background: #FFFFFF !important;
+  color: #E4002B !important;
+}
+
+.version-reader,
+.quick-status-item,
+.session-user,
+.home-indicator {
+  border-color: var(--surface-border) !important;
+  border-radius: 0 !important;
+  background: #FFFFFF !important;
+  color: var(--muted) !important;
+}
+
+.panel-surface,
+.device-card,
+.tv-device,
+.camera-card,
+.app-link,
+.pool-motor,
+.water-temperature,
+.quick-action,
+.agenda-day-panel,
+.notif-item,
+.confirm-dialog,
+.auth-dialog,
+.event-dialog {
+  border: 1px solid var(--surface-border) !important;
+  border-radius: 0 !important;
+  background: #FFFFFF !important;
+  box-shadow: none !important;
+}
+
+.clock-panel,
+.weather-panel,
+.summary-panel,
+.forecast-panel,
+.gate-panel,
+.tv-control,
+.calendar-panel,
+.agenda-day-panel,
+.quick-access-panel,
+.today-agenda,
+.system-status-card,
+.activity-panel,
+.upcoming-agenda-panel {
+  background: #FFFFFF !important;
+}
+
+.clock-panel::after { display: none !important; }
+.pool-art,
+.camera-preview {
+  border: 1px solid var(--surface-border) !important;
+  background: #F7F7F8 !important;
+  color: #E4002B !important;
+}
+.pool-art .ui-icon { width: 56px; height: 56px; }
+.weather-symbol,
+.temperature-icon,
+.temperature-rule { color: #E4002B !important; background-color: #E4002B; }
+
+.dashboard-grid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--surface-border);
+  border-left: 1px solid var(--surface-border);
+}
+
+.dashboard-grid > .clock-panel { grid-column: span 5; }
+.dashboard-grid > .weather-panel { grid-column: span 7; }
+.dashboard-grid > .summary-panel { grid-column: span 7; }
+.dashboard-grid > .forecast-panel { grid-column: span 5; }
+.dashboard-grid > .quick-access-panel,
+.dashboard-grid > .today-agenda { grid-column: 1 / -1; }
+
+.dashboard-grid > .panel-surface {
+  border-top: 0 !important;
+  border-left: 0 !important;
+  padding: clamp(18px, 2.2vw, 28px);
+}
+
+.welcome-row,
+.page-heading {
+  align-items: flex-end;
+  border-bottom: 1px solid var(--surface-border);
+  padding-bottom: 18px;
+}
+
+.welcome-row h1::before,
+.page-heading h1::before {
+  display: block;
+  width: 48px;
+  height: 1px;
+  margin-bottom: 13px;
+  background: #E4002B;
+  content: "";
+}
+
+.eyebrow {
+  color: var(--muted) !important;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .12em;
+}
+
+h1,
+h2,
+h3,
+.clock,
+#weather-temperature,
+.volume-value {
+  color: var(--text) !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
+}
+
+.clock { font-size: clamp(52px, 7vw, 76px); font-weight: 400; }
+.muted,
+.date-line,
+.weather-description,
+.weather-source-note,
+.page-heading > p:last-child,
+.control-feedback,
+.system-status-meta,
+.activity-meta,
+.quick-action-copy small {
+  color: var(--muted) !important;
+}
+
+.tab-button {
+  border: 0 !important;
+  border-bottom: 1px solid transparent !important;
+  border-radius: 0 !important;
+  color: var(--muted) !important;
+}
+
+.tab-button.is-active {
+  border-bottom: 1px solid #E4002B !important;
+  background: #FFFFFF !important;
+  color: #E4002B !important;
+}
+
+.primary-button,
+.auth-submit,
+.gate-button,
+.danger-button {
+  min-height: 44px;
+  border: 1px solid #E4002B !important;
+  border-radius: 0 !important;
+  background: #E4002B !important;
+  color: #FFFFFF !important;
+}
+
+.secondary-button,
+.push-enable-button,
+.notif-bell-btn,
+.pwa-install-button,
+.api-logout,
+.weather-refresh,
+.calendar-nav,
+.calendar-today,
+.mute-button,
+.tv-power-button,
+.remote-key,
+.modal-close,
+.notif-panel-close,
+.icon-button,
+.event-action,
+.camera-remove,
+.auth-install-link {
+  border: 1px solid var(--surface-border) !important;
+  border-radius: 0 !important;
+  background: #FFFFFF !important;
+  color: var(--text) !important;
+}
+
+button:hover:not(:disabled),
+.app-link:hover,
+.device-card:hover,
+.tv-device:hover,
+.quick-action:hover {
+  border-color: #E4002B !important;
+  background: #F7F7F8 !important;
+  color: #171717 !important;
+  transform: none;
+}
+
+.app-grid { gap: 0; border-top: 1px solid var(--surface-border); border-left: 1px solid var(--surface-border); }
+.app-link { min-height: 58px; border-top: 0 !important; border-left: 0 !important; }
+.app-link > span:not(.launch-mark) { color: var(--text) !important; }
+.launch-mark,
+.quick-action-arrow { color: #E4002B !important; }
+.quick-action { border-top: 0 !important; border-left: 0 !important; }
+.quick-action-icon,
+.summary-icon,
+.device-symbol,
+.system-status-icon {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #E4002B !important;
+}
+
+.device-card.is-on { border-left: 2px solid #E4002B !important; }
+.device-card.is-on .device-symbol { color: #E4002B !important; }
+.switch-track,
+.switch-thumb { border-radius: 0 !important; }
+.state-switch[aria-checked="true"] .switch-track { background: #E4002B !important; }
+.status-dot { box-shadow: none !important; }
+.status-dot.is-online { background: #147A43 !important; }
+.status-dot.is-checking { background: #805900 !important; }
+.status-dot.is-error,
+.status-dot.is-off { background: #E4002B !important; }
+.tv-device.is-selected { border-color: #E4002B !important; background: #F7F7F8 !important; }
+.tv-device-icon { border: 1px solid var(--surface-border) !important; color: #E4002B !important; }
+.tv-device-check { width: 8px; height: 8px; font-size: 0; }
+.tv-device.is-selected .tv-device-check { background: #E4002B; }
+.activity-result-dot { width: 8px; height: 8px; padding: 0; border: 0; background: #E4002B; font-size: 0; }
+.activity-result-dot.is-ok { background: #147A43; }
+.volume-slider::-webkit-slider-runnable-track,
+.volume-slider::-moz-range-track { background: #D6D6D6 !important; }
+.volume-slider::-webkit-slider-thumb,
+.volume-slider::-moz-range-thumb { background: #E4002B !important; }
+.calendar-day.is-selected { outline: 1px solid #E4002B; outline-offset: -1px; }
+.calendar-day.is-today { background: #FBE5E9 !important; color: #E4002B !important; }
+
+.form-field input,
+.form-field textarea,
+.form-field select,
+.volume-slider,
+.calendar-day,
+.agenda-day-panel,
+.camera-preview,
+.notif-panel,
+.toast,
+.notif-toast {
+  border-radius: 0 !important;
+}
+
+.form-field input,
+.form-field textarea,
+.form-field select {
+  border-color: var(--surface-border) !important;
+  background: #FFFFFF !important;
+  color: var(--text) !important;
+}
+
+.auth-gate,
+.confirm-modal-backdrop,
+.event-modal-backdrop,
+.notif-panel-backdrop {
+  background: rgba(255, 255, 255, .94) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.auth-gate::before { background: rgba(255, 255, 255, .94) !important; }
+
+.notif-panel { border-left: 1px solid var(--surface-border) !important; background: #FFFFFF !important; }
+.app-footer { border-color: var(--surface-border) !important; }
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #E4002B !important;
+  outline-offset: 3px;
+}
+
+.ui-icon { width: 18px; height: 18px; }
+.quick-action-icon .ui-icon { width: 20px; height: 20px; }
+.launch-mark .ui-icon { width: 15px; height: 15px; }
+.device-symbol .ui-icon { width: 22px; height: 22px; }
+
+@media (max-width: 760px) {
+  .app-shell { width: calc(100% - 24px); }
+  .dashboard-grid > .clock-panel,
+  .dashboard-grid > .weather-panel,
+  .dashboard-grid > .summary-panel,
+  .dashboard-grid > .forecast-panel { grid-column: 1 / -1; }
+  .dashboard-grid > .panel-surface { padding: 18px; }
+  .welcome-row,
+  .page-heading { align-items: flex-start; }
+  .clock { font-size: clamp(50px, 15vw, 68px); }
+  .app-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tab-bar { background: #FFFFFF !important; box-shadow: none !important; }
+  .tab-button { min-width: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}

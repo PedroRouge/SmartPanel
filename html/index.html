@@ -6,17 +6,18 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <meta name="theme-color" content="#090e17">
+  <meta name="theme-color" content="#FFFFFF">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="76">
+  <meta name="smart-panel-version" content="77">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=76">
+  <link rel="stylesheet" href="css/styles.css?v=77">
+  <link rel="stylesheet" href="css/swiss-ui.css?v=77">
   <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
@@ -25,7 +26,7 @@
   <script src="js/bootstrap.js?v=70" defer></script>
   <script src="js/firebase-runtime-config.js?v=75" defer></script>
   <script src="js/firebase-config.js?v=75" defer></script>
-  <script src="js/app.js?v=76" defer></script>
+  <script src="js/app.js?v=77" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -34,7 +35,7 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v76</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v77</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
       <div class="home-quick-status" aria-label="Estado actual de la casa">
         <span class="quick-status-item" title="Conexi&#243;n con el ESP32"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h4l2 3 4-6 2 3h4"/><path d="M7 7h.01M17 17h.01"/></svg><i class="status-dot is-checking" id="quick-esp-dot"></i><span id="quick-esp">ESP32</span></span>
         <span class="quick-status-item" title="Órdenes ON reportadas por el gateway; no es lectura de sensores"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M8.2 14.5a7 7 0 1 1 7.6 0c-.9.6-1.3 1.4-1.5 2.5h-4.6c-.2-1.1-.6-1.9-1.5-2.5Z"/></svg><strong id="quick-lights">--</strong></span>
@@ -72,7 +73,6 @@
             <p class="eyebrow">TU CASA, DE UN VISTAZO</p>
             <h1 id="greeting-text">Buen día</h1>
           </div>
-          <div class="home-indicator"><span class="status-dot"></span> Todo en calma</div>
         </div>
 
         <div class="dashboard-grid">
@@ -108,9 +108,9 @@
               <span class="summary-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5l8-2 8 2v16"/><path d="M8 6v15m8-15v15M4 11h16"/></svg></span>
             </div>
             <div class="summary-items">
-              <div class="summary-item"><span class="summary-icon light-icon" aria-hidden="true">✳</span><span>Órdenes de luces ON</span><strong id="summary-lights">--</strong></div>
-              <div class="summary-item"><span class="summary-icon pool-icon" aria-hidden="true">≈</span><span>Última orden de bomba</span><strong id="summary-pool">Sin dato</strong></div>
-              <div class="summary-item"><span class="summary-icon gate-icon" aria-hidden="true">↗</span><span>Posición del portón</span><strong id="summary-gate">Desconocido</strong></div>
+              <div class="summary-item"><span class="summary-icon light-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0-3.5 10.9c.8.6 1.2 1.3 1.3 2.1h4.4c.1-.8.5-1.5 1.3-2.1A6 6 0 0 0 12 3ZM9.5 19h5M10.5 22h3"/></svg></span><span>Órdenes de luces ON</span><strong id="summary-lights">--</strong></div>
+              <div class="summary-item"><span class="summary-icon pool-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2M3 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2M3 20h18"/></svg></span><span>Última orden de bomba</span><strong id="summary-pool">Sin dato</strong></div>
+              <div class="summary-item"><span class="summary-icon gate-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5l8-2 8 2v16M8 6v15m8-15v15M4 11h16"/></svg></span><span>Posición del portón</span><strong id="summary-gate">Desconocido</strong></div>
             </div>
             <p class="state-freshness" id="shared-state-freshness">Esperando respuesta de los relés; sensores físicos pendientes</p>
           </section>
@@ -129,9 +129,9 @@
           <section class="quick-access-panel panel-surface" aria-labelledby="quick-access-heading">
             <div class="section-heading"><div><p class="eyebrow">ACCIONES R&#193;PIDAS</p><h2 id="quick-access-heading">Ir directo a</h2></div></div>
             <div class="quick-access-grid">
-              <button class="quick-action" type="button" data-open-section="hogar"><span class="quick-action-icon" aria-hidden="true">&#9678;</span><span class="quick-action-copy"><strong>Luces y accesos</strong><small>Controlar el hogar</small></span><span class="quick-action-arrow" aria-hidden="true">&#8594;</span></button>
-              <button class="quick-action" type="button" data-open-section="pileta"><span class="quick-action-icon" aria-hidden="true">&#8776;</span><span class="quick-action-copy"><strong>Pileta</strong><small>Motor y horarios</small></span><span class="quick-action-arrow" aria-hidden="true">&#8594;</span></button>
-              <button class="quick-action" type="button" data-open-section="multimedia"><span class="quick-action-icon" aria-hidden="true">&#9655;</span><span class="quick-action-copy"><strong>Medios</strong><small>TV y reproducci&#243;n</small></span><span class="quick-action-arrow" aria-hidden="true">&#8594;</span></button>
+              <button class="quick-action" type="button" data-open-section="hogar"><span class="quick-action-icon" aria-hidden="true"><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5M5 9v12h14V9m-9 12v-7h4v7"/></svg></span><span class="quick-action-copy"><strong>Luces y accesos</strong><small>Controlar el hogar</small></span><span class="quick-action-arrow" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg></span></button>
+              <button class="quick-action" type="button" data-open-section="pileta"><span class="quick-action-icon" aria-hidden="true"><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2M3 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2M3 20h18"/></svg></span><span class="quick-action-copy"><strong>Pileta</strong><small>Motor y horarios</small></span><span class="quick-action-arrow" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg></span></button>
+              <button class="quick-action" type="button" data-open-section="multimedia"><span class="quick-action-icon" aria-hidden="true"><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18v14H3zM10 9l5 3-5 3z"/></svg></span><span class="quick-action-copy"><strong>Medios</strong><small>TV y reproducci&#243;n</small></span><span class="quick-action-arrow" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg></span></button>
             </div>
           </section>
           <section class="today-agenda panel-surface" aria-labelledby="today-agenda-heading">
@@ -195,40 +195,40 @@
           <div class="tv-list-empty panel-surface" id="tv-list-empty" hidden>No hay televisores detectados.</div>
         </section>
         <section class="tv-control panel-surface" id="tv-control" aria-labelledby="selected-tv-name" hidden>
-          <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV Living</h2><p class="tv-location" id="selected-tv-location">Living</p></div><div class="tv-heading-status"><span class="tv-status"><span class="status-dot is-unknown" id="selected-tv-dot"></span><span id="selected-tv-power">Estado físico desconocido</span></span><button class="tv-power-button" id="tv-power-button" type="button" aria-label="Encender televisor"><span aria-hidden="true">⏻</span><span id="tv-power-label">Encender</span></button></div></div>
-          <p class="tv-power-hint" id="tv-power-hint" hidden>Control Wi-Fi / Infrarrojo listo.</p>
+          <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV Living</h2><p class="tv-location" id="selected-tv-location">Living</p></div><div class="tv-heading-status"><span class="tv-status"><span class="status-dot is-unknown" id="selected-tv-dot"></span><span id="selected-tv-power">Estado físico desconocido</span></span><button class="tv-power-button" id="tv-power-button" type="button" aria-label="Encender televisor"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v10m-6.5-6a8 8 0 1 0 13 0"/></svg><span id="tv-power-label">Encender</span></button></div></div>
+          <p class="tv-power-hint" id="tv-power-hint" hidden>Los comandos dependen del protocolo de red configurado para este televisor.</p>
           <div class="media-control-inner" aria-labelledby="volume-heading">
             <div class="section-heading"><div><p class="eyebrow">CONTROL DE AUDIO</p><h3 id="volume-heading">Nivel solicitado</h3></div><span class="volume-value" id="volume-value">35%</span></div>
             <div class="volume-controls">
               <input class="volume-slider" id="volume-slider" type="range" min="0" max="100" value="35" aria-label="Volumen del televisor">
               <button class="mute-button" type="button" id="mute-button" aria-pressed="false"><span aria-hidden="true">◖</span> Silenciar</button>
             </div>
-            <p class="control-feedback" id="media-feedback" aria-live="polite">Volumen listo para controlar.</p>
+          <p class="control-feedback" id="media-feedback" aria-live="polite">El volumen se actualizará cuando el televisor confirme el comando.</p>
           </div>
           <section class="remote-control" aria-labelledby="remote-heading">
             <div class="section-heading"><div><p class="eyebrow">NAVEGACIÓN</p><h3 id="remote-heading">Control remoto</h3></div></div>
             <div class="remote-pad" role="group" aria-label="Navegación del televisor">
-              <button class="remote-key" type="button" data-remote-key="HOME" aria-label="Inicio" title="Inicio" disabled>⌂</button>
-              <button class="remote-key" type="button" data-remote-key="UP" aria-label="Arriba" title="Arriba" disabled>↑</button>
-              <button class="remote-key" type="button" data-remote-key="MENU" aria-label="Menú" title="Menú" disabled>⋯</button>
-              <button class="remote-key" type="button" data-remote-key="LEFT" aria-label="Izquierda" title="Izquierda" disabled>←</button>
+              <button class="remote-key" type="button" data-remote-key="HOME" aria-label="Inicio" title="Inicio" disabled><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5M5 9v12h14V9m-9 12v7h4v-7"/></svg></button>
+              <button class="remote-key" type="button" data-remote-key="UP" aria-label="Arriba" title="Arriba" disabled><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V4m-7 7 7-7 7 7"/></svg></button>
+              <button class="remote-key" type="button" data-remote-key="MENU" aria-label="Menú" title="Menú" disabled>Men&#250;</button>
+              <button class="remote-key" type="button" data-remote-key="LEFT" aria-label="Izquierda" title="Izquierda" disabled><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12H4m7-7-7 7 7 7"/></svg></button>
               <button class="remote-key remote-key-center" type="button" data-remote-key="OK" aria-label="Aceptar" title="Aceptar" disabled>OK</button>
-              <button class="remote-key" type="button" data-remote-key="RIGHT" aria-label="Derecha" title="Derecha" disabled>→</button>
-              <button class="remote-key" type="button" data-remote-key="BACK" aria-label="Volver" title="Volver" disabled>↶</button>
-              <button class="remote-key" type="button" data-remote-key="DOWN" aria-label="Abajo" title="Abajo" disabled>↓</button>
-              <button class="remote-key" type="button" data-remote-key="PLAY_PAUSE" aria-label="Reproducir o pausar" title="Reproducir o pausar" disabled>▶/Ⅱ</button>
+              <button class="remote-key" type="button" data-remote-key="RIGHT" aria-label="Derecha" title="Derecha" disabled><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h16m-7-7 7 7-7 7"/></svg></button>
+              <button class="remote-key" type="button" data-remote-key="BACK" aria-label="Volver" title="Volver" disabled><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12H5m7-7-7 7 7 7"/></svg></button>
+              <button class="remote-key" type="button" data-remote-key="DOWN" aria-label="Abajo" title="Abajo" disabled><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16m7-7-7 7-7-7"/></svg></button>
+              <button class="remote-key" type="button" data-remote-key="PLAY_PAUSE" aria-label="Reproducir o pausar" title="Reproducir o pausar" disabled><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4v16l11-8L5 4Z"/><path d="M19 5v14"/></svg></button>
             </div>
               <p class="remote-key-hint" id="remote-key-hint">Selecciona un televisor para activar sus controles.</p>
           </section>
           <section class="media-apps" aria-labelledby="apps-heading">
             <div class="section-heading"><div><p class="eyebrow">ACCESOS DIRECTOS</p><h3 id="apps-heading">Abrir una app</h3></div></div>
             <div class="app-grid">
-              <button class="app-link app-netflix" type="button" data-app="Netflix"><span class="app-initial">N</span><span>Netflix</span><span class="launch-mark" aria-hidden="true">↗</span></button>
-              <button class="app-link app-youtube" type="button" data-app="YouTube"><span class="app-initial">▶</span><span>YouTube</span><span class="launch-mark" aria-hidden="true">↗</span></button>
-              <button class="app-link app-flow" type="button" data-app="Flow"><span class="app-initial">F</span><span>Flow</span><span class="launch-mark" aria-hidden="true">↗</span></button>
-              <button class="app-link app-prime" type="button" data-app="Prime Video"><span class="app-initial">P</span><span>Prime Video</span><span class="launch-mark" aria-hidden="true">↗</span></button>
-              <button class="app-link app-disney" type="button" data-app="Disney+"><span class="app-initial">D+</span><span>Disney+</span><span class="launch-mark" aria-hidden="true">↗</span></button>
-              <button class="app-link app-spotify" type="button" data-app="Spotify"><span class="app-initial">♫</span><span>Spotify</span><span class="launch-mark" aria-hidden="true">↗</span></button>
+              <button class="app-link app-netflix" type="button" data-app="Netflix"><span>Netflix</span><span class="launch-mark" aria-hidden="true"><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></span></button>
+              <button class="app-link app-youtube" type="button" data-app="YouTube"><span>YouTube</span><span class="launch-mark" aria-hidden="true"><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></span></button>
+              <button class="app-link app-flow" type="button" data-app="Flow"><span>Flow</span><span class="launch-mark" aria-hidden="true"><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></span></button>
+              <button class="app-link app-prime" type="button" data-app="Prime Video"><span>Prime Video</span><span class="launch-mark" aria-hidden="true"><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></span></button>
+              <button class="app-link app-disney" type="button" data-app="Disney+"><span>Disney+</span><span class="launch-mark" aria-hidden="true"><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></span></button>
+              <button class="app-link app-spotify" type="button" data-app="Spotify"><span>Spotify</span><span class="launch-mark" aria-hidden="true"><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></span></button>
             </div>
           </section>
         </section>
@@ -237,17 +237,17 @@
       <section class="view" id="panel-hogar" role="tabpanel" aria-labelledby="tab-hogar" data-panel="hogar" hidden>
         <div class="page-heading"><p class="eyebrow">AUTOMATIZACIÓN</p><h1>Hogar</h1><p>Luces y accesos principales.</p></div>
         <section class="gate-panel panel-surface" aria-labelledby="gate-heading">
-          <div class="gate-copy"><p class="eyebrow">ACCESO PRINCIPAL</p><h2 id="gate-heading">Portón automático</h2><p id="gate-description">El portón está cerrado.</p></div>
-          <button class="gate-button" id="gate-button" type="button"><span class="gate-button-icon" aria-hidden="true">↗</span><span id="gate-button-label">Abrir portón</span></button>
-          <p class="control-feedback" id="gate-feedback" aria-live="polite">Control simulado. Conecta tu API para accionar el portón.</p>
+          <div class="gate-copy"><p class="eyebrow">ACCESO PRINCIPAL</p><h2 id="gate-heading">Portón automático</h2><p id="gate-description">La posición del portón es desconocida.</p></div>
+          <button class="gate-button" id="gate-button" type="button"><span class="gate-button-icon" aria-hidden="true"><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V4h10v16M12 12h7m-3-3 3 3-3 3"/></svg></span><span id="gate-button-label">Abrir portón</span></button>
+          <p class="control-feedback" id="gate-feedback" aria-live="polite">La posición requiere un sensor para confirmarse.</p>
         </section>
         <section class="devices-section" aria-labelledby="lights-heading">
           <div class="section-heading"><div><p class="eyebrow">ILUMINACIÓN</p><h2 id="lights-heading">Luces</h2></div><span class="section-count" id="lights-count">Sin dato del gateway</span></div>
           <div class="device-grid">
-            <article class="device-card panel-surface" data-device="living"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Living</h3><p>Techo</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz del living" aria-describedby="desc-light-living"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-living">Apagada</span></button></article>
-            <article class="device-card panel-surface" data-device="kitchen"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Cocina</h3><p>Mesada</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz de la cocina" aria-describedby="desc-light-kitchen"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-kitchen">Apagada</span></button></article>
-            <article class="device-card panel-surface" data-device="bedroom"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Dormitorio</h3><p>Principal</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz del dormitorio" aria-describedby="desc-light-bedroom"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-bedroom">Apagada</span></button></article>
-            <article class="device-card panel-surface" data-device="garden"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Exterior</h3><p>Jardín</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz exterior" aria-describedby="desc-light-garden"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-garden">Apagada</span></button></article>
+            <article class="device-card panel-surface" data-device="living"><span class="device-symbol light-symbol" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0-3.5 10.9c.8.6 1.2 1.3 1.3 2.1h4.4c.1-.8.5-1.5 1.3-2.1A6 6 0 0 0 12 3ZM9.5 19h5M10.5 22h3"/></svg></span><div class="device-info"><h3>Living</h3><p>Techo</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz del living" aria-describedby="desc-light-living"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-living">Apagada</span></button></article>
+            <article class="device-card panel-surface" data-device="kitchen"><span class="device-symbol light-symbol" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0-3.5 10.9c.8.6 1.2 1.3 1.3 2.1h4.4c.1-.8.5-1.5 1.3-2.1A6 6 0 0 0 12 3ZM9.5 19h5M10.5 22h3"/></svg></span><div class="device-info"><h3>Cocina</h3><p>Mesada</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz de la cocina" aria-describedby="desc-light-kitchen"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-kitchen">Apagada</span></button></article>
+            <article class="device-card panel-surface" data-device="bedroom"><span class="device-symbol light-symbol" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0-3.5 10.9c.8.6 1.2 1.3 1.3 2.1h4.4c.1-.8.5-1.5 1.3-2.1A6 6 0 0 0 12 3ZM9.5 19h5M10.5 22h3"/></svg></span><div class="device-info"><h3>Dormitorio</h3><p>Principal</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz del dormitorio" aria-describedby="desc-light-bedroom"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-bedroom">Apagada</span></button></article>
+            <article class="device-card panel-surface" data-device="garden"><span class="device-symbol light-symbol" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0-3.5 10.9c.8.6 1.2 1.3 1.3 2.1h4.4c.1-.8.5-1.5 1.3-2.1A6 6 0 0 0 12 3ZM9.5 19h5M10.5 22h3"/></svg></span><div class="device-info"><h3>Exterior</h3><p>Jardín</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz exterior" aria-describedby="desc-light-garden"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-garden">Apagada</span></button></article>
           </div>
         </section>
       </section>
@@ -256,7 +256,7 @@
         <div class="page-heading"><p class="eyebrow">EXTERIOR</p><h1>Pileta</h1><p>Circulación y temperatura del agua.</p></div>
         <section class="pool-layout">
           <article class="pool-motor panel-surface">
-            <div class="pool-art" aria-hidden="true"><span>≈</span></div>
+            <div class="pool-art" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2M3 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2M3 20h18"/></svg></div>
             <p class="eyebrow">SISTEMA DE CIRCULACIÓN</p>
             <h2>Motor de pileta</h2>
             <p class="device-description" id="pool-description">El funcionamiento del motor no está medido.</p>
@@ -301,7 +301,7 @@
           <label class="form-field auth-password-field">
             <span>Contraseña</span>
             <div class="password-wrapper">
-              <input id="auth-password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
+              <input id="auth-password" name="password" type="password" autocomplete="current-password" required>
               <button class="password-toggle-btn" id="auth-password-toggle" type="button" aria-label="Mostrar u ocultar contraseña" title="Mostrar u ocultar contraseña" tabindex="-1">
                 <span id="password-toggle-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z'/><circle cx='12' cy='12' r='3'/></svg></span>
               </button>
@@ -317,7 +317,7 @@
     <div class="event-modal" id="event-modal" hidden>
       <div class="event-modal-backdrop" data-close-event></div>
       <section class="event-dialog panel-surface" role="dialog" aria-modal="true" aria-labelledby="event-form-title">
-        <div class="section-heading"><div><p class="eyebrow">AGENDA</p><h2 id="event-form-title">Nuevo evento</h2></div><button class="modal-close" type="button" aria-label="Cerrar evento" data-close-event>×</button></div>
+        <div class="section-heading"><div><p class="eyebrow">AGENDA</p><h2 id="event-form-title">Nuevo evento</h2></div><button class="modal-close" type="button" aria-label="Cerrar evento" data-close-event><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
         <form id="event-form" novalidate>
           <label class="form-field"><span>Título</span><input type="text" name="title" maxlength="120" required></label>
           <label class="form-field"><span>Fecha</span><input type="date" name="date" required></label>
@@ -342,7 +342,7 @@
     <div class="pwa-install-dialog" id="pwa-install-dialog" hidden>
       <div class="pwa-install-backdrop" data-close-pwa-install></div>
       <section class="pwa-install-content panel-surface" role="dialog" aria-modal="true" aria-labelledby="pwa-install-title">
-        <div class="section-heading"><div><p class="eyebrow">SMART PANEL</p><h2 id="pwa-install-title">Añadir a inicio</h2></div><button class="modal-close" type="button" aria-label="Cerrar" data-close-pwa-install>×</button></div>
+        <div class="section-heading"><div><p class="eyebrow">SMART PANEL</p><h2 id="pwa-install-title">Añadir a inicio</h2></div><button class="modal-close" type="button" aria-label="Cerrar" data-close-pwa-install><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
         <p>En Safari, toca <strong>Compartir</strong> y elige <strong>Añadir a pantalla de inicio</strong>. Abre siempre la app desde ese icono para recibir las actualizaciones.</p>
         <button class="primary-button pwa-install-close" type="button" data-close-pwa-install>Entendido</button>
       </section>
@@ -351,7 +351,7 @@
     <div class="camera-modal" id="camera-modal" hidden>
       <div class="camera-modal-backdrop" data-close-camera-form></div>
       <section class="camera-dialog panel-surface" role="dialog" aria-modal="true" aria-labelledby="camera-form-title">
-        <div class="section-heading"><div><p class="eyebrow">NUEVO DISPOSITIVO</p><h2 id="camera-form-title">Añadir cámara</h2></div><button class="modal-close" type="button" aria-label="Cerrar formulario" data-close-camera-form>×</button></div>
+        <div class="section-heading"><div><p class="eyebrow">NUEVO DISPOSITIVO</p><h2 id="camera-form-title">Añadir cámara</h2></div><button class="modal-close" type="button" aria-label="Cerrar formulario" data-close-camera-form><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
         <form id="camera-form" novalidate>
           <label class="form-field"><span>Nombre de la cámara</span><input type="text" name="cameraName" maxlength="48" placeholder="Ej. Entrada principal" required></label>
           <label class="form-field"><span>URL del stream</span><input type="url" name="cameraUrl" inputmode="url" autocapitalize="off" autocorrect="off" maxlength="2048" placeholder="http://192.168.1.20/stream.mjpg" required><small>Usa un stream MJPEG por HTTP o HTTPS, sin credenciales en la URL. RTSP no es compatible con el navegador.</small></label>
@@ -392,7 +392,7 @@
       <h2>Notificaciones</h2>
       <div class="notif-panel-header-actions">
         <button class="notif-clear-btn" id="notif-clear-btn" type="button">Limpiar todo</button>
-        <button class="notif-panel-close" id="notif-panel-close" type="button" aria-label="Cerrar notificaciones">×</button>
+        <button class="notif-panel-close" id="notif-panel-close" type="button" aria-label="Cerrar notificaciones"><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
     </div>
     <div class="notif-panel-list" id="notif-panel-list"></div>
@@ -404,7 +404,7 @@
     <section class="event-dialog pool-schedule-dialog panel-surface" role="dialog" aria-modal="true" aria-labelledby="pool-schedule-form-title">
       <div class="section-heading">
         <div><p class="eyebrow">PILETA</p><h2 id="pool-schedule-form-title">Nuevo horario</h2></div>
-        <button class="modal-close" type="button" aria-label="Cerrar" data-close-pool-schedule>×</button>
+        <button class="modal-close" type="button" aria-label="Cerrar" data-close-pool-schedule><svg class="ui-icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <form id="pool-schedule-form" class="pool-schedule-form" novalidate>
         <div class="form-row pool-time-row">
