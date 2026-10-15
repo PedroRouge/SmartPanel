@@ -8,8 +8,8 @@
   "display_override": ["window-controls-overlay", "standalone"],
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#121212",
-  "theme_color": "#121212",
+  "background_color": "#0a0e1a",
+  "theme_color": "#0a0e1a",
   "icons": [
     {
       "src": "/icons/icon-192.png",

@@ -28,7 +28,7 @@
     var normalizedTheme = theme === "dark" ? "dark" : "light";
     root.setAttribute("data-theme", normalizedTheme);
     if (themeColorMeta) {
-      themeColorMeta.setAttribute("content", normalizedTheme === "dark" ? "#111111" : "#FFFFFF");
+      themeColorMeta.setAttribute("content", normalizedTheme === "dark" ? "#0a0e1a" : "#edf2f9");
     }
     updateThemeControl(normalizedTheme);
   }

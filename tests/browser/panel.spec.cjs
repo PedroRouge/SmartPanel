@@ -27,7 +27,7 @@ test("abre el dashboard y conserva una única pestaña seleccionada", async ({ p
   await expect(page).toHaveTitle("Smart Panel");
   await expect(page.locator('[data-panel="inicio"]')).toBeVisible();
   await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
-  await expect(page.locator("#frontend-version")).toHaveText("HTML v82");
+  await expect(page.locator("#frontend-version")).toHaveText("HTML v83");
 });
 
 test("respeta el tema del sistema y guarda el tema elegido", async ({ page }) => {
@@ -38,11 +38,11 @@ test("respeta el tema del sistema y guarda el tema elegido", async ({ page }) =>
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(17, 17, 17)");
-  await expect(page.locator(".clock-panel")).toHaveCSS("background-color", "rgb(25, 25, 25)");
-  await expect(page.locator(".clock")).toHaveCSS("color", "rgb(247, 247, 248)");
-  await expect(page.locator(".command-feedback")).toHaveCSS("background-color", "rgb(36, 36, 36)");
-  await expect(page.locator(".camera-modal-backdrop")).toHaveCSS("background-color", "rgba(0, 0, 0, 0.82)");
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(10, 14, 26)");
+  await expect(page.locator(".clock-panel")).toHaveCSS("background-color", "rgba(255, 255, 255, 0.055)");
+  await expect(page.locator(".clock")).toHaveCSS("color", "rgb(243, 245, 250)");
+  await expect(page.locator(".command-feedback")).toHaveCSS("background-color", "rgba(255, 255, 255, 0.1)");
+  await expect(page.locator(".camera-modal-backdrop")).toHaveCSS("background-color", "rgba(4, 8, 17, 0.72)");
 
   const toggle = page.locator("#theme-toggle");
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
@@ -50,9 +50,9 @@ test("respeta el tema del sistema y guarda el tema elegido", async ({ page }) =>
   await toggle.click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(toggle).toHaveAttribute("aria-label", "Cambiar a tema oscuro");
-  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(255, 255, 255)");
-  await expect(page.locator(".command-feedback")).toHaveCSS("background-color", "rgb(247, 247, 248)");
-  await expect(page.locator(".camera-modal-backdrop")).toHaveCSS("background-color", "rgba(255, 255, 255, 0.94)");
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(237, 242, 249)");
+  await expect(page.locator(".command-feedback")).toHaveCSS("background-color", "rgba(255, 255, 255, 0.94)");
+  await expect(page.locator(".camera-modal-backdrop")).toHaveCSS("background-color", "rgba(15, 24, 40, 0.42)");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.locator("#auth-gate").evaluate((element) => { element.hidden = true; });
