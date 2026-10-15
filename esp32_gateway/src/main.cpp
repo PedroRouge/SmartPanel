@@ -5,9 +5,6 @@
 #include <Firebase_ESP_Client.h>
 #include <addons/TokenHelper.h>
 #include <addons/RTDBHelper.h>
-#include <IRremoteESP8266.h>
-#include <IRsend.h>
-#include <ir_Samsung.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
@@ -28,11 +25,6 @@ FirebaseData streamData;
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
-
-// =========================================================================
-// IR SENDER
-// =========================================================================
-IRsend irsend(IR_SEND_PIN);
 
 // =========================================================================
 // FREERTOS: COLA DE COMANDOS (Core 0 recibe → Core 1 ejecuta)
@@ -109,10 +101,7 @@ void setup() {
     esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true);
     esp_task_wdt_add(NULL);
 
-    // 2. IR sender
-    irsend.begin();
-
-    // 3. Cola de comandos (comunicación inter-núcleo)
+    // 2. Cola de comandos (comunicación inter-núcleo)
     cmdQueue = xQueueCreate(CMD_QUEUE_SIZE, sizeof(Command));
     if (!cmdQueue) {
         Serial.println("[FreeRTOS] ERROR CRÍTICO: No se pudo crear la cola de comandos.");
@@ -198,7 +187,7 @@ void workerTask(void* param) {
             if (cmd.sourcePath[0] != '\0') {
                 String receiptKey = String(cmd.sourcePath);
                 receiptKey.replace("/", "_");
-                String receiptPath = "/home/state/commandReceipts" + receiptKey;
+                String receiptPath = "/home/state/commandReceipts/" + receiptKey;
                 FirebaseData receiptData;
                 bool receiptFound = Firebase.RTDB.get(&receiptData, receiptPath.c_str());
                 if (receiptFound && receiptData.to<double>() >= (double)cmd.timestamp) {
@@ -329,6 +318,7 @@ void initWiFi() {
     Serial.printf("[Wi-Fi] Conectando a '%s'", WIFI_SSID);
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 40) {
+        esp_task_wdt_reset();
         delay(500);
         Serial.print(".");
         attempts++;
@@ -352,13 +342,14 @@ void initNTP() {
     unsigned long start = millis();
     time_t now = 0;
     while (now < 100000 && millis() - start < 8000) {
+        esp_task_wdt_reset();
         delay(200);
         now = time(nullptr);
     }
     if (now > 100000) {
         Serial.printf("[NTP] Reloj sincronizado: %s", ctime(&now));
     } else {
-        Serial.println("[NTP] Advertencia: Sin sincronización NTP. TTL guard usará millis().");
+        Serial.println("[NTP] Sin sincronización; se rechazarán comandos físicos hasta sincronizar.");
     }
 }
 
@@ -384,6 +375,7 @@ void initFirebase() {
     Serial.print("[Firebase] Esperando token JWT");
     unsigned long startAuth = millis();
     while (!Firebase.ready() && millis() - startAuth < 12000) {
+        esp_task_wdt_reset();
         delay(200);
         Serial.print(".");
     }
@@ -663,16 +655,14 @@ void handleTvCommand(const String& targetId, const String& action, const String&
     else if (targetId == "tv-lucas")  { tvIp = TV_LUCAS_IP;  }
 
     if (action == "power") {
-        bool ok = executeHttpLocalCommand("http://" + tvIp + ":8080/power");
-        if (!ok && targetId == "tv-living") irsend.sendSAMSUNG(0xE0E040BF, 32);
+        executeHttpLocalCommand("http://" + tvIp + ":8080/power");
 
     } else if (action == "set_volume") {
         int vol = value.toInt();
         executeHttpLocalCommand("http://" + tvIp + ":8080/volume?level=" + String(vol));
 
     } else if (action == "toggle_mute") {
-        bool ok = executeHttpLocalCommand("http://" + tvIp + ":8080/mute");
-        if (!ok && targetId == "tv-living") irsend.sendSAMSUNG(0xE0E0F00F, 32);
+        executeHttpLocalCommand("http://" + tvIp + ":8080/mute");
 
     } else if (action == "launch_app") {
         String encodedApp = value;
@@ -681,16 +671,6 @@ void handleTvCommand(const String& targetId, const String& action, const String&
         executeHttpLocalCommand("http://" + tvIp + ":8080/app?name=" + encodedApp);
 
     } else if (action == "remote_key") {
-        bool ok = executeHttpLocalCommand("http://" + tvIp + ":8080/key?name=" + value);
-        if (!ok && targetId == "tv-living") {
-            if      (value == "UP")    { irsend.sendSAMSUNG(0xE0E006F9, 32); }
-            else if (value == "DOWN")  { irsend.sendSAMSUNG(0xE0E08679, 32); }
-            else if (value == "LEFT")  { irsend.sendSAMSUNG(0xE0E0A659, 32); }
-            else if (value == "RIGHT") { irsend.sendSAMSUNG(0xE0E046B9, 32); }
-            else if (value == "ENTER" || value == "OK") { irsend.sendSAMSUNG(0xE0E016E9, 32); }
-            else if (value == "BACK")  { irsend.sendSAMSUNG(0xE0E01AE5, 32); }
-            else if (value == "HOME" || value == "MENU") { irsend.sendSAMSUNG(0xE0E058A7, 32); }
-            else if (value == "PLAY_PAUSE") { irsend.sendSAMSUNG(0xE0E052AD, 32); }
-        }
+        executeHttpLocalCommand("http://" + tvIp + ":8080/key?name=" + value);
     }
 }

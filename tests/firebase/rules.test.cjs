@@ -49,6 +49,7 @@ test("gateway reporta estados de portón enumerados y admin puede leerlos", asyn
 
 test("device solo puede escribir campos conocidos en home/state", async () => {
   const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
+  const guestDb = environment.authenticatedContext("guest").database();
   const state = ref(deviceDb, "home/state");
 
   await assertSucceeds(set(ref(deviceDb, "home/state/gateStatus"), "pulse_sent"));
@@ -57,6 +58,11 @@ test("device solo puede escribir campos conocidos en home/state", async () => {
   await assertFails(set(state, { gateStatus: "pulse_sent", gateStatusAt: Date.now() }));
   await assertFails(set(ref(deviceDb, "home/state/firmwareOverride"), true));
   await assertFails(set(ref(deviceDb, "home/state/lights/unlisted"), true));
+
+  const receipt = ref(deviceDb, "home/state/commandReceipts/_home_commands_lights_living");
+  await assertSucceeds(set(receipt, Date.now()));
+  await assertFails(set(receipt, "invalid"));
+  await assertFails(get(ref(guestDb, "home/state/commandReceipts/_home_commands_lights_living")));
 });
 
 test("gateway status exige el esquema exacto y valores acotados", async () => {
