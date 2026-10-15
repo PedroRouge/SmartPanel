@@ -1822,6 +1822,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .agenda-day-panel { padding: 16px; }
 }
 
+@media (max-width: 599px) {
+  .tv-control > .section-heading { align-items: stretch; flex-direction: column; gap: 14px; }
+  .tv-heading-status { align-items: stretch; flex-direction: column; gap: 10px; width: 100%; }
+  .tv-status { white-space: normal; line-height: 1.4; }
+  .tv-power-button { width: 100%; min-height: 48px; }
+}
+
 /* Small interaction details across the control surfaces */
 .device-card.is-on {
   border-color: rgba(242,199,125,.22);
