@@ -92,6 +92,10 @@ void setup() {
     Serial.begin(115200);
     delay(800);
 
+    // Set the N16R8 board's onboard RGB LED before any network setup can block.
+    neopixelWrite(RGB_BUILTIN, 0, 0, RGB_BRIGHTNESS);
+    Serial.println("[LED] RGB onboard configurado en azul.");
+
     Serial.println("\n==================================================");
     Serial.println("  SMART PANEL - GATEWAY IOT LOCAL (ESP32-S3)     ");
     Serial.println("  Arquitectura: Dual-Core FreeRTOS + Firebase     ");
