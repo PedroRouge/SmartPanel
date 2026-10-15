@@ -145,9 +145,9 @@ jobs:
         run: vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"
 
   deploy-functions:
-    name: Publicar Firebase Functions
+    name: Publicar reglas y Firebase Functions
     needs: [frontend-and-functions, python-api, esp32-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOYMENTS_ENABLED == 'true'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.FIREBASE_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: firebase-production
@@ -166,4 +166,4 @@ jobs:
       - name: Desplegar funciones verificadas
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-        run: npx firebase-tools@15.34.0 deploy --only functions --project smart-panel-53d7b --non-interactive --token="$FIREBASE_TOKEN"
+        run: npx firebase-tools@15.34.0 deploy --only database,functions --project smart-panel-53d7b --non-interactive --token="$FIREBASE_TOKEN"
