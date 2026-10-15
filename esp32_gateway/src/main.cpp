@@ -92,10 +92,6 @@ void setup() {
     Serial.begin(115200);
     delay(800);
 
-    // Use the RGB pin selected by the active ESP32-S3 board variant (GPIO48 here).
-    // Keep the fixed 3.3 V power indicator untouched.
-    neopixelWrite(PIN_NEOPIXEL, 0, 0, 64);
-
     Serial.println("\n==================================================");
     Serial.println("  SMART PANEL - GATEWAY IOT LOCAL (ESP32-S3)     ");
     Serial.println("  Arquitectura: Dual-Core FreeRTOS + Firebase     ");
@@ -131,6 +127,11 @@ void setup() {
 
     // 7. Firebase
     initFirebase();
+
+    // Use the board variant's addressable RGB LED alias (GPIO48 on this N16R8).
+    // Keep the fixed power/status indicators untouched.
+    neopixelWrite(RGB_BUILTIN, 0, 0, RGB_BRIGHTNESS);
+    Serial.println("[LED] RGB onboard configurado en azul.");
 
     Serial.println("[Sistema] Gateway iniciado. Escuchando comandos...\n");
 }
