@@ -3304,7 +3304,7 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v72";
+    byId("frontend-version").textContent = "HTML v73";
     byId("script-build-version").textContent = "JS v73";
 
     initializeConfirmDialog();
