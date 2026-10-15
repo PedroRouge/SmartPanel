@@ -13,13 +13,4 @@
     });
   }
 
-  if ("caches" in window) {
-    caches.keys().then(function (keys) {
-      return Promise.all(keys.filter(function (key) {
-        return key.indexOf("smart-panel-shell-") === 0 && key !== "smart-panel-shell-70";
-      }).map(function (key) { return caches.delete(key); }));
-    }).catch(function (error) {
-      console.warn("[ServiceWorker] No se pudieron limpiar cachés anteriores:", error);
-    });
-  }
 }());
