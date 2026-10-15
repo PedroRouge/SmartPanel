@@ -79,18 +79,51 @@ test("el encabezado y el control de tema caben en celular, tablet y escritorio",
   }
 });
 
-test("las pestañas móviles conservan objetivos táctiles y se pueden desplazar", async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 640 });
-  const nav = page.locator(".tab-bar");
-  const firstTab = page.locator('.tab-button[data-tab="inicio"]');
-  const lastTab = page.locator('.tab-button[data-tab="estado"]');
-  await expect(firstTab).toBeVisible();
-  const firstBox = await firstTab.boundingBox();
-  expect(firstBox.width).toBeGreaterThanOrEqual(44);
-  const scrollable = await nav.evaluate((element) => element.scrollWidth > element.clientWidth);
-  expect(scrollable).toBe(true);
-  await lastTab.scrollIntoViewIfNeeded();
-  await expect(lastTab).toBeInViewport();
+test("las siete pestañas móviles caben, son táctiles y cambian de sección", async ({ page }) => {
+  await page.locator("#auth-gate").evaluate((element) => { element.hidden = true; });
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    const nav = page.locator(".tab-bar");
+    const tabs = page.locator(".tab-button");
+    await expect(tabs).toHaveCount(7);
+
+    const navBox = await nav.boundingBox();
+    for (let index = 0; index < await tabs.count(); index += 1) {
+      const box = await tabs.nth(index).boundingBox();
+      expect(box.width, `pestaña ${index} en ${width}px`).toBeGreaterThanOrEqual(44);
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
+      expect(box.y + box.height).toBeGreaterThan(navBox.y);
+    }
+    const overflows = await nav.evaluate((element) => element.scrollWidth > element.clientWidth + 1);
+    expect(overflows, `la barra no debe esconder pestañas a ${width}px`).toBe(false);
+
+    for (const [tab, panel] of [
+      ["hogar", "panel-hogar"], ["multimedia", "panel-multimedia"], ["pileta", "panel-pileta"],
+      ["camaras", "panel-camaras"], ["estado", "panel-estado"],
+    ]) {
+      await page.locator(`.tab-button[data-tab="${tab}"]`).click();
+      await expect(page.locator(`#${panel}`)).toBeVisible();
+    }
+  }
+});
+
+test("la navegación completa queda visible en sidebar de escritorio y fila de tablet", async ({ page }) => {
+  await page.locator("#auth-gate").evaluate((element) => { element.hidden = true; });
+  for (const [width, direction] of [[768, "row"], [1280, "column"]]) {
+    await page.setViewportSize({ width, height: 900 });
+    const nav = page.locator(".tab-bar");
+    await expect(nav).toBeVisible();
+    await expect(nav.locator(".tab-button")).toHaveCount(7);
+    await expect(nav).toHaveCSS("flex-direction", direction);
+    for (let index = 0; index < await nav.locator(".tab-button").count(); index += 1) {
+      const box = await nav.locator(".tab-button").nth(index).boundingBox();
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height).toBeLessThanOrEqual(900);
+    }
+  }
 });
 
 test("los iconos inline usan currentColor y los controles de icono son táctiles", async ({ page }) => {
