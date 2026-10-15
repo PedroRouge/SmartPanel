@@ -46,6 +46,8 @@ Genera el token limitado al proyecto desde una sesión Vercel con: `vercel token
 
 La configuración Firebase de navegador y Service Worker se genera desde esos dos secretos mediante `scripts/generate-firebase-runtime-config.cjs`. El fallback versionado no contiene las claves. La API key web y la VAPID son datos públicos del cliente, no contraseñas; mantenlos restringidos en Google Cloud y nunca pongas claves administrativas, contraseñas o tokens en el frontend.
 
+Los dos jobs de deploy requieren además la variable de repositorio `DEPLOYMENTS_ENABLED=true`. Déjala sin configurar hasta que Vercel y Firebase tengan sus credenciales CI válidas; así los checks de calidad pueden ejecutarse sin publicar solo una parte de la aplicación.
+
 ### Proteger la rama de producción
 
 En **Settings → Branches**, protege `main`, exige pull request y marca los checks requeridos:

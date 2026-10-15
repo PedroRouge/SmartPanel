@@ -110,7 +110,7 @@ jobs:
   deploy:
     name: Publicar sitio en Vercel
     needs: [frontend-and-functions, python-api, esp32-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -147,7 +147,7 @@ jobs:
   deploy-functions:
     name: Publicar Firebase Functions
     needs: [frontend-and-functions, python-api, esp32-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: firebase-production
