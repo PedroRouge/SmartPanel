@@ -2,45 +2,52 @@
 
 ## Direction
 
-Smart Panel is a home-control dashboard. Keep the existing Swiss editorial direction: system sans-serif typography, flat surfaces, fine separators, and one red accent. Prioritize clear device state and direct controls over decorative effects.
+Smart Panel uses the atmospheric, compact home-control language of [House Control](https://github.com/0xProbabillity/house-control), adapted to its existing dashboard and controls. Keep the Smart Panel wordmark, navigation, home status, weather, schedule, lighting, gate, pool, media and camera functions. Use a deep blue-black canvas, softly lit glass surfaces, fine translucent edges, rounded device tiles and clear live states. The reference's 3D floor plan is not copied because Smart Panel has no equivalent model; its lighting and tile grammar carries through the current modules.
 
 ## Tokens
 
+The dark values below are extracted from `web/src/style.css` in House Control. The light values are a readable counterpart for Smart Panel's existing light theme; the reference itself defines a dark theme only.
+
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
-| `--page` | `#FFFFFF` | `#111111` | App background |
-| `--surface` | `#FFFFFF` | `#191919` | Panels and controls |
-| `--surface-raised` | `#F7F7F8` | `#242424` | Secondary surfaces |
-| `--surface-border` | `#D6D6D6` | `#454545` | Dividers and outlines |
-| `--text` | `#171717` | `#F7F7F8` | Primary text |
-| `--muted` | `#575757` | `#D0D0D0` | Supporting text |
-| `--accent` | `#E4002B` | `#FF4A65` | Main actions and focus |
+| `--page` | `#edf2f9` | `#0a0e1a` | Canvas |
+| `--text` | `#172033` | `#f3f5fa` | Main text |
+| `--muted` | `#53627a` | `rgba(222, 230, 247, .72)` | Supporting text |
+| `--surface` | `rgba(255,255,255,.78)` | `rgba(255,255,255,.055)` | Glass cards |
+| `--surface-raised` | `rgba(255,255,255,.94)` | `rgba(255,255,255,.1)` | Hover and raised states |
+| `--surface-border` | `rgba(47,72,108,.14)` | `rgba(255,255,255,.085)` | Fine outlines |
+| `--accent` | `#307ce5` | `#3d8bff` | Active controls and focus |
+| `--warm` | `#e7a348` | `#ffb46b` | Lights and warm readings |
+| `--positive` | `#168a55` | `#4ade80` | Connected and enabled |
+| `--red` | `#d94d61` | `#ff7888` | Errors and alerts |
 
-Tokens live in `html/css/swiss-ui.css`. Apply `data-theme` before stylesheets load through `html/js/theme-init.js`; preserve the stored user selection and system preference fallback.
+- Typography: native system sans stack led by Apple SF Pro where available, then Inter and `system-ui`; tabular numerals for time and readings.
+- Geometry: 20–22 px cards, 14–15 px controls, pill status chips and switches.
+- Depth: subtle translucent fills, a fine light edge and soft low-spread shadows. Desktop pointer devices may blur the topbar/navigation; touch devices keep the same translucent color layers without backdrop blur for lower GPU cost.
+- Motion: short color and transform feedback on user actions; honor reduced motion and avoid continuous decorative work.
 
-## Layout and interaction
+Tokens and component mapping live in `html/css/swiss-ui.css`, loaded after the existing component sheet. Theme selection remains in `data-theme` and is initialized before stylesheets through `html/js/theme-init.js`. The PWA shell cache uses network-first CSS/JS requests.
 
-- Keep the seven dashboard sections and existing navigation behavior intact.
-- Use the 760 px and 700 px breakpoints already established by the stylesheets. At mobile widths, the bottom section bar scrolls horizontally; each tab remains at least 44 px wide.
-- Keep fixed controls clear of device safe areas and allow modal content to scroll independently.
-- Maintain visible keyboard focus, semantic labels, a skip link, and reduced-motion support.
-- The mobile viewport currently disables pinch zoom by explicit product preference. Revisit that choice if accessibility requirements change.
+## Component mapping
 
-## Iconography and app identity
+- Summary and status cards use the same glass tile, border, radius and depth treatment.
+- Lights use the warm amber reference state; enabled controls get a soft accent tint and glow.
+- Pump/pool uses a cool cyan status, gate uses green when open/active, and connection indicators retain green, amber and red for online, checking and error.
+- Existing labels, controls, navigation, behavior and responsive grids stay intact.
 
-- Dashboard controls use inline 24 × 24 SVG with a 1.8 px rounded stroke and `currentColor`; the icon follows its text color in either theme.
-- Use 18–20 px icons on desktop and 20–22 px on touch layouts. Icon-only controls keep visible labels for assistive technology and at least 44 × 44 px hit areas on mobile/tablet.
-- The launcher mark is a high-contrast geometric “S” on the Swiss red field. Keep the maskable artwork inside the central 65% safe region; let iOS apply its own rounded mask.
-- Source artwork and generated platform files live in `html/icons/`, matching this static site's `/icons/` URL. Run `npm run icons:generate` to regenerate PNG and ICO derivatives from the SVG masters.
-- Do not add icon fonts or remote icon libraries.
+## Layout and accessibility
 
-## Performance constraints
+- Retain the seven sections, existing navigation behavior and 600/700/760/900/1200 px breakpoints.
+- Mobile-first grids collapse to one column; section navigation remains horizontally scrollable and touch targets stay at least 44 px.
+- Preserve safe-area spacing, modal scrolling, visible keyboard focus, semantic labels and reduced-motion support.
+- Keep the current viewport and interaction behavior unless an accessibility change is requested.
 
-- No `backdrop-filter`, blur, stacked shadows, heavy animation libraries, or continuous decorative motion.
-- Prefer native scrolling and transitions limited to color, background, border, or transform.
-- Avoid work on every animation frame; update live values only when their underlying state changes.
-- CSS/browser viewport checks are not a substitute for testing on physical older iPads and low-end phones.
+## Performance
 
-## Source of truth
+- Avoid continuous animation and large effects over scrolling content.
+- Limit `backdrop-filter` to the topbar/navigation on fine-pointer desktop screens; touch devices use translucent surfaces without blur.
+- Keep app imagery and icons local; do not add a remote icon or font runtime dependency.
 
-The implementation is split between legacy component rules in `html/css/styles.css` and theme/layout overrides in `html/css/swiss-ui.css`. Browser regression coverage lives in `tests/browser/panel.spec.cjs` and runs with `npm run test:ui`.
+## Source
+
+The component structure and functionality remain in `html/index.html` and `html/css/styles.css`; the reference-inspired theme overrides are in `html/css/swiss-ui.css`. UI regression coverage is in `tests/browser/panel.spec.cjs` and runs with `npm run test:ui`.

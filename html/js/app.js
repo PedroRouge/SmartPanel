@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "82";
+  var APP_BUILD_VERSION = "83";
   var STORAGE_KEY = "smart-panel-state-v3";
   var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
@@ -2609,7 +2609,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=82").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=83").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -3349,7 +3349,7 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v82";
+    byId("frontend-version").textContent = "HTML v83";
     byId("script-build-version").textContent = "JS v81";
 
     initializeConfirmDialog();

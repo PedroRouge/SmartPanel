@@ -26,13 +26,13 @@ test("el sistema de iconos PWA tiene fallbacks, tamaños y propósito seguros", 
   const html = read("html/index.html");
   const manifest = JSON.parse(read("html/manifest.json"));
   assert.match(html, /rel="icon"[^>]*href="\/icons\/favicon\.ico"/);
-  assert.match(html, /name="theme-color" content="#121212"/);
+  assert.match(html, /name="theme-color" content="#0a0e1a"/);
   assert.match(html, /rel="apple-touch-icon"[^>]*sizes="180x180"[^>]*href="\/icons\/apple-touch-icon\.png"/);
   assert.match(html, /rel="manifest"[^>]*href="\/manifest\.json"/);
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192" && icon.purpose === "any"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512" && icon.purpose === "any"));
   assert.ok(manifest.icons.some((icon) => icon.src === "/icons/icon-maskable.png" && icon.purpose === "any maskable"));
-  assert.equal(manifest.theme_color, "#121212");
+  assert.equal(manifest.theme_color, "#0a0e1a");
 
   for (const icon of manifest.icons) {
     assert.ok(fs.existsSync(path.join(root, "html", icon.src.slice(1))), `no existe el icono declarado ${icon.src}`);
