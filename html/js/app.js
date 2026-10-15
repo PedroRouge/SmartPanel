@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "70";
+  var APP_BUILD_VERSION = "71";
   var STORAGE_KEY = "smart-panel-state-v3";
   var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
@@ -1100,6 +1100,11 @@
     var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
     var isUnconfigured = !config.apiKey || config.apiKey.indexOf("TU_API_KEY") !== -1;
     var errorEl = byId("auth-error");
+    [byId("auth-username"), byId("auth-password")].forEach(function (input) {
+      if (!input) { return; }
+      input.value = "";
+      input.addEventListener("focus", function () { input.removeAttribute("readonly"); }, { once: true });
+    });
 
     if (isUnconfigured && errorEl) {
       errorEl.innerHTML = "⚠️ Falta vincular tu proyecto de Firebase.<br><button type='button' class='firebase-setup-link' id='quick-firebase-setup'>Toca aquí para configurar Firebase</button>";
@@ -2570,7 +2575,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=70").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=71").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -3307,7 +3312,7 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v70";
+    byId("frontend-version").textContent = "HTML v71";
     byId("script-build-version").textContent = "JS v70";
 
     initializeConfirmDialog();

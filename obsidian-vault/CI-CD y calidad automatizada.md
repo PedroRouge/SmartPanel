@@ -44,7 +44,7 @@ El proyecto detectado es `smart-panel`, URL `https://smart-panel-beryl.vercel.ap
 
 Genera el token limitado al proyecto desde una sesión Vercel con: `vercel tokens create "Smart Panel GitHub Actions" --project prj_aDyrkIXgQurddGsDujGMU2kFhJuR --json`. Guarda su valor únicamente como el secreto `VERCEL_TOKEN`.
 
-La configuración Firebase de navegador y Service Worker se genera desde esos dos secretos mediante `scripts/generate-firebase-runtime-config.cjs`. El fallback versionado no contiene las claves. La API key web y la VAPID son datos públicos del cliente, no contraseñas; mantenlos restringidos en Google Cloud y nunca pongas claves administrativas, contraseñas o tokens en el frontend.
+La configuración Firebase de navegador y Service Worker queda vinculada automáticamente al proyecto en `html/js/firebase-runtime-config.js`; CI la regenera desde secretos mediante `scripts/generate-firebase-runtime-config.cjs`. La API key web y la VAPID son datos públicos del cliente, no contraseñas; mantenlos restringidos por dominio/API en Google Cloud y nunca pongas claves administrativas, contraseñas ni tokens de cuenta en el frontend.
 
 Los dos jobs de deploy requieren además la variable de repositorio `DEPLOYMENTS_ENABLED=true`. Déjala sin configurar hasta que Vercel y Firebase tengan sus credenciales CI válidas; así los checks de calidad pueden ejecutarse sin publicar solo una parte de la aplicación.
 

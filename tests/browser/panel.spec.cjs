@@ -8,13 +8,20 @@ test.beforeEach(async ({ page }) => {
 test("sin sesión, el formulario de autenticación está visible", async ({ page }) => {
   await expect(page.locator("#auth-gate")).toBeVisible();
   await expect(page.locator("#auth-form")).toBeVisible();
+  await expect(page.locator("#auth-username")).toHaveValue("");
+  await expect(page.locator("#auth-password")).toHaveValue("");
+  await expect(page.locator("#auth-form")).toHaveAttribute("autocomplete", "off");
+  await expect(page.locator("#auth-password")).toHaveAttribute("autocomplete", "new-password");
+  await expect.poll(() => page.evaluate(() => window.SMART_PANEL_FIREBASE_CONFIG?.apiKey || ""))
+    .toMatch(/^AIza[0-9A-Za-z_-]{30,}$/);
+  await expect(page.locator("#auth-error")).toBeHidden();
 });
 
 test("abre el dashboard y conserva una única pestaña seleccionada", async ({ page }) => {
   await expect(page).toHaveTitle("Smart Panel");
   await expect(page.locator('[data-panel="inicio"]')).toBeVisible();
   await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
-  await expect(page.locator("#frontend-version")).toHaveText("HTML v70");
+  await expect(page.locator("#frontend-version")).toHaveText("HTML v71");
 });
 
 test("cambia de sección con clic y muestra el panel correspondiente", async ({ page }) => {

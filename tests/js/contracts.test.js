@@ -73,8 +73,9 @@ test("la configuración Firebase se inyecta solo durante el despliegue", () => {
   const firebaseConfig = read("html/js/firebase-config.js");
   const generator = read("scripts/generate-firebase-runtime-config.cjs");
   const worker = read("html/service-worker.js");
-  assert.doesNotMatch(runtime, /AIza[0-9A-Za-z_-]{30,}|[A-Za-z0-9_-]{80,}/);
-  assert.doesNotMatch(firebaseConfig, /AIza[0-9A-Za-z_-]{30,}|[A-Za-z0-9_-]{80,}/);
+  assert.match(runtime, /apiKey:\s*"AIza[0-9A-Za-z_-]{30,}"/);
+  assert.match(runtime, /vapidKey:\s*"[A-Za-z0-9_-]{80,}"/);
+  assert.doesNotMatch(runtime + firebaseConfig + worker, /FIREBASE_USER_PASSWORD|WIFI_PASSWORD|-----BEGIN [A-Z ]*PRIVATE KEY-----/);
   assert.match(generator, /process\.env\.FIREBASE_WEB_API_KEY/);
   assert.match(generator, /process\.env\.FIREBASE_WEB_VAPID_KEY/);
   assert.doesNotMatch(worker, /AIza[0-9A-Za-z_-]{30,}/);
