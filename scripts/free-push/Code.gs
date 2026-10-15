@@ -18,11 +18,11 @@ function runSmartPanelFreePush() {
   if (!lock.tryLock(1000)) return;
   try {
     var now = Date.now();
-    var users = rtdbGet_("users") || {};
-    Object.keys(users).forEach(function (uid) {
-      var events = users[uid] && users[uid].events || {};
+    var userIds = rtdbGetShallow_("users") || {};
+    Object.keys(userIds).forEach(function (uid) {
       var tokens = getUserTokens_(uid);
       if (!tokens.length) return;
+      var events = rtdbGet_("users/" + encodeURIComponent(uid) + "/events") || {};
       Object.keys(events).forEach(function (eventId) {
         deliverDueReminders_(uid, eventId, events[eventId], tokens, now);
       });
@@ -38,19 +38,27 @@ function installSmartPanelFreePushTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (trigger) {
     if (trigger.getHandlerFunction() === SMART_PANEL_PUSH.triggerHandler) ScriptApp.deleteTrigger(trigger);
   });
-  ScriptApp.newTrigger(SMART_PANEL_PUSH.triggerHandler).timeBased().everyMinutes(5).create();
+  var trigger = ScriptApp.newTrigger(SMART_PANEL_PUSH.triggerHandler).timeBased().everyMinutes(5).create();
   Logger.log("Trigger gratuito instalado: notificaciones Smart Panel cada 5 minutos.");
+  return {
+    installed: true,
+    handler: trigger.getHandlerFunction(),
+    source: String(trigger.getTriggerSource()),
+    uniqueId: trigger.getUniqueId(),
+    intervalMinutes: 5
+  };
 }
 
 function verifySmartPanelFreePushAccess() {
-  var users = rtdbGet_("users");
+  var userIds = rtdbGetShallow_("users");
   var response = UrlFetchApp.fetch(
     "https://fcm.googleapis.com/v1/projects/" + SMART_PANEL_PUSH.projectId + "/messages:send",
     requestOptions_("post", { message: { token: "validation-only-invalid-token", notification: { title: "Validación" } } })
   );
   var status = response.getResponseCode();
   if (status === 401 || status === 403) throw new Error("La cuenta no tiene permiso para enviar con FCM HTTP v1 (HTTP " + status + ").");
-  Logger.log("Firebase Realtime Database autorizado. Usuarios leídos: " + Object.keys(users || {}).length);
+  if (status !== 400) throw new Error("La validación de FCM esperaba HTTP 400 para el token ficticio y recibió HTTP " + status + ".");
+  Logger.log("Firebase Realtime Database autorizado. Usuarios encontrados: " + Object.keys(userIds || {}).length);
   Logger.log("FCM HTTP v1 autorizado (respuesta de validación HTTP " + status + ").");
   return { database: "ok", fcmHttpStatus: status };
 }
@@ -177,11 +185,13 @@ function safeKey_(value) {
 }
 
 function rtdbGet_(path) { return rtdbRequest_("get", path); }
+function rtdbGetShallow_(path) { return rtdbRequest_("get", path, undefined, "shallow=true"); }
 function rtdbPut_(path, value) { return rtdbRequest_("put", path, value); }
 function rtdbDelete_(path) { return rtdbRequest_("delete", path); }
 
-function rtdbRequest_(method, path, value) {
+function rtdbRequest_(method, path, value, query) {
   var url = SMART_PANEL_PUSH.databaseUrl.replace(/\/+$/, "") + "/" + path + ".json";
+  if (query) url += "?" + query;
   var options = requestOptions_(method, value);
   var response = UrlFetchApp.fetch(url, options);
   var status = response.getResponseCode();
