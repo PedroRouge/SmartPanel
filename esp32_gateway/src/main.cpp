@@ -430,6 +430,9 @@ void initFirebase() {
 
     config.api_key        = FIREBASE_API_KEY;
     config.database_url   = FIREBASE_DATABASE_URL;
+    // Evita repetir el inicio de sesión cada 2 s si Firebase rechaza credenciales
+    // o aplica un bloqueo temporal por demasiados intentos.
+    config.signer.reqTO   = 60000;
     auth.user.email       = FIREBASE_USER_EMAIL;
     auth.user.password    = FIREBASE_USER_PASSWORD;
     config.token_status_callback = tokenStatusCallback;
