@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "76";
+  var APP_BUILD_VERSION = "77";
   var STORAGE_KEY = "smart-panel-state-v3";
   var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
@@ -63,10 +63,10 @@
   var lastRenderedDay = ""; // PERF-03: sólo actualizar date-line cuando cambia el día
 
   var TV_DEVICES = [
-    { id: "tv-living", name: "TV Living", room: "Living", model: "Smart TV", ip: "", powerControlReady: true, volume: 35, muted: false },
-    { id: "tv-pedro", name: "TV Pedro", room: "Habitación Pedro", model: "Smart TV", ip: "", powerControlReady: true, volume: 30, muted: false },
-    { id: "tv-padres", name: "TV Habitación Padres", room: "Habitación Padres", model: "Smart TV", ip: "", powerControlReady: true, volume: 30, muted: false },
-    { id: "tv-lucas", name: "TV Lucas", room: "Habitación Lucas", model: "Smart TV", ip: "", powerControlReady: true, volume: 25, muted: false }
+    { id: "tv-living", name: "TV Living", room: "Living", model: "Modelo no configurado", ip: "", powerControlReady: false, volume: 35, muted: false },
+    { id: "tv-pedro", name: "TV Pedro", room: "Habitación Pedro", model: "Modelo no configurado", ip: "", powerControlReady: false, volume: 30, muted: false },
+    { id: "tv-padres", name: "TV Habitación Padres", room: "Habitación Padres", model: "Modelo no configurado", ip: "", powerControlReady: false, volume: 30, muted: false },
+    { id: "tv-lucas", name: "TV Lucas", room: "Habitación Lucas", model: "Modelo no configurado", ip: "", powerControlReady: false, volume: 25, muted: false }
   ];
 
   function readState() {
@@ -136,6 +136,9 @@
       bell: '<path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>',
       calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
       alert: '<path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5m0 3h.01"/>',
+      close: '<path d="M18 6 6 18M6 6l12 12"/>',
+      tv: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="m8 2 4 3 4-3"/>',
+      camera: '<path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3.5"/>',
       eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
       eyeoff: '<path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3 3.8M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7a10 10 0 0 0 4-.8"/>',
       sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>',
@@ -827,7 +830,10 @@
     }
     visible.slice(0, 100).forEach(function (entry) {
       var row = createTextElement("article", "activity-row");
-      row.appendChild(createTextElement("span", "activity-result-dot" + (entry.result === "ok" ? " is-ok" : " is-error"), entry.result === "ok" ? "✓" : "!"));
+      var resultDot = createTextElement("span", "activity-result-dot" + (entry.result === "ok" ? " is-ok" : " is-error"));
+      resultDot.setAttribute("role", "img");
+      resultDot.setAttribute("aria-label", entry.result === "ok" ? "Correcto" : "Error");
+      row.appendChild(resultDot);
       var copy = createTextElement("div", "activity-copy");
       copy.appendChild(createTextElement("strong", "", entry.action || "Acción del sistema"));
       if (entry.details) { copy.appendChild(createTextElement("span", "", entry.details)); }
@@ -1112,7 +1118,11 @@
     var isUnconfigured = !config.apiKey || config.apiKey.indexOf("TU_API_KEY") !== -1;
     var errorEl = byId("auth-error");
     if (isUnconfigured && errorEl) {
-      errorEl.innerHTML = "⚠️ Falta vincular tu proyecto de Firebase.<br><button type='button' class='firebase-setup-link' id='quick-firebase-setup'>Toca aquí para configurar Firebase</button>";
+      errorEl.textContent = "Falta vincular tu proyecto de Firebase. ";
+      var setupButton = createTextElement("button", "firebase-setup-link", "Configurar Firebase");
+      setupButton.type = "button";
+      setupButton.id = "quick-firebase-setup";
+      errorEl.appendChild(setupButton);
       errorEl.hidden = false;
       setTimeout(function () {
         var btn = byId("quick-firebase-setup");
@@ -1772,10 +1782,10 @@
         }).catch(function (err) {
           console.error("Error al eliminar evento:", err);
           recordActivity("No se pudo eliminar el evento: " + (eventData.title || "Evento"), "error", err.message);
-          addNotification("alert", "⚠", "NO SE PUDO ELIMINAR", eventData.title || "Evento", err.message);
+          addNotification("alert", "alert", "NO SE PUDO ELIMINAR", eventData.title || "Evento", err.message);
         });
       } else {
-        addNotification("alert", "⚠", "NO SE PUDO ELIMINAR", eventData.title || "Evento", "Iniciá sesión para modificar tu agenda.");
+        addNotification("alert", "alert", "NO SE PUDO ELIMINAR", eventData.title || "Evento", "Iniciá sesión para modificar tu agenda.");
       }
     });
   }
@@ -1965,7 +1975,7 @@
         var remove = document.createElement("button");
         remove.type = "button";
         remove.className = "event-action is-delete";
-        remove.textContent = "×";
+        remove.appendChild(svgIcon("close"));
         remove.addEventListener("click", function () { deleteCalendarEvent(ev); });
         actions.appendChild(edit);
         actions.appendChild(remove);
@@ -2119,7 +2129,8 @@
       btn.type = "button";
       btn.className = "tv-device" + (active ? " is-selected" : "");
 
-      var icon = createTextElement("span", "tv-device-icon", "▣");
+      var icon = createTextElement("span", "tv-device-icon");
+      icon.appendChild(svgIcon("tv"));
       var copy = document.createElement("span");
       copy.className = "tv-device-copy";
       copy.appendChild(createTextElement("strong", "", tv.name));
@@ -2129,7 +2140,9 @@
       power.classList.add("is-unknown");
       copy.appendChild(power);
 
-      var check = createTextElement("span", "tv-device-check", active ? "●" : "");
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+      var check = createTextElement("span", "tv-device-check");
+      check.setAttribute("aria-hidden", "true");
 
       btn.appendChild(icon);
       btn.appendChild(copy);
@@ -2150,19 +2163,21 @@
       var selectedTvState = getSelectedTvState();
       var powerLabel = selectedTvState.poweredOn === true ? "Apagar" : "Encender";
       byId("selected-tv-name").textContent = selected.name;
-      byId("selected-tv-location").textContent = selected.room + " · " + selected.model + " · " + (selected.ip || "Wi-Fi LAN");
+      byId("selected-tv-location").textContent = selected.room + " · " + selected.model + " · " + (selected.ip || "IP sin configurar");
       byId("selected-tv-power").textContent = "Estado físico desconocido";
       byId("selected-tv-dot").classList.remove("is-off");
       byId("selected-tv-dot").classList.add("is-unknown");
       byId("tv-power-label").textContent = powerLabel;
       byId("tv-power-button").setAttribute("aria-label", powerLabel + " televisor");
-      byId("tv-power-button").disabled = false;
-      byId("tv-power-hint").hidden = true;
+      byId("tv-power-button").disabled = !selected.powerControlReady;
+      byId("tv-power-hint").hidden = selected.powerControlReady;
+      byId("volume-slider").disabled = !selected.powerControlReady;
+      byId("mute-button").disabled = !selected.powerControlReady;
 
       Array.prototype.forEach.call(document.querySelectorAll("[data-remote-key]"), function (b) {
-        b.disabled = false;
+        b.disabled = !selected.powerControlReady;
       });
-      byId("remote-key-hint").textContent = "Comandos Wi-Fi / IR listos para enviar al ESP32.";
+      byId("remote-key-hint").textContent = "Los comandos requieren que el modelo y su protocolo de control por red estén configurados.";
     }
   }
 
@@ -2187,7 +2202,8 @@
     image.hidden = true;
 
     var message = createTextElement("span", "camera-stream-message", "Conectando stream...");
-    var glyph = createTextElement("span", "camera-glyph", "▧");
+    var glyph = createTextElement("span", "camera-glyph");
+    glyph.appendChild(svgIcon("camera"));
     var tag = createTextElement("span", "camera-tag", "CÁMARA IP");
 
     image.onload = function () {
@@ -2221,7 +2237,7 @@
     var remove = document.createElement("button");
     remove.type = "button";
     remove.className = "camera-remove";
-    remove.textContent = "×";
+    remove.appendChild(svgIcon("close"));
     remove.addEventListener("click", function () {
       showConfirmDialog({
         title: "¿Eliminar cámara?",
@@ -2581,7 +2597,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=71").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=77").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -2858,7 +2874,7 @@
     var closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.className = "notif-toast-close";
-    closeBtn.textContent = "×";
+    closeBtn.appendChild(svgIcon("close"));
     closeBtn.setAttribute("aria-label", "Cerrar notificación");
 
     var bar = document.createElement("span");
@@ -2956,7 +2972,7 @@
       var dismiss = document.createElement("button");
       dismiss.type = "button";
       dismiss.className = "notif-item-dismiss";
-      dismiss.textContent = "×";
+      dismiss.appendChild(svgIcon("close"));
       dismiss.setAttribute("aria-label", "Descartar notificación");
       dismiss.addEventListener("click", (function (id) {
         return function () { dismissNotif(id); };
@@ -3161,7 +3177,7 @@
       var remove = document.createElement("button");
       remove.type = "button";
       remove.className = "pool-schedule-remove";
-      remove.textContent = "×";
+      remove.appendChild(svgIcon("close"));
       remove.setAttribute("aria-label", "Eliminar horario");
       remove.addEventListener("click", (function (i) {
         return function () {
@@ -3216,7 +3232,7 @@
           sendPoolCommand(true);
           addNotification(
             "important",
-            "≈",
+            "water",
             "PILETA · HORARIO",
             "Sistema de pileta iniciado",
             matchedSchedule
@@ -3230,7 +3246,7 @@
           sendPoolCommand(false);
           addNotification(
             "important",
-            "≈",
+            "water",
             "PILETA · HORARIO",
             "Sistema de pileta finalizado",
             "El ciclo de circulación automático ha terminado."
@@ -3308,9 +3324,9 @@
         // Solo notificar si no es un cambio por horario automático
         if (lastPoolScheduleState === null) {
           if (state.poolOn) {
-            addNotification("important", "≈", "PILETA", "Motor de pileta encendido", "Activado manualmente.");
+            addNotification("important", "water", "PILETA", "Motor de pileta encendido", "Activado manualmente.");
           } else {
-            addNotification("important", "≈", "PILETA", "Motor de pileta apagado", "Apagado manualmente.");
+            addNotification("important", "water", "PILETA", "Motor de pileta apagado", "Apagado manualmente.");
           }
         }
       }
@@ -3318,8 +3334,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v76";
-    byId("script-build-version").textContent = "JS v76";
+    byId("frontend-version").textContent = "HTML v77";
+    byId("script-build-version").textContent = "JS v77";
 
     initializeConfirmDialog();
     initializeTabs();
