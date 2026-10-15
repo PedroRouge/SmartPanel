@@ -4,6 +4,9 @@
 #define WIFI_SSID "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 
+// ESP32-S3-N16R8 dual-USB board: onboard RGB LED is on GPIO48.
+// #define RGB_LED_PIN 48
+
 #define FIREBASE_API_KEY "YOUR_FIREBASE_WEB_API_KEY"
 #define FIREBASE_DATABASE_URL "https://YOUR_PROJECT-default-rtdb.firebaseio.com"
 #define FIREBASE_USER_EMAIL "esp32@YOUR_PROJECT.local"

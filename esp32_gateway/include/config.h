@@ -40,3 +40,8 @@ struct WifiSmartDevice {
 #ifndef SMART_PANEL_LOCAL_NETWORK_CONFIG
 #error "Local device IP configuration must be defined in config.local.h"
 #endif
+
+// Placa ESP32-S3-N16R8 de doble USB mostrada: LED RGB integrado en GPIO48.
+#ifndef RGB_LED_PIN
+#define RGB_LED_PIN 48
+#endif
