@@ -65,6 +65,18 @@ class ApiEndpointTests(unittest.TestCase):
         cls.thread.join(timeout=2)
         TEMP_DATA.cleanup()
 
+    def assert_request_status(self, request, expected_status):
+        try:
+            response = urlopen(request, timeout=3)
+        except HTTPError as error:
+            status = error.code
+            error.read()
+            error.close()
+        else:
+            response.close()
+            self.fail("La solicitud debía responder HTTP {}".format(expected_status))
+        self.assertEqual(status, expected_status)
+
     def test_auth_status_endpoint_is_available_without_a_session(self):
         with urlopen(self.base_url + "/api/auth/status", timeout=3) as response:
             payload = json.loads(response.read().decode("utf-8"))
@@ -79,15 +91,11 @@ class ApiEndpointTests(unittest.TestCase):
             headers={"Origin": "https://attacker.example"},
             method="OPTIONS",
         )
-        with self.assertRaises(HTTPError) as result:
-            urlopen(request, timeout=3)
-        self.assertEqual(result.exception.code, 403)
+        self.assert_request_status(request, 403)
 
     def test_private_events_endpoint_rejects_anonymous_requests(self):
         request = Request(self.base_url + "/api/events")
-        with self.assertRaises(HTTPError) as result:
-            urlopen(request, timeout=3)
-        self.assertEqual(result.exception.code, 401)
+        self.assert_request_status(request, 401)
 
     def test_login_rate_limit_ignores_spoofed_proxy_ip_header(self):
         request = Request(
@@ -96,9 +104,7 @@ class ApiEndpointTests(unittest.TestCase):
             headers={"Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.99"},
             method="POST",
         )
-        with self.assertRaises(HTTPError) as result:
-            urlopen(request, timeout=3)
-        self.assertEqual(result.exception.code, 401)
+        self.assert_request_status(request, 401)
         self.assertIn("127.0.0.1", servidor._login_failures)
         self.assertNotIn("203.0.113.99", servidor._login_failures)
 

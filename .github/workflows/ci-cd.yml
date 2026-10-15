@@ -42,6 +42,7 @@ jobs:
           node --check html/js/bootstrap.js
           node --check html/service-worker.js
           node --check functions/index.js
+          node --check functions/reminders.js
           node --check functions/scripts/set-role.js
 
       - name: Probar estructura de UI y firmware
@@ -145,7 +146,7 @@ jobs:
         run: vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"
 
   deploy-functions:
-    name: Publicar reglas Firebase
+    name: Publicar reglas y Cloud Functions de Firebase
     needs: [frontend-and-functions, python-api, esp32-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.FIREBASE_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-24.04
@@ -163,7 +164,7 @@ jobs:
       - name: Instalar CLI fijada
         run: npm ci
 
-      - name: Desplegar reglas verificadas
+      - name: Desplegar reglas y funciones verificadas
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-        run: npx firebase-tools@15.34.0 deploy --only database --project smart-panel-53d7b --non-interactive --token="$FIREBASE_TOKEN"
+        run: npx firebase-tools@15.34.0 deploy --only database,functions --project smart-panel-53d7b --non-interactive --token="$FIREBASE_TOKEN"
