@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -11,12 +11,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="75">
+  <meta name="smart-panel-version" content="76">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=75">
+  <link rel="stylesheet" href="css/styles.css?v=76">
   <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
@@ -25,7 +25,7 @@
   <script src="js/bootstrap.js?v=70" defer></script>
   <script src="js/firebase-runtime-config.js?v=75" defer></script>
   <script src="js/firebase-config.js?v=75" defer></script>
-  <script src="js/app.js?v=75" defer></script>
+  <script src="js/app.js?v=76" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -34,7 +34,7 @@
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v75</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v76</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
       <div class="home-quick-status" aria-label="Estado actual de la casa">
         <span class="quick-status-item" title="Conexi&#243;n con el ESP32"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h4l2 3 4-6 2 3h4"/><path d="M7 7h.01M17 17h.01"/></svg><i class="status-dot is-checking" id="quick-esp-dot"></i><span id="quick-esp">ESP32</span></span>
         <span class="quick-status-item" title="Órdenes ON reportadas por el gateway; no es lectura de sensores"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M8.2 14.5a7 7 0 1 1 7.6 0c-.9.6-1.3 1.4-1.5 2.5h-4.6c-.2-1.1-.6-1.9-1.5-2.5Z"/></svg><strong id="quick-lights">--</strong></span>
@@ -195,7 +195,7 @@
           <div class="tv-list-empty panel-surface" id="tv-list-empty" hidden>No hay televisores detectados.</div>
         </section>
         <section class="tv-control panel-surface" id="tv-control" aria-labelledby="selected-tv-name" hidden>
-          <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV Living</h2><p class="tv-location" id="selected-tv-location">Living</p></div><div class="tv-heading-status"><span class="tv-status"><span class="status-dot is-unknown" id="selected-tv-dot"></span><span id="selected-tv-power">Estado físico desconocido</span></span><button class="tv-power-button" id="tv-power-button" type="button" aria-label="Alternar energía"><span aria-hidden="true">⏻</span><span id="tv-power-label">Alternar energía</span></button></div></div>
+          <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV Living</h2><p class="tv-location" id="selected-tv-location">Living</p></div><div class="tv-heading-status"><span class="tv-status"><span class="status-dot is-unknown" id="selected-tv-dot"></span><span id="selected-tv-power">Estado físico desconocido</span></span><button class="tv-power-button" id="tv-power-button" type="button" aria-label="Encender televisor"><span aria-hidden="true">⏻</span><span id="tv-power-label">Encender</span></button></div></div>
           <p class="tv-power-hint" id="tv-power-hint" hidden>Control Wi-Fi / Infrarrojo listo.</p>
           <div class="media-control-inner" aria-labelledby="volume-heading">
             <div class="section-heading"><div><p class="eyebrow">CONTROL DE AUDIO</p><h3 id="volume-heading">Nivel solicitado</h3></div><span class="volume-value" id="volume-value">35%</span></div>

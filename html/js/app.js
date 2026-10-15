@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "75";
+  var APP_BUILD_VERSION = "76";
   var STORAGE_KEY = "smart-panel-state-v3";
   var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
@@ -101,7 +101,8 @@
               if (!savedTv || typeof savedTv !== "object") { return; }
               defaults.tvStates[tv.id] = {
                 volume: Number.isInteger(savedTv.volume) && savedTv.volume >= 0 && savedTv.volume <= 100 ? savedTv.volume : tv.volume,
-                muted: savedTv.muted === true
+                muted: savedTv.muted === true,
+                poweredOn: typeof savedTv.poweredOn === "boolean" ? savedTv.poweredOn : null
               };
             });
           }
@@ -262,6 +263,7 @@
         model: typeof remoteTv.model === "string" && remoteTv.model.length <= 80 ? remoteTv.model : fallback.model,
         ip: typeof remoteTv.ip === "string" && remoteTv.ip.length <= 64 ? remoteTv.ip : fallback.ip,
         powerControlReady: remoteTv.powerControlReady === true,
+        poweredOn: typeof remoteTv.poweredOn === "boolean" ? remoteTv.poweredOn : null,
         volume: volume,
         muted: remoteTv.muted === true
       };
@@ -275,6 +277,8 @@
       else if (typeof cached.volume !== "number") { cached.volume = 35; }
       if (typeof tv.muted === "boolean") { cached.muted = tv.muted; }
       else if (typeof cached.muted !== "boolean") { cached.muted = false; }
+      if (typeof tv.poweredOn === "boolean") { cached.poweredOn = tv.poweredOn; }
+      else if (typeof cached.poweredOn !== "boolean") { cached.poweredOn = null; }
       state.tvStates[tv.id] = cached;
     });
     saveState();
@@ -1023,7 +1027,7 @@
     var feedback = byId("media-feedback");
     if (!requireGatewayConnection("el televisor", feedback)) { renderMedia(); return; }
     var tvState = getSelectedTvState();
-    var previous = { volume: tvState.volume, muted: tvState.muted };
+    var previous = { volume: tvState.volume, muted: tvState.muted, poweredOn: tvState.poweredOn };
     if (action === "set_volume") {
       tvState.volume = Number(value);
       tvState.muted = false;
@@ -1032,6 +1036,8 @@
     } else if (action === "toggle_mute") {
       tvState.muted = !tvState.muted;
       state.muted = tvState.muted;
+    } else if (action === "power") {
+      tvState.poweredOn = tvState.poweredOn === true ? false : true;
     }
     saveState();
     renderTVs();
@@ -1049,6 +1055,8 @@
       updates["home/tvs/" + tv.id + "/muted"] = false;
     } else if (action === "toggle_mute") {
       updates["home/tvs/" + tv.id + "/muted"] = tvState.muted;
+    } else if (action === "power") {
+      updates["home/tvs/" + tv.id + "/poweredOn"] = tvState.poweredOn;
     }
 
     updateFirebasePaths(updates).then(function () {
@@ -1058,6 +1066,7 @@
     }).catch(function (error) {
       tvState.volume = previous.volume;
       tvState.muted = previous.muted;
+      tvState.poweredOn = previous.poweredOn;
       state.volume = previous.volume;
       state.muted = previous.muted;
       saveState();
@@ -2090,7 +2099,7 @@
     var tv = getSelectedTv();
     if (!tv) { return { volume: state.volume, muted: state.muted }; }
     if (!state.tvStates[tv.id]) {
-      state.tvStates[tv.id] = { volume: tv.volume || 35, muted: tv.muted === true };
+      state.tvStates[tv.id] = { volume: tv.volume || 35, muted: tv.muted === true, poweredOn: typeof tv.poweredOn === "boolean" ? tv.poweredOn : null };
     }
     return state.tvStates[tv.id];
   }
@@ -2138,12 +2147,15 @@
 
     byId("tv-control").hidden = !selected;
     if (selected) {
+      var selectedTvState = getSelectedTvState();
+      var powerLabel = selectedTvState.poweredOn === true ? "Apagar" : "Encender";
       byId("selected-tv-name").textContent = selected.name;
       byId("selected-tv-location").textContent = selected.room + " · " + selected.model + " · " + (selected.ip || "Wi-Fi LAN");
       byId("selected-tv-power").textContent = "Estado físico desconocido";
       byId("selected-tv-dot").classList.remove("is-off");
       byId("selected-tv-dot").classList.add("is-unknown");
-      byId("tv-power-label").textContent = "Alternar energía";
+      byId("tv-power-label").textContent = powerLabel;
+      byId("tv-power-button").setAttribute("aria-label", powerLabel + " televisor");
       byId("tv-power-button").disabled = false;
       byId("tv-power-hint").hidden = true;
 
@@ -3306,8 +3318,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v75";
-    byId("script-build-version").textContent = "JS v75";
+    byId("frontend-version").textContent = "HTML v76";
+    byId("script-build-version").textContent = "JS v76";
 
     initializeConfirmDialog();
     initializeTabs();
