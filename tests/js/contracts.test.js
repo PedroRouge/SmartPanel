@@ -81,6 +81,7 @@ test("la política web mantiene CSP sin scripts inline y el build coincide", () 
   assert.ok(csp, "falta Content-Security-Policy");
   assert.doesNotMatch(csp.value, /unsafe-inline/);
   assert.match(csp.value, /script-src[^;]*https:\/\/apis\.google\.com/);
+  assert.match(csp.value, /frame-src[^;]*https:\/\/smart-panel-53d7b\.firebaseapp\.com/);
   assert.doesNotMatch(html, /<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/i);
   assert.doesNotMatch(html.match(/<meta name="viewport"[^>]*>/i)?.[0] || "", /user-scalable=no|maximum-scale\s*=\s*1/i);
   const headers = policy.headers.flatMap((entry) => entry.headers);
@@ -135,7 +136,9 @@ test("CI fija el sistema operativo del runner para evitar cambios automáticos",
 
 test("el despliegue de Firebase publica reglas y Cloud Functions", () => {
   const workflow = read(".github/workflows/ci-cd.yml");
-  assert.match(workflow, /deploy --only database,functions/);
+  const databaseDeploy = workflow.indexOf("deploy --only database --project smart-panel-53d7b");
+  const functionsDeploy = workflow.indexOf("deploy --only functions --project smart-panel-53d7b");
+  assert.ok(databaseDeploy >= 0 && functionsDeploy > databaseDeploy, "las reglas deben desplegarse antes de Cloud Functions");
 });
 
 test("Cloud Functions usa Node.js 22 en manifiesto y lockfile", () => {
