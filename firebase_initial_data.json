@@ -11,7 +11,7 @@
         "name": "TV Living",
         "room": "Living",
         "model": "Smart TV",
-        "ip": "192.168.0.52",
+        "ip": "",
         "volume": 35,
         "muted": false,
         "powerControlReady": true
@@ -21,7 +21,7 @@
         "name": "TV Pedro",
         "room": "Habitación Pedro",
         "model": "Smart TV",
-        "ip": "192.168.0.10",
+        "ip": "",
         "volume": 30,
         "muted": false,
         "powerControlReady": true
@@ -31,7 +31,7 @@
         "name": "TV Habitación Padres",
         "room": "Habitación Padres",
         "model": "Smart TV",
-        "ip": "192.168.0.53",
+        "ip": "",
         "volume": 30,
         "muted": false,
         "powerControlReady": true
@@ -41,7 +41,7 @@
         "name": "TV Lucas",
         "room": "Habitación Lucas",
         "model": "Smart TV",
-        "ip": "192.168.0.51",
+        "ip": "",
         "volume": 25,
         "muted": false,
         "powerControlReady": true
@@ -51,7 +51,9 @@
     "gateway": {
       "status": {
         "online": false,
-        "last_seen": 0,
+        "ip": "",
+        "rssi": 0,
+        "last_seen": 1,
         "uptime": 0,
         "version": "not-connected"
       }

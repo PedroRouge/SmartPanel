@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "74";
+  var APP_BUILD_VERSION = "75";
   var STORAGE_KEY = "smart-panel-state-v3";
   var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
@@ -63,10 +63,10 @@
   var lastRenderedDay = ""; // PERF-03: sólo actualizar date-line cuando cambia el día
 
   var TV_DEVICES = [
-    { id: "tv-living", name: "TV Living", room: "Living", model: "Smart TV", ip: "192.168.0.52", powerControlReady: true, volume: 35, muted: false },
-    { id: "tv-pedro", name: "TV Pedro", room: "Habitación Pedro", model: "Smart TV", ip: "192.168.0.10", powerControlReady: true, volume: 30, muted: false },
-    { id: "tv-padres", name: "TV Habitación Padres", room: "Habitación Padres", model: "Smart TV", ip: "192.168.0.53", powerControlReady: true, volume: 30, muted: false },
-    { id: "tv-lucas", name: "TV Lucas", room: "Habitación Lucas", model: "Smart TV", ip: "192.168.0.51", powerControlReady: true, volume: 25, muted: false }
+    { id: "tv-living", name: "TV Living", room: "Living", model: "Smart TV", ip: "", powerControlReady: true, volume: 35, muted: false },
+    { id: "tv-pedro", name: "TV Pedro", room: "Habitación Pedro", model: "Smart TV", ip: "", powerControlReady: true, volume: 30, muted: false },
+    { id: "tv-padres", name: "TV Habitación Padres", room: "Habitación Padres", model: "Smart TV", ip: "", powerControlReady: true, volume: 30, muted: false },
+    { id: "tv-lucas", name: "TV Lucas", room: "Habitación Lucas", model: "Smart TV", ip: "", powerControlReady: true, volume: 25, muted: false }
   ];
 
   function readState() {
@@ -3306,8 +3306,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v74";
-    byId("script-build-version").textContent = "JS v74";
+    byId("frontend-version").textContent = "HTML v75";
+    byId("script-build-version").textContent = "JS v75";
 
     initializeConfirmDialog();
     initializeTabs();

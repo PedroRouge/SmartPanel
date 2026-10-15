@@ -39,10 +39,13 @@ test("la política web mantiene CSP sin scripts inline y el build coincide", () 
 
 test("las reglas Firebase no habilitan escritura general a cualquier usuario", () => {
   const rules = JSON.parse(read("firebase_rules.json")).rules;
-  assert.equal(rules.home.state[".write"], "auth != null && auth.token.role == 'device'");
+  assert.equal(rules.home.state[".write"], undefined);
+  assert.equal(rules.home.state.gateStatus[".write"], "auth != null && auth.token.role == 'device'");
+  assert.equal(rules.home.state.lights.$light[".write"], "auth != null && auth.token.role == 'device'");
   assert.equal(rules.home.state[".read"], "auth != null && auth.token.role == 'admin'");
   assert.equal(rules.home.commands.timestamp[".write"], "auth != null && auth.token.role == 'admin'");
   assert.equal(rules.home.commands[".read"], "auth != null && (auth.token.role == 'admin' || auth.token.role == 'device')");
+  assert.equal(rules.home.gateway.status.$other[".validate"], false);
   assert.equal(rules.scheduledReminders[".read"], false);
   assert.equal(rules.scheduledReminders[".write"], false);
 });
@@ -65,9 +68,17 @@ test("la plataforma y bibliotecas PlatformIO están fijadas", () => {
 
 test("los secretos reales del firmware no están en la plantilla de CI", () => {
   const example = read("esp32_gateway/include/config.example.h");
+  const sharedConfig = read("esp32_gateway/include/config.h");
+  const gitignore = read(".gitignore");
+  const initialData = read("firebase_initial_data.json");
+  const app = read("html/js/app.js");
   assert.match(example, /YOUR_WIFI_SSID/);
   assert.match(example, /REPLACE_WITH_A_UNIQUE_DEVICE_PASSWORD/);
   assert.doesNotMatch(example, /AIza[0-9A-Za-z_-]{30,}/);
+  assert.doesNotMatch(sharedConfig, /192\.168\./);
+  assert.doesNotMatch(initialData, /192\.168\./);
+  assert.doesNotMatch(app, /ip:\s*"192\.168\./);
+  assert.match(gitignore, /esp32_gateway\/include\/config\.local\.h/);
 });
 
 test("la configuración Firebase se inyecta solo durante el despliegue", () => {

@@ -47,6 +47,35 @@ test("gateway reporta estados de portón enumerados y admin puede leerlos", asyn
   await assertFails(get(ref(guestDb, "home/state/gateStatus")));
 });
 
+test("device solo puede escribir campos conocidos en home/state", async () => {
+  const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
+  const state = ref(deviceDb, "home/state");
+
+  await assertSucceeds(set(ref(deviceDb, "home/state/gateStatus"), "pulse_sent"));
+  await assertSucceeds(set(ref(deviceDb, "home/state/gateStatusAt"), Date.now()));
+  await assertSucceeds(set(ref(deviceDb, "home/state/lights/living"), true));
+  await assertFails(set(state, { gateStatus: "pulse_sent", gateStatusAt: Date.now() }));
+  await assertFails(set(ref(deviceDb, "home/state/firmwareOverride"), true));
+  await assertFails(set(ref(deviceDb, "home/state/lights/unlisted"), true));
+});
+
+test("gateway status exige el esquema exacto y valores acotados", async () => {
+  const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
+  const status = ref(deviceDb, "home/gateway/status");
+  const validStatus = {
+    online: true,
+    ip: "10.0.0.20",
+    rssi: -55,
+    uptime: 42,
+    last_seen: Date.now(),
+    version: "2.1.0-dualcore",
+  };
+
+  await assertSucceeds(set(status, validStatus));
+  await assertFails(set(status, { ...validStatus, rssi: 100 }));
+  await assertFails(set(ref(deviceDb, "home/gateway/status/injected"), "extra"));
+});
+
 test("eventos quedan privados por UID y validan su contenido", async () => {
   const aliceDb = environment.authenticatedContext("alice").database();
   const bobDb = environment.authenticatedContext("bob").database();
@@ -63,6 +92,19 @@ test("eventos quedan privados por UID y validan su contenido", async () => {
   await assertSucceeds(set(ref(aliceDb, "users/alice/events/event-1"), event));
   await assertFails(set(ref(bobDb, "users/alice/events/event-2"), event));
   await assertFails(set(ref(aliceDb, "users/alice/events/event-3"), { ...event, title: "" }));
+  await assertFails(set(ref(aliceDb, "users/alice/events/event-4"), { ...event, isAdmin: true }));
+});
+
+test("tokens push son privados, acotados y rechazan campos adicionales", async () => {
+  const aliceDb = environment.authenticatedContext("alice").database();
+  const bobDb = environment.authenticatedContext("bob").database();
+  const token = { token: "fcm-token-example", updatedAt: Date.now(), platform: "Chrome", device: "Desktop" };
+
+  await assertSucceeds(set(ref(aliceDb, "pushTokens/alice/encoded-token"), token));
+  await assertFails(set(ref(bobDb, "pushTokens/alice/other-token"), token));
+  await assertFails(set(ref(aliceDb, "pushTokens/alice/extra-field"), { ...token, admin: true }));
+  await assertFails(set(ref(aliceDb, "pushTokens/alice/long-platform"), { ...token, platform: "x".repeat(1025) }));
+  await assertFails(set(ref(aliceDb, "pushTokens/alice"), { arbitrary: token }));
 });
 
 

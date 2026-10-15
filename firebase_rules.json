@@ -3,17 +3,34 @@
     "home": {
       "state": {
         ".read": "auth != null && auth.token.role == 'admin'",
-        ".write": "auth != null && auth.token.role == 'device'",
-        "updatedAt": { ".validate": "newData.isNumber() && newData.val() > 0" },
-        "lights": {
-          "$light": { ".validate": "($light == 'living' || $light == 'kitchen' || $light == 'bedroom' || $light == 'garden') && newData.isBoolean()" }
+        "updatedAt": {
+          ".write": "auth != null && auth.token.role == 'device'",
+          ".validate": "newData.isNumber() && newData.val() > 0"
         },
-        "poolOn": { ".validate": "newData.isBoolean()" },
-        "gateStatus": { ".validate": "newData.isString() && (newData.val() == 'unknown' || newData.val() == 'pulse_sent' || newData.val() == 'pulse_failed')" },
-        "gateStatusAt": { ".validate": "newData.isNumber() && newData.val() > 0" },
+        "lights": {
+          "$light": {
+            ".write": "auth != null && auth.token.role == 'device'",
+            ".validate": "($light == 'living' || $light == 'kitchen' || $light == 'bedroom' || $light == 'garden') && newData.isBoolean()"
+          }
+        },
+        "poolOn": {
+          ".write": "auth != null && auth.token.role == 'device'",
+          ".validate": "newData.isBoolean()"
+        },
+        "gateStatus": {
+          ".write": "auth != null && auth.token.role == 'device'",
+          ".validate": "newData.isString() && (newData.val() == 'unknown' || newData.val() == 'pulse_sent' || newData.val() == 'pulse_failed')"
+        },
+        "gateStatusAt": {
+          ".write": "auth != null && auth.token.role == 'device'",
+          ".validate": "newData.isNumber() && newData.val() > 0"
+        },
         "commandReceipts": {
           ".read": "auth != null && auth.token.role == 'device'",
-          "$command": { ".validate": "newData.isNumber() && newData.val() > 0" }
+          "$command": {
+            ".write": "auth != null && auth.token.role == 'device'",
+            ".validate": "newData.isNumber() && newData.val() > 0"
+          }
         }
       },
       "commands": {
@@ -45,7 +62,14 @@
         "status": {
           ".read": "auth != null && auth.token.role == 'admin'",
           ".write": "auth != null && auth.token.role == 'device'",
-          ".validate": "newData.hasChildren(['online', 'last_seen', 'version']) && newData.child('online').isBoolean() && newData.child('last_seen').isNumber() && newData.child('version').isString()"
+          ".validate": "newData.hasChildren(['online', 'ip', 'rssi', 'uptime', 'last_seen', 'version'])",
+          "online": { ".validate": "newData.isBoolean()" },
+          "ip": { ".validate": "newData.isString() && newData.val().length <= 45" },
+          "rssi": { ".validate": "newData.isNumber() && newData.val() >= -120 && newData.val() <= 0" },
+          "uptime": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+          "last_seen": { ".validate": "newData.isNumber() && newData.val() > 0" },
+          "version": { ".validate": "newData.isString() && newData.val().length <= 32" },
+          "$other": { ".validate": false }
         }
       },
       "tvs": {
@@ -78,7 +102,16 @@
           ".write": "auth != null && auth.uid == $uid",
           "$eventId": {
             ".write": "auth != null && auth.uid == $uid",
-            ".validate": "newData.hasChildren(['title', 'date', 'all_day', 'notes', 'category', 'updatedAt']) && newData.child('title').isString() && newData.child('title').val().length > 0 && newData.child('title').val().length <= 120 && newData.child('date').isString() && newData.child('date').val().matches(/^(19|20)[0-9][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/) && newData.child('all_day').isBoolean() && newData.child('notes').isString() && newData.child('notes').val().length <= 2000 && newData.child('category').isString() && (newData.child('category').val() == 'personal' || newData.child('category').val() == 'hogar' || newData.child('category').val() == 'salud' || newData.child('category').val() == 'trabajo' || newData.child('category').val() == 'otro') && newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() > 0 && (!newData.child('start_time').exists() || newData.child('start_time').val() == null || (newData.child('start_time').isString() && newData.child('start_time').val().matches(/^([01][0-9]|2[0-3]):[0-5][0-9]$/))) && (!newData.child('end_time').exists() || newData.child('end_time').val() == null || (newData.child('end_time').isString() && newData.child('end_time').val().matches(/^([01][0-9]|2[0-3]):[0-5][0-9]$/)))"
+            ".validate": "newData.hasChildren(['title', 'date', 'all_day', 'notes', 'category', 'updatedAt']) && newData.child('title').isString() && newData.child('title').val().length > 0 && newData.child('title').val().length <= 120 && newData.child('date').isString() && newData.child('date').val().matches(/^(19|20)[0-9][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/) && newData.child('all_day').isBoolean() && newData.child('notes').isString() && newData.child('notes').val().length <= 2000 && newData.child('category').isString() && (newData.child('category').val() == 'personal' || newData.child('category').val() == 'hogar' || newData.child('category').val() == 'salud' || newData.child('category').val() == 'trabajo' || newData.child('category').val() == 'otro') && newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() > 0 && (!newData.child('start_time').exists() || newData.child('start_time').val() == null || (newData.child('start_time').isString() && newData.child('start_time').val().matches(/^([01][0-9]|2[0-3]):[0-5][0-9]$/))) && (!newData.child('end_time').exists() || newData.child('end_time').val() == null || (newData.child('end_time').isString() && newData.child('end_time').val().matches(/^([01][0-9]|2[0-3]):[0-5][0-9]$/)))",
+            "title": { ".validate": true },
+            "date": { ".validate": true },
+            "all_day": { ".validate": true },
+            "notes": { ".validate": true },
+            "category": { ".validate": true },
+            "updatedAt": { ".validate": true },
+            "start_time": { ".validate": true },
+            "end_time": { ".validate": true },
+            "$other": { ".validate": false }
           }
         }
       }
@@ -86,7 +119,15 @@
     "pushTokens": {
       "$uid": {
         ".read": "auth != null && auth.uid == $uid",
-        ".write": "auth != null && auth.uid == $uid"
+        "$tokenKey": {
+          ".write": "auth != null && auth.uid == $uid",
+          ".validate": "newData.hasChildren(['token', 'updatedAt', 'platform']) && newData.child('token').isString() && newData.child('token').val().length > 0 && newData.child('token').val().length <= 4096 && newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() > 0 && newData.child('platform').isString() && newData.child('platform').val().length <= 1024 && (!newData.hasChild('device') || (newData.child('device').isString() && newData.child('device').val().length <= 128))",
+          "token": { ".validate": true },
+          "updatedAt": { ".validate": true },
+          "platform": { ".validate": true },
+          "device": { ".validate": true },
+          "$other": { ".validate": false }
+        }
       }
     },
     "pushSent": {
