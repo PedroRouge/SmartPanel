@@ -85,7 +85,7 @@ Se necesita Java 21 para Firebase Emulator. En PowerShell reemplaza `cp` por `Co
 - Firebase Emulator valida reglas localmente; no modifica producción.
 - La compilación verifica código y enlace del firmware, pero no simula señales eléctricas ni el relé.
 - La auditoría de npm reportó avisos en el toolchain de desarrollo; las dependencias de producción de Functions sí se auditan como puerta CI. Dependabot propone actualizaciones para revisar.
-- Cloud Functions ya tienen job de deploy condicionado a `main`; requiere el secreto `FIREBASE_TOKEN`. Las reglas RTDB no se publican automaticamente para evitar un bloqueo antes de asignar claims de owner.
+- Cloud Functions ya tienen job de deploy condicionado a `main`; requiere el secreto `FIREBASE_TOKEN`. Las reglas RTDB no se publican automaticamente para evitar un bloqueo antes de asignar claims de admin.
 
 ## Nodos relacionados
 

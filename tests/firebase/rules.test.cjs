@@ -24,11 +24,11 @@ beforeEach(async () => {
   await environment.clearDatabase();
 });
 
-test("solo el email permitido puede emitir comandos sin claim owner; device puede retirarlos", async () => {
-  const ownerDb = environment.authenticatedContext("owner", { email: "pedrorouge2022@gmail.com" }).database();
+test("admin puede emitir comandos; device solo puede retirarlos", async () => {
+  const adminDb = environment.authenticatedContext("admin", { role: "admin" }).database();
   const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
   const strangerDb = environment.authenticatedContext("guest", { email: "otro@example.com" }).database();
-  const command = ref(ownerDb, "home/commands/lights/living");
+  const command = ref(adminDb, "home/commands/lights/living");
 
   await assertSucceeds(set(command, true));
   await assertFails(set(ref(strangerDb, "home/commands/lights/living"), false));
@@ -36,14 +36,14 @@ test("solo el email permitido puede emitir comandos sin claim owner; device pued
   await assertSucceeds(set(ref(deviceDb, "home/commands/lights/living"), null));
 });
 
-test("gateway solo reporta estados de portón enumerados y owner puede leerlos", async () => {
+test("gateway reporta estados de portón enumerados y admin puede leerlos", async () => {
   const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
-  const ownerDb = environment.authenticatedContext("owner", { email: "pedrorouge2022@gmail.com" }).database();
+  const adminDb = environment.authenticatedContext("admin", { role: "admin" }).database();
   const guestDb = environment.authenticatedContext("guest", { email: "otro@example.com" }).database();
 
   await assertSucceeds(set(ref(deviceDb, "home/state/gateStatus"), "pulse_sent"));
   await assertFails(set(ref(deviceDb, "home/state/gateStatus"), "open"));
-  await assertSucceeds(get(ref(ownerDb, "home/state/gateStatus")));
+  await assertSucceeds(get(ref(adminDb, "home/state/gateStatus")));
   await assertFails(get(ref(guestDb, "home/state/gateStatus")));
 });
 
@@ -66,9 +66,9 @@ test("eventos quedan privados por UID y validan su contenido", async () => {
 });
 
 
-test("solo el email autorizado entra sin claim owner", async () => {
-  const allowedDb = environment.authenticatedContext("allowed", { email: "pedrorouge2022@gmail.com" }).database();
-  const otherDb = environment.authenticatedContext("other", { email: "other@example.com" }).database();
-  await assertSucceeds(set(ref(allowedDb, "home/commands/timestamp"), Date.now()));
-  await assertFails(set(ref(otherDb, "home/commands/timestamp"), Date.now()));
+test("el acceso de administrador depende del claim y no del email", async () => {
+  const adminDb = environment.authenticatedContext("admin", { role: "admin", email: "other@example.com" }).database();
+  const oldOwnerEmailDb = environment.authenticatedContext("old-owner", { email: "pedrorouge2022@gmail.com" }).database();
+  await assertSucceeds(set(ref(adminDb, "home/commands/timestamp"), Date.now()));
+  await assertFails(set(ref(oldOwnerEmailDb, "home/commands/timestamp"), Date.now()));
 });

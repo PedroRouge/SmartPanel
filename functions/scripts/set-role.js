@@ -5,8 +5,8 @@ const { getAuth } = require("firebase-admin/auth");
 
 async function main() {
   const [, , email, role] = process.argv;
-  if (!email || !["device", "none"].includes(role)) {
-    throw new Error("Uso: node scripts/set-role.js <email> <device|none>");
+  if (!email || !["admin", "device", "none"].includes(role)) {
+    throw new Error("Uso: node scripts/set-role.js <email> <admin|device|none>");
   }
 
   initializeApp({ credential: applicationDefault() });

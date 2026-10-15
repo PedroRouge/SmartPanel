@@ -21,7 +21,7 @@ test("abre el dashboard y conserva una única pestaña seleccionada", async ({ p
   await expect(page).toHaveTitle("Smart Panel");
   await expect(page.locator('[data-panel="inicio"]')).toBeVisible();
   await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
-  await expect(page.locator("#frontend-version")).toHaveText("HTML v73");
+  await expect(page.locator("#frontend-version")).toHaveText("HTML v74");
 });
 
 test("cambia de sección con clic y muestra el panel correspondiente", async ({ page }) => {
