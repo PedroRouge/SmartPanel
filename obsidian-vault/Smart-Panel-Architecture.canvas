@@ -1,0 +1,23 @@
+{
+  "nodes": [
+    { "id": "a101000000000001", "type": "file", "x": 0, "y": 160, "width": 360, "height": 220, "file": "00-Smart-Panel-Architecture.md" },
+    { "id": "a101000000000002", "type": "file", "x": 500, "y": 0, "width": 340, "height": 190, "file": "Documento principal HTML.md" },
+    { "id": "a101000000000003", "type": "file", "x": 920, "y": -70, "width": 360, "height": 190, "file": "Aplicación principal app.js.md" },
+    { "id": "a101000000000004", "type": "file", "x": 920, "y": 170, "width": 360, "height": 190, "file": "Estilos de la interfaz.md" },
+    { "id": "a101000000000005", "type": "file", "x": 920, "y": 410, "width": 360, "height": 190, "file": "Temas-CSS.md" },
+    { "id": "a101000000000006", "type": "file", "x": 1410, "y": 100, "width": 360, "height": 190, "file": "Reglas de Realtime Database.md" },
+    { "id": "a101000000000007", "type": "file", "x": 1880, "y": 100, "width": 380, "height": 220, "file": "Firmware ESP32 Gateway.md" },
+    { "id": "a101000000000008", "type": "file", "x": 500, "y": 430, "width": 340, "height": 190, "file": "PWA y Service Worker.md" },
+    { "id": "a101000000000009", "type": "text", "x": 1410, "y": 410, "width": 360, "height": 190, "text": "## Datos de interfaz\nFirebase Authentication protege el panel. Realtime Database distribuye órdenes y estado según las reglas de acceso.\n\nLa configuración local del gateway se guarda fuera del repositorio." }
+  ],
+  "edges": [
+    { "id": "b201000000000001", "fromNode": "a101000000000001", "toNode": "a101000000000002", "fromSide": "right", "toSide": "left", "label": "documenta" },
+    { "id": "b201000000000002", "fromNode": "a101000000000002", "toNode": "a101000000000003", "fromSide": "right", "toSide": "left", "label": "carga" },
+    { "id": "b201000000000003", "fromNode": "a101000000000002", "toNode": "a101000000000004", "fromSide": "right", "toSide": "left", "label": "presenta" },
+    { "id": "b201000000000004", "fromNode": "a101000000000002", "toNode": "a101000000000005", "fromSide": "bottom", "toSide": "left", "label": "preaplica tema" },
+    { "id": "b201000000000005", "fromNode": "a101000000000002", "toNode": "a101000000000008", "fromSide": "bottom", "toSide": "top", "label": "instala shell" },
+    { "id": "b201000000000006", "fromNode": "a101000000000003", "toNode": "a101000000000006", "fromSide": "right", "toSide": "left", "label": "lee y escribe con permisos" },
+    { "id": "b201000000000007", "fromNode": "a101000000000006", "toNode": "a101000000000007", "fromSide": "right", "toSide": "left", "label": "autoriza dispositivo" },
+    { "id": "b201000000000008", "fromNode": "a101000000000009", "toNode": "a101000000000006", "fromSide": "top", "toSide": "bottom", "label": "define acceso" }
+  ]
+}

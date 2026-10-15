@@ -51,6 +51,24 @@ test("el bootstrap no borra la caché activa y el tema se precarga", () => {
   assert.match(worker, /\/js\/theme-init\.js\?v=\d+/);
 });
 
+test("el canvas de arquitectura tiene IDs y enlaces internos válidos", () => {
+  const vault = path.join(root, "obsidian-vault");
+  const canvas = JSON.parse(read("obsidian-vault/Smart-Panel-Architecture.canvas"));
+  const nodeIds = canvas.nodes.map((node) => node.id);
+  const allIds = [...nodeIds, ...canvas.edges.map((edge) => edge.id)];
+  assert.equal(new Set(allIds).size, allIds.length, "hay IDs duplicados en el canvas");
+  for (const node of canvas.nodes) {
+    assert.ok(["file", "text", "link", "group"].includes(node.type));
+    if (node.type === "file") {
+      assert.ok(fs.existsSync(path.join(vault, node.file)), `no existe el archivo Obsidian ${node.file}`);
+    }
+  }
+  for (const edge of canvas.edges) {
+    assert.ok(nodeIds.includes(edge.fromNode), `origen inexistente ${edge.fromNode}`);
+    assert.ok(nodeIds.includes(edge.toNode), `destino inexistente ${edge.toNode}`);
+  }
+});
+
 test("las reglas Firebase no habilitan escritura general a cualquier usuario", () => {
   const rules = JSON.parse(read("firebase_rules.json")).rules;
   assert.equal(rules.home.state[".write"], undefined);

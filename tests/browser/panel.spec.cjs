@@ -21,7 +21,7 @@ test("abre el dashboard y conserva una única pestaña seleccionada", async ({ p
   await expect(page).toHaveTitle("Smart Panel");
   await expect(page.locator('[data-panel="inicio"]')).toBeVisible();
   await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
-  await expect(page.locator("#frontend-version")).toHaveText("HTML v78");
+  await expect(page.locator("#frontend-version")).toHaveText("HTML v79");
 });
 
 test("respeta el tema del sistema y guarda el tema elegido", async ({ page }) => {
@@ -68,6 +68,18 @@ test("el encabezado y el control de tema caben en celular, tablet y escritorio",
       document.documentElement.scrollWidth > document.documentElement.clientWidth
     );
     expect(hasHorizontalOverflow, `desborde horizontal a ${viewport.width}px`).toBe(false);
+  }
+});
+
+test("la UI evita filtros de desenfoque en superficies pesadas", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator("#notif-toast-container").evaluate((container) => {
+    const toast = document.createElement("div");
+    toast.className = "notif-toast";
+    container.appendChild(toast);
+  });
+  for (const selector of [".tab-bar", ".notif-toast", ".notif-panel", ".confirm-modal-backdrop"]) {
+    await expect(page.locator(selector).first()).toHaveCSS("backdrop-filter", "none");
   }
 });
 
