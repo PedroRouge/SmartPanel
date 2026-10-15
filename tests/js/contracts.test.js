@@ -60,6 +60,8 @@ test("el firmware conserva validaciones explícitas para órdenes TV y reloj", (
   assert.match(firmware, /first == 192 && second == 168/);
   assert.match(firmware, /NTP|time\(nullptr\)|time\(&/i);
   assert.match(firmware, /CMD_QUEUE_SIZE/);
+  assert.match(firmware, /commandReceipts\/" \+ receiptKey/);
+  assert.doesNotMatch(firmware, /irsend|sendSAMSUNG|IRremote/i);
 });
 
 test("la plataforma y bibliotecas PlatformIO están fijadas", () => {
@@ -73,7 +75,8 @@ test("la plataforma y bibliotecas PlatformIO están fijadas", () => {
   assert.match(platformio, /^platform = espressif32@\d+\.\d+\.\d+$/m);
   assert.match(platformio, /Firebase-ESP-Client\.git#[0-9a-f]{40}/);
   assert.match(platformio, /ArduinoJson @ \d+\.\d+\.\d+/);
-  assert.match(platformio, /IRremoteESP8266 @ \d+\.\d+\.\d+/);
+  assert.doesNotMatch(platformio, /IRremoteESP8266/);
+  assert.match(read("esp32_gateway/huge_app.csv"), /app0,\s+app,\s+ota_0,\s+0x10000,\s+0x300000/);
 });
 
 test("los secretos reales del firmware no están en la plantilla de CI", () => {
