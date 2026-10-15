@@ -17,6 +17,9 @@ data/
 .env
 .env.*
 !.env.example
+*service-account*.json
+*firebase-adminsdk*.json
+functions/.runtimeconfig.json
 
 # Sistema operativo
 .DS_Store
@@ -36,3 +39,11 @@ desktop.ini
 # -----------------------------------------------------------------------
 esp32_gateway/include/config.local.h
 esp32_gateway/.pio/
+.playwright-browsers/
+playwright-report/
+test-results/
+.vercel/
+
+# Node.js dependencies
+node_modules/
+functions/node_modules/

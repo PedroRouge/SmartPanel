@@ -58,6 +58,7 @@ struct Command {
     char      value[32];      // TV: valor numérico o clave de app
     bool      boolParam;      // luces, pileta, portón
     long long timestamp;      // timestamp Unix ms del comando (de Firebase)
+    char      sourcePath[96]; // nodo que se limpia al terminar el despacho
 };
 
 QueueHandle_t cmdQueue;
@@ -82,12 +83,13 @@ void checkStreamHealth();
 bool executeHttpLocalCommand(const String& url);
 void handleLightCommand(const String& lightName, bool targetState);
 void handlePoolCommand(bool targetState);
-void handleGateCommand(bool targetState);
+void handleGateCommand(long long commandTimestamp);
 void handleTvCommand(const String& targetId, const String& action, const String& value);
 void workerTask(void* param);
 void streamCallback(FirebaseStream data);
 void streamTimeoutCallback(bool timeout);
 bool isCommandFresh(long long cmdTimestampMs);
+bool isValidTvCommand(const String& targetId, const String& action, const String& value);
 void clearExecutedCommand(const String& path);
 
 // =========================================================================
@@ -181,6 +183,38 @@ void workerTask(void* param) {
     for (;;) {
         // Esperar hasta 100 ms por un comando en la cola
         if (xQueueReceive(cmdQueue, &cmd, pdMS_TO_TICKS(100)) == pdTRUE) {
+            if (cmd.timestamp <= 0 && (cmd.type == CMD_LIGHT || cmd.type == CMD_POOL)) {
+                FirebaseData tsData;
+                if (Firebase.RTDB.get(&tsData, "/home/commands/timestamp")) {
+                    cmd.timestamp = tsData.to<long long>();
+                }
+            }
+            if (!isCommandFresh(cmd.timestamp)) {
+                Serial.println("[Worker] Comando vencido o sin hora confiable; descartado.");
+                if (cmd.timestamp > 0 && cmd.sourcePath[0] != '\0') { clearExecutedCommand(String(cmd.sourcePath)); }
+                continue;
+            }
+            if (cmd.sourcePath[0] != '\0') {
+                String receiptKey = String(cmd.sourcePath);
+                receiptKey.replace("/", "_");
+                String receiptPath = "/home/state/commandReceipts" + receiptKey;
+                FirebaseData receiptData;
+                bool receiptFound = Firebase.RTDB.get(&receiptData, receiptPath.c_str());
+                if (receiptFound && receiptData.to<double>() >= (double)cmd.timestamp) {
+                    clearExecutedCommand(String(cmd.sourcePath));
+                    Serial.println("[Worker] Comando duplicado; ya tiene recibo.");
+                    continue;
+                }
+                if (!receiptFound && receiptData.httpCode() != 404) {
+                    Serial.printf("[Worker] No se pudo verificar el recibo (%d); comando no ejecutado.\n", receiptData.httpCode());
+                    continue;
+                }
+                // Claim before actuation: a reset can lose a command, but cannot replay a gate pulse.
+                if (!Firebase.RTDB.setDouble(&fbdo, receiptPath.c_str(), (double)cmd.timestamp)) {
+                    Serial.printf("[Worker] No se pudo reservar el comando: %s\n", fbdo.errorReason().c_str());
+                    continue;
+                }
+            }
             switch (cmd.type) {
                 case CMD_LIGHT:
                     handleLightCommand(String(cmd.deviceId), cmd.boolParam);
@@ -189,12 +223,13 @@ void workerTask(void* param) {
                     handlePoolCommand(cmd.boolParam);
                     break;
                 case CMD_GATE:
-                    handleGateCommand(cmd.boolParam);
+                    handleGateCommand(cmd.timestamp);
                     break;
                 case CMD_TV:
                     handleTvCommand(String(cmd.deviceId), String(cmd.action), String(cmd.value));
                     break;
             }
+            if (cmd.sourcePath[0] != '\0') { clearExecutedCommand(String(cmd.sourcePath)); }
         }
         // Yield para no monopolizar el scheduler
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -216,9 +251,9 @@ bool isCommandFresh(long long cmdTimestampMs) {
     // Obtener tiempo actual del servidor NTP
     time_t nowSec = time(nullptr);
     if (nowSec < 100000) {
-        // NTP aún no sincronizado — aceptar el comando con advertencia
-        Serial.println("[TTL Guard] NTP no sincronizado — comando aceptado con cautela.");
-        return true;
+        // Fail closed: never execute a physical command without a trusted clock.
+        Serial.println("[TTL Guard] NTP no sincronizado — comando rechazado.");
+        return false;
     }
     long long nowMs  = (long long)nowSec * 1000LL;
     long long diffMs = nowMs - cmdTimestampMs;
@@ -231,6 +266,28 @@ bool isCommandFresh(long long cmdTimestampMs) {
     }
     Serial.printf("[TTL Guard] Comando VÁLIDO — antigüedad: %lld ms\n", diffMs);
     return true;
+}
+
+bool isValidTvCommand(const String& targetId, const String& action, const String& value) {
+    bool knownTv = targetId == "tv-living" || targetId == "tv-pedro" || targetId == "tv-padres" || targetId == "tv-lucas";
+    if (!knownTv) return false;
+    if (action == "power" || action == "toggle_mute") return value.length() == 0;
+    if (action == "set_volume") {
+        if (value.length() == 0) return false;
+        for (size_t i = 0; i < value.length(); i++) if (!isDigit(value[i])) return false;
+        int volume = value.toInt();
+        return volume >= 0 && volume <= 100;
+    }
+    if (action == "launch_app") {
+        return value == "Netflix" || value == "YouTube" || value == "Flow" ||
+            value == "Prime Video" || value == "Disney+" || value == "Spotify";
+    }
+    if (action == "remote_key") {
+        return value == "UP" || value == "DOWN" || value == "LEFT" || value == "RIGHT" ||
+            value == "ENTER" || value == "OK" || value == "BACK" || value == "HOME" ||
+            value == "MENU" || value == "PLAY_PAUSE";
+    }
+    return false;
 }
 
 // =========================================================================
@@ -376,9 +433,6 @@ void streamCallback(FirebaseStream data) {
 
     Serial.printf("\n[Stream] Path: %s | Tipo: %s\n", path.c_str(), dataType.c_str());
 
-    // Extraer timestamp global del comando (escrito por la web en /home/commands/timestamp)
-    // Se lee por separado; aquí trabajamos con el payload directo.
-
     Command cmd;
     memset(&cmd, 0, sizeof(cmd));
     bool enqueue = false;
@@ -389,26 +443,12 @@ void streamCallback(FirebaseStream data) {
         cmd.type      = CMD_LIGHT;
         cmd.boolParam = data.boolData();
         strncpy(cmd.deviceId, lightName.c_str(), sizeof(cmd.deviceId) - 1);
-
-        // Leer timestamp del nodo hermano
-        FirebaseData tsData;
-        if (Firebase.RTDB.get(&tsData, "/home/commands/timestamp")) {
-            cmd.timestamp = tsData.to<long long>();
-        }
-        if (isCommandFresh(cmd.timestamp)) {
-            enqueue = true;
-            clearExecutedCommand("/home/commands/lights/" + lightName);
-        }
+        String sourcePath = "/home/commands/lights/" + lightName;
+        strncpy(cmd.sourcePath, sourcePath.c_str(), sizeof(cmd.sourcePath) - 1);
+        enqueue = true;
     }
     // --- Luces en bloque JSON: /lights ---
     else if (path == "/lights" && dataType == "json") {
-        FirebaseData tsData;
-        long long ts = 0;
-        if (Firebase.RTDB.get(&tsData, "/home/commands/timestamp")) {
-            ts = tsData.to<long long>();
-        }
-        if (!isCommandFresh(ts)) { return; }
-
         FirebaseJson json = data.jsonObject();
         size_t len = json.iteratorBegin();
         String key, value;
@@ -420,45 +460,29 @@ void streamCallback(FirebaseStream data) {
                 memset(&c, 0, sizeof(c));
                 c.type      = CMD_LIGHT;
                 c.boolParam = (value == "true");
-                c.timestamp = ts;
                 strncpy(c.deviceId, key.c_str(), sizeof(c.deviceId) - 1);
-                xQueueSend(cmdQueue, &c, 0);
+                String sourcePath = "/home/commands/lights/" + key;
+                strncpy(c.sourcePath, sourcePath.c_str(), sizeof(c.sourcePath) - 1);
+                if (cmdQueue) { xQueueSend(cmdQueue, &c, 0); }
             }
         }
         json.iteratorEnd();
-        clearExecutedCommand("/home/commands/lights");
         return;
     }
     // --- Pileta: /poolOn ---
     else if (path == "/poolOn" && dataType == "boolean") {
-        FirebaseData tsData;
-        if (Firebase.RTDB.get(&tsData, "/home/commands/timestamp")) {
-            cmd.timestamp = tsData.to<long long>();
-        }
-        if (isCommandFresh(cmd.timestamp)) {
-            cmd.type      = CMD_POOL;
-            cmd.boolParam = data.boolData();
-            enqueue = true;
-            clearExecutedCommand("/home/commands/poolOn");
-        }
+        cmd.type      = CMD_POOL;
+        cmd.boolParam = data.boolData();
+        strncpy(cmd.sourcePath, "/home/commands/poolOn", sizeof(cmd.sourcePath) - 1);
+        enqueue = true;
     }
-    // --- Portón: /gateOpen o /gateTrigger ---
-    else if ((path == "/gateOpen" || path == "/gateTrigger")) {
-        FirebaseData tsData;
-        if (Firebase.RTDB.get(&tsData, "/home/commands/timestamp")) {
-            cmd.timestamp = tsData.to<long long>();
-        }
-        // Para el portón, el propio gateTrigger es el timestamp si es numérico
-        if (path == "/gateTrigger" && (dataType == "int" || dataType == "double")) {
+    // --- Portón: pulso de relé vía timestamp en /gateTrigger ---
+    else if (path == "/gateTrigger") {
+        if (dataType == "int" || dataType == "double") {
             cmd.timestamp = (long long)data.doubleData();
-        } else if (dataType == "boolean") {
-            cmd.boolParam = data.boolData();
-        }
-        if (isCommandFresh(cmd.timestamp)) {
             cmd.type  = CMD_GATE;
-            cmd.boolParam = true;
+            strncpy(cmd.sourcePath, "/home/commands/gateTrigger", sizeof(cmd.sourcePath) - 1);
             enqueue = true;
-            clearExecutedCommand("/home/commands/gateTrigger");
         }
     }
     // --- TV: /tv (JSON) ---
@@ -467,27 +491,26 @@ void streamCallback(FirebaseStream data) {
         FirebaseJsonData jd;
         long long ts = 0;
         if (json.get(jd, "timestamp")) { ts = (long long)jd.doubleValue; }
-        if (!isCommandFresh(ts)) { return; }
 
         String targetId = "tv-living";
         String action   = "";
         String value    = "";
         if (json.get(jd, "targetId")) { targetId = jd.stringValue; }
         if (json.get(jd, "action"))   { action   = jd.stringValue; }
-        if (json.get(jd, "value") && !jd.isNull) { value = jd.stringValue; }
+        if (json.get(jd, "value") && jd.success && jd.typeNum != FirebaseJson::JSON_NULL) { value = jd.stringValue; }
 
-        if (action.length() > 0) {
+        if (isValidTvCommand(targetId, action, value)) {
             cmd.type      = CMD_TV;
             cmd.timestamp = ts;
             strncpy(cmd.deviceId, targetId.c_str(), sizeof(cmd.deviceId) - 1);
             strncpy(cmd.action,   action.c_str(),   sizeof(cmd.action) - 1);
             strncpy(cmd.value,    value.c_str(),     sizeof(cmd.value) - 1);
+            strncpy(cmd.sourcePath, "/home/commands/tv", sizeof(cmd.sourcePath) - 1);
             enqueue = true;
-            clearExecutedCommand("/home/commands/tv");
         }
     }
 
-    if (enqueue) {
+    if (enqueue && cmdQueue) {
         if (xQueueSend(cmdQueue, &cmd, 0) != pdTRUE) {
             Serial.println("[Stream] Cola llena — comando descartado.");
         }
@@ -592,13 +615,20 @@ void handlePoolCommand(bool targetState) {
     }
 }
 
-void handleGateCommand(bool targetState) {
+void handleGateCommand(long long commandTimestamp) {
     Serial.println("[Portón] Enviando pulso Wi-Fi...");
     bool ok = executeHttpLocalCommand(GATE_RELAY_PULSE_URL);
-    if (Firebase.RTDB.setBool(&fbdo, "/home/state/gateOpen", ok ? targetState : !targetState)) {
-        updateStateTimestamp();
+    time_t nowSec = time(nullptr);
+    if (nowSec > 100000) {
+        FirebaseJson patch;
+        patch.set("gateStatus", ok ? "pulse_sent" : "pulse_failed");
+        patch.set("gateStatusAt", (double)commandTimestamp);
+        patch.set("updatedAt", (double)nowSec * 1000.0);
+        if (!Firebase.RTDB.updateNode(&fbdo, "/home/state", &patch)) {
+            Serial.printf("[Porton] No se pudo publicar el resultado: %s\n", fbdo.errorReason().c_str());
+        }
     } else {
-        Serial.printf("[Porton] No se pudo publicar estado: %s\n", fbdo.errorReason().c_str());
+        Serial.println("[Portón] No se publica el resultado porque el reloj NTP no está sincronizado.");
     }
 }
 
@@ -611,33 +641,34 @@ void handleTvCommand(const String& targetId, const String& action, const String&
     else if (targetId == "tv-lucas")  { tvIp = TV_LUCAS_IP;  }
 
     if (action == "power") {
-        irsend.sendSamsung(0xE0E040BF, 32);
-        delay(40);
-        irsend.sendSamsung(0xE0E040BF, 32);
-        executeHttpLocalCommand("http://" + tvIp + ":8080/power");
+        bool ok = executeHttpLocalCommand("http://" + tvIp + ":8080/power");
+        if (!ok && targetId == "tv-living") irsend.sendSAMSUNG(0xE0E040BF, 32);
 
     } else if (action == "set_volume") {
         int vol = value.toInt();
         executeHttpLocalCommand("http://" + tvIp + ":8080/volume?level=" + String(vol));
 
     } else if (action == "toggle_mute") {
-        irsend.sendSamsung(0xE0E0F00F, 32);
+        bool ok = executeHttpLocalCommand("http://" + tvIp + ":8080/mute");
+        if (!ok && targetId == "tv-living") irsend.sendSAMSUNG(0xE0E0F00F, 32);
 
     } else if (action == "launch_app") {
-        executeHttpLocalCommand("http://" + tvIp + ":8080/app?name=" + value);
+        String encodedApp = value;
+        encodedApp.replace("+", "%2B");
+        encodedApp.replace(" ", "%20");
+        executeHttpLocalCommand("http://" + tvIp + ":8080/app?name=" + encodedApp);
 
     } else if (action == "remote_key") {
-        if      (value == "UP")    { irsend.sendSamsung(0xE0E006F9, 32); }
-        else if (value == "DOWN")  { irsend.sendSamsung(0xE0E08679, 32); }
-        else if (value == "LEFT")  { irsend.sendSamsung(0xE0E0A659, 32); }
-        else if (value == "RIGHT") { irsend.sendSamsung(0xE0E046B9, 32); }
-        else if (value == "ENTER" || value == "OK") { irsend.sendSamsung(0xE0E016E9, 32); }
-        else if (value == "BACK")  { irsend.sendSamsung(0xE0E01AE5, 32); }
-        else if (value == "HOME")  { irsend.sendSamsung(0xE0E058A7, 32); }
-        else if (value == "MENU")  { irsend.sendSamsung(0xE0E058A7, 32); }
-        else if (value == "PLAY_PAUSE") { irsend.sendSamsung(0xE0E052AD, 32); }
-
-        // Enviar también vía Wi-Fi HTTP local si la TV soporta ADB/HTTP bridge
-        executeHttpLocalCommand("http://" + tvIp + ":8080/key?name=" + value);
+        bool ok = executeHttpLocalCommand("http://" + tvIp + ":8080/key?name=" + value);
+        if (!ok && targetId == "tv-living") {
+            if      (value == "UP")    { irsend.sendSAMSUNG(0xE0E006F9, 32); }
+            else if (value == "DOWN")  { irsend.sendSAMSUNG(0xE0E08679, 32); }
+            else if (value == "LEFT")  { irsend.sendSAMSUNG(0xE0E0A659, 32); }
+            else if (value == "RIGHT") { irsend.sendSAMSUNG(0xE0E046B9, 32); }
+            else if (value == "ENTER" || value == "OK") { irsend.sendSAMSUNG(0xE0E016E9, 32); }
+            else if (value == "BACK")  { irsend.sendSAMSUNG(0xE0E01AE5, 32); }
+            else if (value == "HOME" || value == "MENU") { irsend.sendSAMSUNG(0xE0E058A7, 32); }
+            else if (value == "PLAY_PAUSE") { irsend.sendSAMSUNG(0xE0E052AD, 32); }
+        }
     }
 }

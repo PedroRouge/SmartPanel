@@ -23,6 +23,7 @@ tags:
 ## Backend Firebase y despliegue
 - [[Funciones de notificaciones]] · [[Funciones de entrada index.js]]
 - [[Funciones Cloud de notificaciones]] · [[Dependencias de Firebase Functions]]
+- [[CI-CD y calidad automatizada]]
 - [[Configuración Firebase web]] · [[Adaptador de datos Firebase]]
 - [[Configuración raíz Firebase]] · [[Reglas de Realtime Database]] · [[Datos iniciales Firebase]]
 - [[Configuración Firebase y despliegue]] · [[Configuración Vercel]]
@@ -34,6 +35,10 @@ tags:
 ## Documentación operativa
 - [[Guía web del proyecto]] · [[Guía de notificaciones push]]
 - [[Guía de migración y seguridad]]
+
+## Auditoría
+- [[Auditoría técnica inicial]]
+- [[Update - 2026-10-14 - Remediación auditoría técnica]]
 
 ## Registro de cambios
 - [[Update - 2026-10-14 - Rediseño responsive]]

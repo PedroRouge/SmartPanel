@@ -11,53 +11,33 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="69">
+  <meta name="smart-panel-version" content="70">
   <title>Smart Panel</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=69">
+  <link rel="stylesheet" href="css/styles.css?v=70">
   <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js" defer></script>
-  <script src="js/firebase-config.js?v=69" defer></script>
-  <script src="js/app.js?v=69" defer></script>
+  <script src="js/bootstrap.js?v=70" defer></script>
+  <script src="js/firebase-runtime-config.js?v=71" defer></script>
+  <script src="js/firebase-config.js?v=71" defer></script>
+  <script src="js/app.js?v=70" defer></script>
 </head>
 <body>
-  <script>
-    window.addEventListener('securitypolicyviolation', function(event) {
-      console.warn('[CSP]', event.effectiveDirective, event.blockedURI, event.sourceFile || '');
-    });
-    // Purgar automáticamente Service Worker y cachés viejas de la versión anterior
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        for (var i = 0; i < registrations.length; i++) {
-          registrations[i].update();
-        }
-      });
-    }
-    if ('caches' in window) {
-      caches.keys().then(function(keys) {
-        keys.forEach(function(key) {
-          if (key.indexOf('smart-panel-shell-') === 0 && key !== 'smart-panel-shell-69') {
-            caches.delete(key);
-          }
-        });
-      });
-    }
-  </script>
   <div class="app-shell">
     <header class="topbar">
       <a class="brand" href="#inicio" aria-label="Smart Panel, inicio">
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v69</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v70</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
       <div class="home-quick-status" aria-label="Estado actual de la casa">
         <span class="quick-status-item" title="Conexi&#243;n con el ESP32"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h4l2 3 4-6 2 3h4"/><path d="M7 7h.01M17 17h.01"/></svg><i class="status-dot is-checking" id="quick-esp-dot"></i><span id="quick-esp">ESP32</span></span>
-        <span class="quick-status-item" title="Luces encendidas"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M8.2 14.5a7 7 0 1 1 7.6 0c-.9.6-1.3 1.4-1.5 2.5h-4.6c-.2-1.1-.6-1.9-1.5-2.5Z"/></svg><strong id="quick-lights">0</strong></span>
+        <span class="quick-status-item" title="Órdenes ON reportadas por el gateway; no es lectura de sensores"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M8.2 14.5a7 7 0 1 1 7.6 0c-.9.6-1.3 1.4-1.5 2.5h-4.6c-.2-1.1-.6-1.9-1.5-2.5Z"/></svg><strong id="quick-lights">--</strong></span>
         <span class="quick-status-item" title="Motor de pileta"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9c2.2 0 2.2-2 4.4-2s2.2 2 4.4 2 2.2-2 4.4-2 2.2 2 4.4 2"/><path d="M3 15c2.2 0 2.2-2 4.4-2s2.2 2 4.4 2 2.2-2 4.4-2 2.2 2 4.4 2"/><path d="M3 20h18"/></svg><i class="status-dot is-checking" id="quick-pool-dot"></i><span id="quick-pool">--</span></span>
         <span class="quick-status-item" title="Port&#243;n"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5l8-2 8 2v16"/><path d="M8 6v15m8-15v15M4 11h16"/></svg><i class="status-dot is-checking" id="quick-gate-dot"></i><span id="quick-gate">--</span></span>
       </div>
@@ -128,11 +108,11 @@
               <span class="summary-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5l8-2 8 2v16"/><path d="M8 6v15m8-15v15M4 11h16"/></svg></span>
             </div>
             <div class="summary-items">
-              <div class="summary-item"><span class="summary-icon light-icon" aria-hidden="true">✳</span><span>Luces encendidas</span><strong id="summary-lights">0</strong></div>
-              <div class="summary-item"><span class="summary-icon pool-icon" aria-hidden="true">≈</span><span>Motor de pileta</span><strong id="summary-pool">Apagado</strong></div>
-              <div class="summary-item"><span class="summary-icon gate-icon" aria-hidden="true">↗</span><span>Portón</span><strong id="summary-gate">Cerrado</strong></div>
+              <div class="summary-item"><span class="summary-icon light-icon" aria-hidden="true">✳</span><span>Órdenes de luces ON</span><strong id="summary-lights">--</strong></div>
+              <div class="summary-item"><span class="summary-icon pool-icon" aria-hidden="true">≈</span><span>Última orden de bomba</span><strong id="summary-pool">Sin dato</strong></div>
+              <div class="summary-item"><span class="summary-icon gate-icon" aria-hidden="true">↗</span><span>Posición del portón</span><strong id="summary-gate">Desconocido</strong></div>
             </div>
-            <p class="state-freshness" id="shared-state-freshness">Esperando confirmaci&#243;n de estado del ESP32</p>
+            <p class="state-freshness" id="shared-state-freshness">Esperando respuesta de los relés; sensores físicos pendientes</p>
           </section>
 
           <section class="forecast-panel panel-surface" aria-labelledby="forecast-heading">
@@ -209,24 +189,16 @@
       <section class="view" id="panel-multimedia" role="tabpanel" aria-labelledby="tab-multimedia" data-panel="multimedia" hidden>
         <div class="page-heading"><p class="eyebrow">ENTRETENIMIENTO</p><h1>Multimedia</h1><p>Selecciona un televisor para abrir sus controles.</p></div>
         <section class="tv-section" aria-labelledby="tv-list-heading">
-          <div class="section-heading"><div><p class="eyebrow">DISPOSITIVOS</p><h2 id="tv-list-heading">Televisores</h2></div><button class="weather-refresh" id="tv-refresh" type="button" aria-label="Buscar televisores"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.5 9a7 7 0 0 1 11.7-2L20 12M4 12l2.8 6a7 7 0 0 0 11.7-2"/></svg></button></div>
+          <div class="section-heading"><div><p class="eyebrow">DISPOSITIVOS CONFIGURADOS</p><h2 id="tv-list-heading">Televisores</h2></div><button class="weather-refresh" id="tv-refresh" type="button" aria-label="Actualizar lista de televisores desde Firebase"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.5 9a7 7 0 0 1 11.7-2L20 12M4 12l2.8 6a7 7 0 0 0 11.7-2"/></svg></button></div>
           <p class="tv-api-status" id="tv-api-status" aria-live="polite">Conectando con ESP32-S3 y Firebase...</p>
           <div class="tv-list" id="tv-list" aria-live="polite"></div>
           <div class="tv-list-empty panel-surface" id="tv-list-empty" hidden>No hay televisores detectados.</div>
         </section>
         <section class="tv-control panel-surface" id="tv-control" aria-labelledby="selected-tv-name" hidden>
-          <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV Living</h2><p class="tv-location" id="selected-tv-location">Living</p></div><div class="tv-heading-status"><span class="tv-status"><span class="status-dot" id="selected-tv-dot"></span><span id="selected-tv-power">Apagada</span></span><button class="tv-power-button" id="tv-power-button" type="button" aria-label="Encender o apagar"><span aria-hidden="true">⏻</span><span id="tv-power-label">Encender</span></button></div></div>
+          <div class="section-heading"><div><p class="eyebrow">CONTROL REMOTO</p><h2 id="selected-tv-name">TV Living</h2><p class="tv-location" id="selected-tv-location">Living</p></div><div class="tv-heading-status"><span class="tv-status"><span class="status-dot is-unknown" id="selected-tv-dot"></span><span id="selected-tv-power">Estado físico desconocido</span></span><button class="tv-power-button" id="tv-power-button" type="button" aria-label="Alternar energía"><span aria-hidden="true">⏻</span><span id="tv-power-label">Alternar energía</span></button></div></div>
           <p class="tv-power-hint" id="tv-power-hint" hidden>Control Wi-Fi / Infrarrojo listo.</p>
-          <div class="tv-pairing" id="tv-pairing-panel" hidden>
-            <p>Confirma el emparejamiento en el ONN e ingresa su código de seis caracteres.</p>
-            <form class="tv-pairing-form" id="tv-pairing-form">
-              <input class="tv-pairing-code" id="tv-pairing-code" type="text" inputmode="text" autocomplete="one-time-code" maxlength="6" aria-label="Código de emparejamiento" placeholder="Código">
-              <button class="tv-pairing-submit" type="submit">Vincular</button>
-              <button class="tv-pairing-cancel" id="tv-pairing-cancel" type="button">Cancelar</button>
-            </form>
-          </div>
           <div class="media-control-inner" aria-labelledby="volume-heading">
-            <div class="section-heading"><div><p class="eyebrow">CONTROL DE AUDIO</p><h3 id="volume-heading">Volumen</h3></div><span class="volume-value" id="volume-value">35%</span></div>
+            <div class="section-heading"><div><p class="eyebrow">CONTROL DE AUDIO</p><h3 id="volume-heading">Nivel solicitado</h3></div><span class="volume-value" id="volume-value">35%</span></div>
             <div class="volume-controls">
               <input class="volume-slider" id="volume-slider" type="range" min="0" max="100" value="35" aria-label="Volumen del televisor">
               <button class="mute-button" type="button" id="mute-button" aria-pressed="false"><span aria-hidden="true">◖</span> Silenciar</button>
@@ -246,7 +218,7 @@
               <button class="remote-key" type="button" data-remote-key="DOWN" aria-label="Abajo" title="Abajo" disabled>↓</button>
               <button class="remote-key" type="button" data-remote-key="PLAY_PAUSE" aria-label="Reproducir o pausar" title="Reproducir o pausar" disabled>▶/Ⅱ</button>
             </div>
-            <p class="remote-key-hint" id="remote-key-hint">Empareja este Android TV para habilitar la navegación.</p>
+              <p class="remote-key-hint" id="remote-key-hint">Selecciona un televisor para activar sus controles.</p>
           </section>
           <section class="media-apps" aria-labelledby="apps-heading">
             <div class="section-heading"><div><p class="eyebrow">ACCESOS DIRECTOS</p><h3 id="apps-heading">Abrir una app</h3></div></div>
@@ -270,7 +242,7 @@
           <p class="control-feedback" id="gate-feedback" aria-live="polite">Control simulado. Conecta tu API para accionar el portón.</p>
         </section>
         <section class="devices-section" aria-labelledby="lights-heading">
-          <div class="section-heading"><div><p class="eyebrow">ILUMINACIÓN</p><h2 id="lights-heading">Luces</h2></div><span class="section-count" id="lights-count">0 encendidas</span></div>
+          <div class="section-heading"><div><p class="eyebrow">ILUMINACIÓN</p><h2 id="lights-heading">Luces</h2></div><span class="section-count" id="lights-count">Sin dato del gateway</span></div>
           <div class="device-grid">
             <article class="device-card panel-surface" data-device="living"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Living</h3><p>Techo</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz del living" aria-describedby="desc-light-living"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-living">Apagada</span></button></article>
             <article class="device-card panel-surface" data-device="kitchen"><span class="device-symbol light-symbol" aria-hidden="true">✳</span><div class="device-info"><h3>Cocina</h3><p>Mesada</p></div><button class="state-switch" type="button" role="switch" aria-checked="false" aria-label="Luz de la cocina" aria-describedby="desc-light-kitchen"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-light-kitchen">Apagada</span></button></article>
@@ -287,7 +259,7 @@
             <div class="pool-art" aria-hidden="true"><span>≈</span></div>
             <p class="eyebrow">SISTEMA DE CIRCULACIÓN</p>
             <h2>Motor de pileta</h2>
-            <p class="device-description" id="pool-description">El motor está apagado.</p>
+            <p class="device-description" id="pool-description">El funcionamiento del motor no está medido.</p>
             <button class="pool-toggle state-switch" id="pool-toggle" type="button" role="switch" aria-checked="false" aria-label="Motor de pileta" aria-describedby="desc-pool-state"><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-state" id="desc-pool-state">Apagado</span></button>
           </article>
           <article class="water-temperature panel-surface">
@@ -298,7 +270,7 @@
             <p class="control-feedback">Listo para integrar un sensor local.</p>
           </article>
         </section>
-        <section class="pool-schedule-section panel-surface" aria-labelledby="pool-schedule-heading" style="padding:20px;margin-top:14px;">
+        <section class="pool-schedule-section panel-surface" aria-labelledby="pool-schedule-heading">
           <div class="section-heading">
             <div>
               <p class="eyebrow">PROGRAMACIÓN</p>
@@ -382,12 +354,7 @@
         <div class="section-heading"><div><p class="eyebrow">NUEVO DISPOSITIVO</p><h2 id="camera-form-title">Añadir cámara</h2></div><button class="modal-close" type="button" aria-label="Cerrar formulario" data-close-camera-form>×</button></div>
         <form id="camera-form" novalidate>
           <label class="form-field"><span>Nombre de la cámara</span><input type="text" name="cameraName" maxlength="48" placeholder="Ej. Entrada principal" required></label>
-          <label class="form-field"><span>IP o URL del stream</span><input type="text" name="cameraUrl" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="http://192.168.1.20/stream.mjpg" required><small>Acepta HTTP, HTTPS (MJPEG) o RTSP.</small></label>
-          <div class="form-row">
-            <label class="form-field"><span>Usuario (opcional)</span><input type="text" name="cameraUser" autocomplete="off" autocapitalize="off"></label>
-            <label class="form-field"><span>Contraseña (opcional)</span><input type="password" name="cameraPassword" autocomplete="new-password"></label>
-          </div>
-          <p class="form-notice">Las credenciales se mantienen solo en memoria y se olvidan al recargar. RTSP requiere un gateway compatible para mostrarse en Safari.</p>
+          <label class="form-field"><span>URL del stream</span><input type="url" name="cameraUrl" inputmode="url" autocapitalize="off" autocorrect="off" maxlength="2048" placeholder="http://192.168.1.20/stream.mjpg" required><small>Usa un stream MJPEG por HTTP o HTTPS, sin credenciales en la URL. RTSP no es compatible con el navegador.</small></label>
           <p class="form-error" id="camera-form-error" role="alert" hidden></p>
           <div class="form-actions"><button class="secondary-button" type="button" data-close-camera-form>Cancelar</button><button class="primary-button" type="submit">Guardar cámara</button></div>
         </form>
@@ -434,13 +401,13 @@
   <!-- MODAL: Agregar horario de pileta -->
   <div class="event-modal" id="pool-schedule-modal" hidden>
     <div class="event-modal-backdrop" data-close-pool-schedule></div>
-    <section class="event-dialog panel-surface" role="dialog" aria-modal="true" aria-labelledby="pool-schedule-form-title" style="max-width:420px;">
+    <section class="event-dialog pool-schedule-dialog panel-surface" role="dialog" aria-modal="true" aria-labelledby="pool-schedule-form-title">
       <div class="section-heading">
         <div><p class="eyebrow">PILETA</p><h2 id="pool-schedule-form-title">Nuevo horario</h2></div>
         <button class="modal-close" type="button" aria-label="Cerrar" data-close-pool-schedule>×</button>
       </div>
-      <form id="pool-schedule-form" novalidate style="margin-top:16px;">
-        <div class="form-row" style="grid-template-columns:1fr 1fr;">
+      <form id="pool-schedule-form" class="pool-schedule-form" novalidate>
+        <div class="form-row pool-time-row">
           <label class="form-field"><span>Encendido</span><input type="time" name="pool_start" required></label>
           <label class="form-field"><span>Apagado</span><input type="time" name="pool_end" required></label>
         </div>

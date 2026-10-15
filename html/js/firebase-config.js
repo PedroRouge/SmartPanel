@@ -2,8 +2,8 @@
 (function () {
   "use strict";
 
-  var DEFAULT_CONFIG = {
-    apiKey: "AIzaSyAnf7z9wl24JNJgFutE0qRvnnBnquNWoNc",
+  var DEFAULT_CONFIG = Object.assign({
+    apiKey: "",
     authDomain: "smart-panel-53d7b.firebaseapp.com",
     databaseURL: "https://smart-panel-53d7b-default-rtdb.firebaseio.com",
     projectId: "smart-panel-53d7b",
@@ -11,9 +11,9 @@
     messagingSenderId: "1085885262056",
     appId: "1:1085885262056:web:90373760572ff556f1015d",
     measurementId: "G-Y99C1G3J4F",
-    vapidKey: "BOyXIPOR-LiIe33vfBlH4xiSvOyDeiEucCoeeA5q3u7Rw3GSSFrTui29lirBFrUbwaj2XWTBRtH4iBaWQlw-w2g",
+    vapidKey: "",
     authDefaultDomain: "smartpanel.local"
-  };
+  }, window.SMART_PANEL_FIREBASE_RUNTIME_CONFIG || {});
 
   // Priorizar configuración si se actualiza dinámicamente, validando el dominio
   var customConfig = null;
@@ -42,7 +42,4 @@
     customConfig || {}
   );
 
-  // Keep the exact Firebase Console key authoritative. It is case-sensitive,
-  // so a stale value from localStorage must never replace it.
-  window.SMART_PANEL_FIREBASE_CONFIG.vapidKey = DEFAULT_CONFIG.vapidKey;
 })();

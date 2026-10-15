@@ -1,0 +1,18 @@
+{
+  "name": "smart-panel-quality-gates",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test:ui": "playwright test",
+    "test:rules": "firebase emulators:exec --only database --project demo-smart-panel \"npm run test:rules:only\"",
+    "test:rules:only": "node --test tests/firebase/rules.test.cjs"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "6.0.0",
+    "@playwright/test": "1.64.1",
+    "firebase": "13.0.0",
+    "firebase-tools": "15.34.0"
+  }
+}

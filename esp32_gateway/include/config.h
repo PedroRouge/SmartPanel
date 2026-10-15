@@ -1,21 +1,41 @@
 #pragma once
 #include <Arduino.h>
 
+// Copy config.example.h to config.local.h and supply local credentials.
+// Secrets must never be committed with the shared device configuration.
+#if __has_include("config.local.h")
+#include "config.local.h"
+#else
+#error "Missing config.local.h. Copy config.example.h and set local credentials."
+#endif
+
 // =========================================================================
 // 1. CONFIGURACIÓN WI-FI DEL HOGAR
 // =========================================================================
-#define WIFI_SSID       "WiFi Starlink Rouge"
-#define WIFI_PASSWORD   "Casa2026"
+#ifndef WIFI_SSID
+#error "WIFI_SSID must be defined in config.local.h"
+#endif
+#ifndef WIFI_PASSWORD
+#error "WIFI_PASSWORD must be defined in config.local.h"
+#endif
 
 // =========================================================================
 // 2. CONFIGURACIÓN FIREBASE (AUTENTICACIÓN SEGURA OBLIGATORIA)
 // =========================================================================
-#define FIREBASE_API_KEY       "AIzaSyAnf7z9wl24JNJgFutE0qRvnnBnquNWoNc"
-#define FIREBASE_DATABASE_URL  "https://smart-panel-53d7b-default-rtdb.firebaseio.com"
+#ifndef FIREBASE_API_KEY
+#error "FIREBASE_API_KEY must be defined in config.local.h"
+#endif
+#ifndef FIREBASE_DATABASE_URL
+#error "FIREBASE_DATABASE_URL must be defined in config.local.h"
+#endif
 
 // Usuario y Contraseña para el ESP32 en Firebase Authentication
-#define FIREBASE_USER_EMAIL    "esp32@smartpanel.local"
-#define FIREBASE_USER_PASSWORD "Pr484014228520."
+#ifndef FIREBASE_USER_EMAIL
+#error "FIREBASE_USER_EMAIL must be defined in config.local.h"
+#endif
+#ifndef FIREBASE_USER_PASSWORD
+#error "FIREBASE_USER_PASSWORD must be defined in config.local.h"
+#endif
 
 // =========================================================================
 // 3. MAPEO DE DISPOSITIVOS LOCALES EN LA RED WI-FI (LAN)

@@ -1,0 +1,169 @@
+name: Smart Panel CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-panel-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-and-functions:
+    name: Frontend, Firebase y contratos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      - name: Instalar herramientas y SDK de pruebas
+        run: npm ci
+
+      - name: Auditar dependencias de producción del toolchain
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Revisar sintaxis JavaScript
+        run: |
+          node --check html/js/app.js
+          node --check html/js/bootstrap.js
+          node --check html/service-worker.js
+          node --check functions/index.js
+          node --check functions/scripts/set-role.js
+
+      - name: Probar estructura de UI y firmware
+        run: node --test tests/js/*.test.js
+
+      - name: Instalar Chromium para pruebas de navegador
+        run: npx playwright install --with-deps chromium
+
+      - name: Probar navegación real del panel
+        run: npm run test:ui
+
+      - name: Instalar Java para Firebase Emulator
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Probar permisos Firebase en el emulador
+        run: npm run test:rules
+
+      - name: Instalar dependencias reproducibles de Functions
+        run: npm ci --prefix functions
+
+      - name: Auditar dependencias de producción
+        run: npm audit --prefix functions --omit=dev --audit-level=high
+
+  python-api:
+    name: API Python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Preparar Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias de la API
+        run: python -m pip install -r legacy_backup/requirements.txt
+
+      - name: Probar validaciones y endpoints
+        run: python -m unittest discover -s legacy_backup/tests -v
+
+  esp32-build:
+    name: Compilar firmware ESP32-S3
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Preparar Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Instalar PlatformIO
+        run: python -m pip install platformio==6.2.0
+
+      - name: Crear configuración ficticia de compilación
+        run: cp esp32_gateway/include/config.example.h esp32_gateway/include/config.local.h
+
+      - name: Compilar para ESP32-S3
+        run: pio run -d esp32_gateway -e esp32-s3-devkitc-1
+
+  deploy:
+    name: Publicar sitio en Vercel
+    needs: [frontend-and-functions, python-api, esp32-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20
+
+      - name: Instalar Vercel CLI
+        run: npm install --global vercel@63.1.2
+
+      - name: Vincular proyecto de Vercel
+        run: vercel link --yes --project="${{ secrets.VERCEL_PROJECT_ID }}" --scope="${{ secrets.VERCEL_ORG_ID }}" --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Descargar configuración de producción
+        run: vercel pull --yes --environment=production --scope="${{ secrets.VERCEL_ORG_ID }}" --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Generar configuración pública de Firebase
+        env:
+          FIREBASE_WEB_API_KEY: ${{ secrets.FIREBASE_WEB_API_KEY }}
+          FIREBASE_WEB_VAPID_KEY: ${{ secrets.FIREBASE_WEB_VAPID_KEY }}
+        run: node scripts/generate-firebase-runtime-config.cjs
+
+      - name: Construir artefacto web
+        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Desplegar artefacto verificado
+        run: vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+  deploy-functions:
+    name: Publicar Firebase Functions
+    needs: [frontend-and-functions, python-api, esp32-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: firebase-production
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20
+
+      - name: Instalar CLI fijada
+        run: npm ci
+
+      - name: Desplegar funciones verificadas
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: npx firebase-tools@15.34.0 deploy --only functions --project smart-panel-53d7b --non-interactive --token="$FIREBASE_TOKEN"

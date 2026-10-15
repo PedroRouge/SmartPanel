@@ -1,8 +1,9 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "69";
-  var STORAGE_KEY = "smart-panel-state-v2";
+  var APP_BUILD_VERSION = "70";
+  var STORAGE_KEY = "smart-panel-state-v3";
+  var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
     latitude: -31.86519,
     longitude: -60.57469,
@@ -30,7 +31,6 @@
   var activityFilterBound = false;
   var apiAuthenticated = false;
   var currentUsername = "";
-  var cameraCredentials = {};
   var weatherHasData = false;
   function formatDateISO(dateValue) {
     var y = dateValue.getFullYear();
@@ -63,36 +63,57 @@
   var lastRenderedDay = ""; // PERF-03: sólo actualizar date-line cuando cambia el día
 
   var TV_DEVICES = [
-    { id: "tv-living", name: "TV Living", room: "Living", model: "Smart TV", ip: "192.168.0.52", online: true, poweredOn: false, powerControlReady: true, volume: 35, muted: false },
-    { id: "tv-pedro", name: "TV Pedro", room: "Habitación Pedro", model: "Smart TV", ip: "192.168.0.10", online: true, poweredOn: false, powerControlReady: true, volume: 30, muted: false },
-    { id: "tv-padres", name: "TV Habitación Padres", room: "Habitación Padres", model: "Smart TV", ip: "192.168.0.53", online: true, poweredOn: false, powerControlReady: true, volume: 30, muted: false },
-    { id: "tv-lucas", name: "TV Lucas", room: "Habitación Lucas", model: "Smart TV", ip: "192.168.0.51", online: true, poweredOn: false, powerControlReady: true, volume: 25, muted: false }
+    { id: "tv-living", name: "TV Living", room: "Living", model: "Smart TV", ip: "192.168.0.52", powerControlReady: true, volume: 35, muted: false },
+    { id: "tv-pedro", name: "TV Pedro", room: "Habitación Pedro", model: "Smart TV", ip: "192.168.0.10", powerControlReady: true, volume: 30, muted: false },
+    { id: "tv-padres", name: "TV Habitación Padres", room: "Habitación Padres", model: "Smart TV", ip: "192.168.0.53", powerControlReady: true, volume: 30, muted: false },
+    { id: "tv-lucas", name: "TV Lucas", room: "Habitación Lucas", model: "Smart TV", ip: "192.168.0.51", powerControlReady: true, volume: 25, muted: false }
   ];
 
   function readState() {
     var defaults = {
-      lights: { living: false, kitchen: false, bedroom: false, garden: false },
-      poolOn: false,
-      gateOpen: false,
+      lights: { living: null, kitchen: null, bedroom: null, garden: null },
+      poolOn: null,
+      gateStatus: "unknown",
+      gateStatusAt: 0,
       volume: 35,
       muted: false,
-      tvId: "tv-principal",
+      tvId: "tv-living",
       tvStates: {},
       cameras: []
     };
     try {
-      var saved = window.localStorage.getItem(STORAGE_KEY);
+      var saved = window.localStorage.getItem(STORAGE_KEY) || window.localStorage.getItem(LEGACY_STORAGE_KEY);
       if (saved) {
         var parsed = JSON.parse(saved);
         if (parsed && typeof parsed === "object") {
-          if (parsed.lights) { Object.assign(defaults.lights, parsed.lights); }
-          defaults.poolOn = parsed.poolOn === true;
-          defaults.gateOpen = parsed.gateOpen === true;
-          if (typeof parsed.volume === "number") { defaults.volume = parsed.volume; }
+          if (parsed.schemaVersion === 3 && parsed.lights && typeof parsed.lights === "object") {
+            Object.keys(defaults.lights).forEach(function (key) {
+              if (typeof parsed.lights[key] === "boolean") { defaults.lights[key] = parsed.lights[key]; }
+            });
+          }
+          if (parsed.schemaVersion === 3 && typeof parsed.poolOn === "boolean") { defaults.poolOn = parsed.poolOn; }
+          if (Number.isInteger(parsed.volume) && parsed.volume >= 0 && parsed.volume <= 100) { defaults.volume = parsed.volume; }
           defaults.muted = parsed.muted === true;
-          if (parsed.tvId) { defaults.tvId = parsed.tvId; }
-          if (parsed.tvStates) { defaults.tvStates = parsed.tvStates; }
-          if (Array.isArray(parsed.cameras)) { defaults.cameras = parsed.cameras; }
+          if (TV_DEVICES.some(function (tv) { return tv.id === parsed.tvId; })) { defaults.tvId = parsed.tvId; }
+          if (parsed.tvStates && typeof parsed.tvStates === "object") {
+            TV_DEVICES.forEach(function (tv) {
+              var savedTv = parsed.tvStates[tv.id];
+              if (!savedTv || typeof savedTv !== "object") { return; }
+              defaults.tvStates[tv.id] = {
+                volume: Number.isInteger(savedTv.volume) && savedTv.volume >= 0 && savedTv.volume <= 100 ? savedTv.volume : tv.volume,
+                muted: savedTv.muted === true
+              };
+            });
+          }
+          if (Array.isArray(parsed.cameras)) {
+            defaults.cameras = parsed.cameras.slice(0, 16).filter(function (camera) {
+              if (!camera || typeof camera !== "object" || typeof camera.id !== "string" || typeof camera.name !== "string" || typeof camera.streamUrl !== "string") { return false; }
+              try {
+                var url = new URL(camera.streamUrl);
+                return camera.id.length <= 64 && camera.name.trim().length > 0 && camera.name.length <= 48 && camera.streamUrl.length <= 2048 && (url.protocol === "http:" || url.protocol === "https:") && !url.username && !url.password;
+              } catch (error) { return false; }
+            }).map(function (camera) { return { id: camera.id, name: camera.name.trim(), streamUrl: camera.streamUrl }; });
+          }
         }
       }
     } catch (e) {}
@@ -101,7 +122,7 @@
 
   function saveState() {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.assign({ schemaVersion: 3 }, state)));
     } catch (e) {}
   }
 
@@ -186,9 +207,24 @@
           if (user) {
             console.log("[Firebase Auth] Usuario autenticado:", user.email || user.uid);
             var name = user.email ? user.email.split("@")[0] : "admin";
-            acceptSession(name);
-            updateAccountStatus(user);
-            probeFirebaseHttps(user);
+            user.getIdTokenResult().then(function (tokenResult) {
+              if (!tokenResult.claims || tokenResult.claims.role !== "owner") {
+                apiAuthenticated = false;
+                detachFirebaseListeners();
+                return auth.signOut().then(function () {
+                  showAuthGate("La cuenta no tiene el rol propietario configurado. Solicita al administrador que asigne el rol y vuelve a iniciar sesión.");
+                  updateAccountStatus(null);
+                });
+              }
+              acceptSession(name);
+              updateAccountStatus(user);
+              probeFirebaseHttps(user);
+            }).catch(function (error) {
+              console.error("[Firebase Auth] No se pudo validar el rol de la cuenta:", error);
+              apiAuthenticated = false;
+              detachFirebaseListeners();
+              showAuthGate("No se pudo validar el permiso de esta cuenta. Comprueba la conexión e inicia sesión de nuevo.");
+            });
           } else {
             console.log("[Firebase Auth] Sesión no iniciada (acceso restringido por reglas).");
             apiAuthenticated = false;
@@ -211,11 +247,24 @@
 
   function applySharedTvState(tvsData) {
     if (!tvsData || typeof tvsData !== "object") { return; }
-    var list = [];
-    Object.keys(tvsData).forEach(function (key) {
+    var allowedIds = TV_DEVICES.map(function (tv) { return tv.id; });
+    var list = Object.keys(tvsData).filter(function (key) { return allowedIds.indexOf(key) !== -1; }).map(function (key) {
       var remoteTv = tvsData[key];
-      if (remoteTv && typeof remoteTv === "object") { list.push(remoteTv); }
+      var fallback = TV_DEVICES.find(function (tv) { return tv.id === key; });
+      if (!remoteTv || typeof remoteTv !== "object" || !fallback) { return null; }
+      var volume = Number.isInteger(remoteTv.volume) && remoteTv.volume >= 0 && remoteTv.volume <= 100 ? remoteTv.volume : fallback.volume;
+      return {
+        id: key,
+        name: typeof remoteTv.name === "string" && remoteTv.name.length <= 80 ? remoteTv.name : fallback.name,
+        room: typeof remoteTv.room === "string" && remoteTv.room.length <= 80 ? remoteTv.room : fallback.room,
+        model: typeof remoteTv.model === "string" && remoteTv.model.length <= 80 ? remoteTv.model : fallback.model,
+        ip: typeof remoteTv.ip === "string" && remoteTv.ip.length <= 64 ? remoteTv.ip : fallback.ip,
+        powerControlReady: remoteTv.powerControlReady === true,
+        volume: volume,
+        muted: remoteTv.muted === true
+      };
     });
+    list = list.filter(Boolean);
     if (!list.length) { return; }
     TV_DEVICES = list;
     TV_DEVICES.forEach(function (tv) {
@@ -262,8 +311,9 @@
         renderPool();
       }
 
-      if (typeof val.gateOpen === "boolean") {
-        state.gateOpen = val.gateOpen;
+      if (typeof val.gateStatus === "string") {
+        state.gateStatus = val.gateStatus;
+        state.gateStatusAt = Number(val.gateStatusAt) || 0;
         renderGate();
       }
       sharedStateUpdatedAt = Number(val.updatedAt) || sharedStateUpdatedAt;
@@ -579,7 +629,7 @@
           renderLights();
         }
         if (typeof home.poolOn === "boolean") { state.poolOn = home.poolOn; renderPool(); }
-        if (typeof home.gateOpen === "boolean") { state.gateOpen = home.gateOpen; renderGate(); }
+        if (typeof home.gateStatus === "string") { state.gateStatus = home.gateStatus; state.gateStatusAt = Number(home.gateStatusAt) || 0; renderGate(); }
         saveState();
       }
       var gateway = values[1];
@@ -642,15 +692,17 @@
     if (label) { label.textContent = statusText; }
     if (meta) { meta.textContent = detailText; }
     var lights = byId("quick-lights");
-    if (lights) { lights.textContent = String(Object.keys(state.lights).filter(function (key) { return state.lights[key] === true; }).length); }
+    var reportedLights = Object.keys(state.lights).filter(function (key) { return typeof state.lights[key] === "boolean"; }).length;
+    var activeLightOrders = Object.keys(state.lights).filter(function (key) { return state.lights[key] === true; }).length;
+    if (lights) { lights.textContent = reportedLights ? String(activeLightOrders) : "--"; }
     var pool = byId("quick-pool");
-    if (pool) { pool.textContent = state.poolOn ? "ON" : "OFF"; }
+    if (pool) { pool.textContent = typeof state.poolOn === "boolean" ? (state.poolOn ? "ON" : "OFF") : "--"; }
     var poolDot = byId("quick-pool-dot");
-    if (poolDot) { poolDot.classList.remove("is-checking", "is-online", "is-error"); poolDot.classList.add(state.poolOn ? "is-online" : "is-error"); }
+    if (poolDot) { poolDot.classList.remove("is-checking", "is-online", "is-error"); poolDot.classList.add(typeof state.poolOn === "boolean" ? (state.poolOn ? "is-online" : "is-error") : "is-checking"); }
     var gate = byId("quick-gate");
-    if (gate) { gate.textContent = state.gateOpen ? "ABIERTO" : "CERRADO"; }
+    if (gate) { gate.textContent = "SIN SENSOR"; }
     var gateDot = byId("quick-gate-dot");
-    if (gateDot) { gateDot.classList.remove("is-checking", "is-online", "is-error"); gateDot.classList.add(state.gateOpen ? "is-error" : "is-online"); }
+    if (gateDot) { gateDot.classList.remove("is-checking", "is-online", "is-error"); gateDot.classList.add("is-error"); }
   }
 
   function probeFirebaseHttps(user) {
@@ -844,7 +896,7 @@
   function updateSharedStateFreshnessUI() {
     var target = byId("shared-state-freshness");
     if (!target) { return; }
-    target.textContent = sharedStateUpdatedAt > 0 ? "Estado confirmado por ESP32 " + formatTimeAgo(sharedStateUpdatedAt).toLowerCase() : "Esperando confirmacion de estado del ESP32";
+    target.textContent = sharedStateUpdatedAt > 0 ? "Última respuesta de relé recibida por ESP32 " + formatTimeAgo(sharedStateUpdatedAt).toLowerCase() + " · sin sensor físico" : "Esperando respuesta de los relés; sensores físicos pendientes";
   }
 
   // Wait for the ESP32 to report the desired state; an initial read may be stale.
@@ -874,7 +926,7 @@
   function sendLightCommand(lightName, targetState) {
     var card = document.querySelector("[data-device='" + lightName + "']");
     if (!requireGatewayConnection("la luz", byId("command-feedback"))) { return; }
-    setCommandFeedback("Enviando orden a la luz; esperando confirmaci\u00f3n del ESP32...", "pending");
+    setCommandFeedback("Enviando orden a la luz; esperando respuesta del relé...", "pending");
     if (card && card.classList.contains("is-pending")) { return; }
     if (card) { card.classList.add("is-pending"); }
     var updates = {};
@@ -888,8 +940,8 @@
       saveState();
       renderLights();
       var lightLabels = { living: "Living", kitchen: "Cocina", bedroom: "Dormitorio", garden: "Exterior" };
-      recordActivity("Luz " + (confirmedState ? "encendida" : "apagada") + ": " + (lightLabels[lightName] || lightName), "ok", "Estado confirmado por el ESP32");
-      setCommandFeedback("Luz " + (lightLabels[lightName] || lightName) + (confirmedState ? " encendida" : " apagada") + " \u00b7 confirmado por ESP32", "success");
+      recordActivity("Orden de luz " + (confirmedState ? "ON" : "OFF") + ": " + (lightLabels[lightName] || lightName), "ok", "El relé respondió al ESP32; el estado físico no tiene sensor");
+      setCommandFeedback("Luz " + (lightLabels[lightName] || lightName) + ": relé respondió a la orden " + (confirmedState ? "ON" : "OFF") + "; estado físico no medido.", "success");
     }).catch(function (error) {
       console.error("No se pudo enviar/confirmar el comando de luz:", error);
       if (card) { card.classList.remove("is-pending"); }
@@ -903,7 +955,7 @@
   function sendPoolCommand(targetState) {
     var toggle = byId("pool-toggle");
     if (!requireGatewayConnection("la pileta", byId("command-feedback"))) { return; }
-    setCommandFeedback("Enviando orden a la pileta; esperando confirmaci\u00f3n del ESP32...", "pending");
+    setCommandFeedback("Enviando orden a la pileta; esperando respuesta del relé...", "pending");
     if (toggle && toggle.classList.contains("is-pending")) { return; }
     if (toggle) { toggle.classList.add("is-pending"); }
     var updates = {};
@@ -916,8 +968,8 @@
       state.poolOn = confirmedState === true;
       saveState();
       renderPool();
-      recordActivity("Motor de pileta " + (confirmedState ? "encendido" : "apagado"), "ok", "Estado confirmado por el ESP32");
-      setCommandFeedback("Pileta " + (confirmedState ? "encendida" : "apagada") + " \u00b7 confirmado por ESP32", "success");
+      recordActivity("Orden de bomba " + (confirmedState ? "ON" : "OFF"), "ok", "El relé respondió al ESP32; el funcionamiento del motor no tiene sensor");
+      setCommandFeedback("Relé respondió a la orden " + (confirmedState ? "ON" : "OFF") + "; funcionamiento de la bomba no medido.", "success");
     }).catch(function (error) {
       console.error("No se pudo enviar/confirmar el comando de pileta:", error);
       if (toggle) { toggle.classList.remove("is-pending"); }
@@ -928,35 +980,35 @@
     });
   }
 
-  // BUG-09: Gate con rollback completo + auto-clear del mensaje (UX-03)
-  function sendGateCommand(targetState) {
+  function sendGateCommand() {
     var button = byId("gate-button");
     var feedbackEl = byId("gate-feedback");
     if (!requireGatewayConnection("el porton", feedbackEl)) { return; }
-    setCommandFeedback("Enviando orden al port\u00f3n; esperando confirmaci\u00f3n del ESP32...", "pending");
+    setCommandFeedback("Enviando pulso al port\u00f3n...", "pending");
     if (button.disabled) { return; }
     button.disabled = true;
-    feedbackEl.textContent = targetState ? "Enviando apertura por Wi-Fi..." : "Enviando cierre por Wi-Fi...";
+    feedbackEl.textContent = "Enviando pulso por Wi-Fi...";
     var updates = {};
-    updates["home/commands/gateOpen"] = targetState;
-    updates["home/commands/gateTrigger"] = Date.now();
-    updates["home/commands/timestamp"] = Date.now();
+    var commandAt = Date.now();
+    updates["home/commands/gateTrigger"] = commandAt;
+    updates["home/commands/timestamp"] = commandAt;
+    state.gateStatus = "pending";
+    renderGate();
     updateFirebasePaths(updates).then(function () {
-      feedbackEl.textContent = "Orden enviada. Esperando confirmacion del ESP32...";
-      return waitForFirebaseValue("home/state/gateOpen", targetState, 10000);
-    }).then(function (confirmedState) {
-      state.gateOpen = confirmedState === true;
-      saveState();
-      renderGate();
-      feedbackEl.textContent = "Porton accionado correctamente.";
-      setCommandFeedback("Port\u00f3n " + (confirmedState ? "abierto" : "cerrado") + " \u00b7 confirmado por ESP32", "success");
+      feedbackEl.textContent = "Orden enviada. Esperando respuesta del ESP32...";
+      return waitForFirebaseValue("home/state/gateStatusAt", commandAt, 10000);
+    }).then(function () {
+      var pulseSent = state.gateStatus === "pulse_sent";
+      feedbackEl.textContent = pulseSent ? "Pulso enviado; la posición física no está confirmada." : "El ESP32 informó que no pudo enviar el pulso.";
+      setCommandFeedback(pulseSent ? "Pulso enviado; posición física desconocida porque no hay sensor." : "Falló el pulso; la posición física sigue siendo desconocida.", pulseSent ? "pending" : "error");
       button.disabled = false;
-      recordActivity("Porton " + (confirmedState ? "abierto" : "cerrado"), "ok", "Estado confirmado por el ESP32");
-      setTimeout(function () { feedbackEl.textContent = ""; }, 4000);
+      recordActivity(pulseSent ? "Pulso enviado al portón" : "Falló el pulso del portón", pulseSent ? "ok" : "error", "La posición física no está confirmada por un sensor");
+      setTimeout(function () { feedbackEl.textContent = ""; }, 6000);
     }).catch(function (error) {
+      state.gateStatus = "unknown";
       renderGate();
-      feedbackEl.textContent = "Error: " + error.message;
-      setCommandFeedback("No se pudo confirmar el port\u00f3n: " + error.message, "error");
+      feedbackEl.textContent = "Sin respuesta del ESP32; no se conoce la posición del portón.";
+      setCommandFeedback("No se recibió confirmación del relé: " + error.message, "error");
       button.disabled = false;
       recordActivity("Accion sobre el porton", "error", error.message);
       addNotification("alert", "!", "ERROR DE DISPOSITIVO", "No se pudo accionar el porton", error.message);
@@ -969,17 +1021,15 @@
     var feedback = byId("media-feedback");
     if (!requireGatewayConnection("el televisor", feedback)) { renderMedia(); return; }
     var tvState = getSelectedTvState();
-    var previous = { volume: tvState.volume, muted: tvState.muted, poweredOn: tv.poweredOn };
+    var previous = { volume: tvState.volume, muted: tvState.muted };
     if (action === "set_volume") {
       tvState.volume = Number(value);
       tvState.muted = false;
       state.volume = tvState.volume;
       state.muted = false;
-    } else if (action === "toggle_mute" || action === "set_mute") {
-      tvState.muted = action === "toggle_mute" ? !tvState.muted : !!value;
+    } else if (action === "toggle_mute") {
+      tvState.muted = !tvState.muted;
       state.muted = tvState.muted;
-    } else if (action === "power") {
-      tv.poweredOn = !tv.poweredOn;
     }
     saveState();
     renderTVs();
@@ -995,22 +1045,19 @@
     if (action === "set_volume") {
       updates["home/tvs/" + tv.id + "/volume"] = tvState.volume;
       updates["home/tvs/" + tv.id + "/muted"] = false;
-    } else if (action === "toggle_mute" || action === "set_mute") {
+    } else if (action === "toggle_mute") {
       updates["home/tvs/" + tv.id + "/muted"] = tvState.muted;
-    } else if (action === "power") {
-      updates["home/tvs/" + tv.id + "/poweredOn"] = tv.poweredOn;
     }
 
     updateFirebasePaths(updates).then(function () {
       feedback.textContent = tv.name + " - orden enviada; el televisor no tiene confirmaci\u00f3n f\u00edsica.";
-      setCommandFeedback("Orden de " + tv.name + " enviada al ESP32; estado f\u00edsico sin sensor de confirmaci\u00f3n.", "pending");
-      recordActivity("Comando multimedia: " + tv.name, "ok", "Orden enviada (" + action.replace(/_/g, " ") + "); ejecucion fisica sin sensor de confirmacion");
+      setCommandFeedback("Solicitud de " + tv.name + " publicada en Firebase; el ESP32 no ha confirmado la ejecuci\u00f3n.", "pending");
+      recordActivity("Comando multimedia: " + tv.name, "pending", "Solicitud publicada (" + action.replace(/_/g, " ") + "); ejecucion fisica aun no confirmada");
     }).catch(function (error) {
       tvState.volume = previous.volume;
       tvState.muted = previous.muted;
       state.volume = previous.volume;
       state.muted = previous.muted;
-      tv.poweredOn = previous.poweredOn;
       saveState();
       renderTVs();
       renderMedia();
@@ -1055,7 +1102,7 @@
     var errorEl = byId("auth-error");
 
     if (isUnconfigured && errorEl) {
-      errorEl.innerHTML = "⚠️ Falta vincular tu proyecto de Firebase.<br><button type='button' id='quick-firebase-setup' style='background:none;border:none;color:#38bdf8;text-decoration:underline;cursor:pointer;font:inherit;padding:4px 0;'>Toca aquí para configurar Firebase</button>";
+      errorEl.innerHTML = "⚠️ Falta vincular tu proyecto de Firebase.<br><button type='button' class='firebase-setup-link' id='quick-firebase-setup'>Toca aquí para configurar Firebase</button>";
       errorEl.hidden = false;
       setTimeout(function () {
         var btn = byId("quick-firebase-setup");
@@ -1117,7 +1164,6 @@
       auth.signInWithEmailAndPassword(email, pass).then(function (userCredential) {
         submit.disabled = false;
         submit.textContent = "Iniciar sesión";
-        acceptSession(userInput);
       }).catch(function (error) {
         // SEGURIDAD: NO se crean cuentas nuevas automáticamente.
         // Solo los usuarios pre-registrados en Firebase Console pueden acceder.
@@ -1989,40 +2035,50 @@
   function renderLights() {
     var cards = document.querySelectorAll("[data-device]");
     var count = 0;
+    var reportedCount = 0;
     Array.prototype.forEach.call(cards, function (card) {
       var name = card.getAttribute("data-device");
+      var hasReportedOrder = typeof state.lights[name] === "boolean";
       var isOn = state.lights[name] === true;
+      if (hasReportedOrder) { reportedCount += 1; }
       var toggle = card.querySelector(".state-switch");
       card.classList.toggle("is-on", isOn);
       if (toggle) {
         toggle.setAttribute("aria-checked", isOn ? "true" : "false");
         var label = toggle.querySelector(".switch-state");
-        if (label) { label.textContent = isOn ? "Encendida" : "Apagada"; }
+        if (label) { label.textContent = hasReportedOrder ? (isOn ? "Orden ON" : "Orden OFF") : "Sin dato"; }
       }
       if (isOn) { count += 1; }
     });
-    byId("summary-lights").textContent = String(count);
-    byId("lights-count").textContent = count + (count === 1 ? " encendida" : " encendidas");
+    byId("summary-lights").textContent = reportedCount ? count + "/" + reportedCount : "--";
+    byId("lights-count").textContent = reportedCount ? count + " con orden ON de " + reportedCount + " con dato" : "Sin dato del gateway";
     renderSystemStatus();
   }
 
   function renderPool() {
     var toggle = byId("pool-toggle");
     if (toggle) {
-      toggle.setAttribute("aria-checked", state.poolOn ? "true" : "false");
+      toggle.setAttribute("aria-checked", state.poolOn === true ? "true" : "false");
       var label = toggle.querySelector(".switch-state");
-      if (label) { label.textContent = state.poolOn ? "Encendido" : "Apagado"; }
+      if (label) { label.textContent = typeof state.poolOn === "boolean" ? (state.poolOn ? "Orden ON" : "Orden OFF") : "Sin dato"; }
     }
-    byId("pool-description").textContent = state.poolOn ? "El motor está en funcionamiento (control Wi-Fi)." : "El motor está apagado.";
-    byId("summary-pool").textContent = state.poolOn ? "Encendido" : "Apagado";
+    byId("pool-description").textContent = typeof state.poolOn === "boolean"
+      ? "Última orden reportada por el relé: " + (state.poolOn ? "ON" : "OFF") + ". El funcionamiento del motor no está medido."
+      : "Todavía no hay respuesta de estado del relé; el funcionamiento del motor no está medido.";
+    byId("summary-pool").textContent = typeof state.poolOn === "boolean" ? (state.poolOn ? "Orden ON" : "Orden OFF") : "Sin dato";
     renderSystemStatus();
   }
 
   function renderGate() {
-    byId("gate-description").textContent = state.gateOpen ? "El portón está abierto." : "El portón está cerrado.";
-    byId("gate-button-label").textContent = state.gateOpen ? "Cerrar portón" : "Abrir portón";
-    byId("gate-button").classList.toggle("is-open", state.gateOpen);
-    byId("summary-gate").textContent = state.gateOpen ? "Abierto" : "Cerrado";
+    var recentGateResult = state.gateStatusAt > 0 && Date.now() - state.gateStatusAt < 60000;
+    byId("gate-description").textContent = state.gateStatus === "pending"
+      ? "Orden enviada; esperando respuesta del ESP32. La posición actual no está medida."
+      : (recentGateResult && state.gateStatus === "pulse_sent"
+        ? "El ESP32 confirmó que el relé recibió el pulso. La posición requiere un sensor para confirmarse."
+        : (recentGateResult && state.gateStatus === "pulse_failed" ? "El ESP32 informó un fallo. La posición actual es desconocida." : "La posición del portón es desconocida: no hay sensor de posición conectado."));
+    byId("gate-button-label").textContent = "Accionar portón";
+    byId("gate-button").classList.remove("is-open");
+    byId("summary-gate").textContent = "Desconocido";
     renderSystemStatus();
   }
 
@@ -2047,7 +2103,7 @@
 
     var selected = getSelectedTv();
     byId("tv-list-empty").hidden = TV_DEVICES.length > 0;
-    byId("tv-api-status").textContent = "Control Wi-Fi vía ESP32-S3 · " + TV_DEVICES.length + " dispositivos listos";
+    byId("tv-api-status").textContent = "Comandos por ESP32-S3 · " + TV_DEVICES.length + " dispositivos configurados · estado físico sin confirmar";
 
     TV_DEVICES.forEach(function (tv) {
       var btn = document.createElement("button");
@@ -2061,8 +2117,8 @@
       copy.appendChild(createTextElement("strong", "", tv.name));
       copy.appendChild(createTextElement("span", "", tv.room + " · " + tv.model + (tv.ip ? " (" + tv.ip + ")" : "")));
 
-      var power = createTextElement("span", "tv-power-state", tv.poweredOn ? "Encendida" : "Apagada");
-      power.classList.add(tv.poweredOn ? "is-on" : "is-off");
+      var power = createTextElement("span", "tv-power-state", "Estado físico desconocido");
+      power.classList.add("is-unknown");
       copy.appendChild(power);
 
       var check = createTextElement("span", "tv-device-check", active ? "●" : "");
@@ -2085,13 +2141,12 @@
     if (selected) {
       byId("selected-tv-name").textContent = selected.name;
       byId("selected-tv-location").textContent = selected.room + " · " + selected.model + " · " + (selected.ip || "Wi-Fi LAN");
-      byId("selected-tv-power").textContent = selected.poweredOn ? "Encendida" : "Apagada";
-      byId("selected-tv-dot").classList.toggle("is-off", !selected.poweredOn);
-      byId("selected-tv-dot").classList.remove("is-unknown");
-      byId("tv-power-label").textContent = selected.poweredOn ? "Apagar" : "Encender";
+      byId("selected-tv-power").textContent = "Estado físico desconocido";
+      byId("selected-tv-dot").classList.remove("is-off");
+      byId("selected-tv-dot").classList.add("is-unknown");
+      byId("tv-power-label").textContent = "Alternar energía";
       byId("tv-power-button").disabled = false;
       byId("tv-power-hint").hidden = true;
-      byId("tv-pairing-panel").hidden = true;
 
       Array.prototype.forEach.call(document.querySelectorAll("[data-remote-key]"), function (b) {
         b.disabled = false;
@@ -2104,7 +2159,6 @@
     var tvState = getSelectedTvState();
     byId("volume-value").textContent = tvState.muted ? "--" : tvState.volume + "%";
     byId("volume-slider").value = String(tvState.volume);
-    byId("volume-slider").style.setProperty("--volume-level", tvState.volume + "%");
     byId("mute-button").setAttribute("aria-pressed", tvState.muted ? "true" : "false");
     byId("mute-button").classList.toggle("is-muted", tvState.muted);
   }
@@ -2209,17 +2263,24 @@
       e.preventDefault();
       var name = form.elements.cameraName.value.trim();
       var url = form.elements.cameraUrl.value.trim();
-      var user = form.elements.cameraUser ? form.elements.cameraUser.value.trim() : "";
-      var pass = form.elements.cameraPassword ? form.elements.cameraPassword.value : "";
       if (!name || !url) {
         byId("camera-form-error").textContent = "Completa el nombre y la dirección del stream.";
         byId("camera-form-error").hidden = false;
         return;
       }
-      var camId = "cam-" + Date.now();
-      if (user || pass) {
-        cameraCredentials[camId] = { user: user, pass: pass };
+      var parsedUrl;
+      try { parsedUrl = new URL(url); } catch (error) { parsedUrl = null; }
+      if (url.length > 2048 || !parsedUrl || (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") || parsedUrl.username || parsedUrl.password) {
+        byId("camera-form-error").textContent = "Usa una URL HTTP o HTTPS válida sin usuario ni contraseña.";
+        byId("camera-form-error").hidden = false;
+        return;
       }
+      if (state.cameras.length >= 16) {
+        byId("camera-form-error").textContent = "Puedes registrar hasta 16 cámaras.";
+        byId("camera-form-error").hidden = false;
+        return;
+      }
+      var camId = "cam-" + Date.now();
       state.cameras.push({ id: camId, name: name, streamUrl: url });
       saveState();
       renderCameras();
@@ -2249,7 +2310,7 @@
 
     // Portón
     byId("gate-button").addEventListener("click", function () {
-      sendGateCommand(!state.gateOpen);
+      sendGateCommand();
     });
 
     // Slider de volumen
@@ -2257,7 +2318,6 @@
     slider.addEventListener("input", function () {
       var val = Number(this.value);
       byId("volume-value").textContent = val + "%";
-      this.style.setProperty("--volume-level", val + "%");
     });
 
     slider.addEventListener("change", function () {
@@ -2287,29 +2347,6 @@
         sendTVCommand("remote_key", this.getAttribute("data-remote-key"));
       });
     });
-
-    // BUG-04: Pairing TV
-    var pairingForm = byId("tv-pairing-form");
-    if (pairingForm) {
-      pairingForm.addEventListener("submit", function (e) {
-        e.preventDefault();
-        var code = (byId("tv-pairing-code").value || "").trim().toUpperCase();
-        if (code.length === 6) {
-          sendTVCommand("pair", code);
-          byId("tv-pairing-panel").hidden = true;
-          byId("tv-pairing-code").value = "";
-          byId("media-feedback").textContent = "Código de vinculación enviado al televisor.";
-        } else {
-          alert("Ingresa un código de emparejamiento válido de 6 caracteres.");
-        }
-      });
-    }
-    var pairingCancel = byId("tv-pairing-cancel");
-    if (pairingCancel) {
-      pairingCancel.addEventListener("click", function () {
-        byId("tv-pairing-panel").hidden = true;
-      });
-    }
 
     // A11Y-02: Cerrar modales con tecla Escape
     window.addEventListener("keydown", function (e) {
@@ -2533,7 +2570,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=69").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=70").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -2788,8 +2825,8 @@
   // ---- Toast ----
   var activeToasts = {};
 
-  function showToast(notif, durationMs) {
-    var dur = durationMs || 7000;
+  function showToast(notif) {
+    var dur = 7000;
     var container = byId("notif-toast-container");
     if (!container) { return; }
 
@@ -2815,8 +2852,6 @@
 
     var bar = document.createElement("span");
     bar.className = "notif-toast-bar";
-    bar.style.animationDuration = dur + "ms";
-
     toast.appendChild(iconEl);
     toast.appendChild(content);
     toast.appendChild(closeBtn);
@@ -3272,8 +3307,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v69";
-    byId("script-build-version").textContent = "JS v69";
+    byId("frontend-version").textContent = "HTML v70";
+    byId("script-build-version").textContent = "JS v70";
 
     initializeConfirmDialog();
     initializeTabs();
@@ -3290,12 +3325,30 @@
     setInterval(refreshGatewayFreshness, 5000);
     setInterval(updateSharedStateFreshnessUI, 30000);
     renderMedia();
+    saveState(); // Rewrite old local cache through the current validation/migration rules.
 
     updateClock();
     setInterval(updateClock, 1000);
 
     byId("weather-refresh").addEventListener("click", loadWeather);
-    byId("tv-refresh").addEventListener("click", renderTVs);
+    byId("tv-refresh").addEventListener("click", function () {
+      var user = auth && auth.currentUser;
+      if (!user || !apiAuthenticated) {
+        byId("tv-api-status").textContent = "Inicia sesión para actualizar la lista compartida.";
+        return;
+      }
+      var refreshButton = byId("tv-refresh");
+      refreshButton.disabled = true;
+      byId("tv-api-status").textContent = "Actualizando lista guardada en Firebase...";
+      fetchFirebaseValueViaRest(user, "home/tvs").then(function (tvData) {
+        applySharedTvState(tvData);
+        byId("tv-api-status").textContent = "Lista sincronizada · disponibilidad y estado físico requieren telemetría del televisor.";
+      }).catch(function (error) {
+        byId("tv-api-status").textContent = "No se pudo actualizar la lista: " + error.message;
+      }).finally(function () {
+        refreshButton.disabled = false;
+      });
+    });
 
     // Inicializar Firebase y Autenticación
     initFirebase();

@@ -1,65 +1,61 @@
-# Guía de Migración y Seguridad: Smart Panel a Firebase + ESP32-S3
+# Migración y seguridad de Smart Panel
 
-Este documento detalla la configuración paso a paso con **autenticación estricta y segura** para proteger tu red local y todos los datos de tu hogar.
+Esta guía acompaña las reglas por roles y la configuración local del firmware.
 
----
+## Acciones inmediatas
 
-## 1. Firebase (Consola de Google)
+Las versiones anteriores del repositorio contenían una contraseña de Wi-Fi y una contraseña de Firebase para el ESP32. Trátalas como expuestas, aunque los archivos actuales ya no incluyan esos valores:
 
-### A. Habilitar Firebase Authentication (Seguridad de Acceso)
-1. En la [Consola de Firebase](https://console.firebase.google.com/), entra a tu proyecto.
-2. En el menú izquierdo ve a **Build > Authentication** y haz clic en **Comenzar**.
-3. En la pestaña **Sign-in method** (Método de inicio de sesión), haz clic en **Correo electrónico/Contraseña** (Email/Password) y **Habilítalo**.
-4. En la pestaña **Users** (Usuarios), haz clic en **Agregar usuario**:
-   - **Usuario para ti (Web/Vercel)**:
-     - Usa el correo exacto con el que vas a iniciar sesión en todos tus dispositivos. Puedes ingresar el correo completo o el nombre `admin` si esa cuenta se creó como `admin@smartpanel.local`.
-     - Contraseña: Tu clave secreta y segura (mínimo 6 caracteres).
-   - **Usuario para la placa ESP32-S3**:
-     - Correo: `esp32@smartpanel.local`
-     - Contraseña: `clave_segura_esp32_123` (o la que elijas en `config.h`).
+1. Cambia la contraseña Wi-Fi desde el router y actualiza los dispositivos legítimos que la usan.
+2. En Firebase Authentication, cambia o elimina la contraseña del usuario del ESP32 y crea una contraseña única nueva.
+3. Si el repositorio fue público o se compartió, considera expuestos también los valores del historial Git. Revocar una contraseña no elimina el historial.
 
----
+No pegues contraseñas, tokens ni una clave privada de cuenta de servicio en el chat ni en el repositorio.
 
-### B. Configurar Realtime Database con Reglas Cerradas
-1. Ve a **Build > Realtime Database**.
-2. **Importar Árbol de Datos**:
-   - En la pestaña **Datos**, toca el menú de tres puntos (`⋮`) arriba a la derecha.
-   - Selecciona **Importar JSON** y sube el archivo [firebase_initial_data.json](file:///c:/Panel%20de%20control/firebase_initial_data.json).
-3. **Aplicar reglas de seguridad**:
-   - En la pestaña **Reglas**, pega el contenido completo de [firebase_rules.json](file:///c:/Panel%20de%20control/firebase_rules.json) y pulsa **Publicar**. También puedes ejecutar `firebase deploy --only database` desde la raíz del repositorio.
-   - No uses reglas genéricas `.read: "auth != null"` y `.write: "auth != null"` en la raíz. La agenda y los tokens quedan bajo el UID autenticado, y el ESP32 mantiene su acceso de servicio.
+## Preparar Firebase
 
----
+1. Confirma que existen en Firebase Authentication la cuenta propietaria y la cuenta dedicada al ESP32. Email/Password debe estar habilitado.
+2. Configura credenciales de Firebase Admin SDK en una ubicación privada fuera del repositorio mediante Application Default Credentials (`GOOGLE_APPLICATION_CREDENTIALS`). La clave de Admin SDK nunca va en la PWA, el firmware ni Git.
+3. Desde la carpeta `functions`, instala dependencias y asigna los claims personalizados. Usa el correo real de cada cuenta:
 
-### C. Obtener Credenciales Web
-1. Ve al icono de engranaje (**Configuración del proyecto**) > pestaña **General**.
-2. Abajo en "Tus apps", selecciona la app web (`</>`) y copia tu `apiKey` y `databaseURL`.
+   ```powershell
+   $env:GOOGLE_APPLICATION_CREDENTIALS = 'C:\ruta-privada\firebase-admin.json'
+   node scripts/set-role.js 'correo-propietario' owner
+   node scripts/set-role.js 'correo-esp32' device
+   ```
 
----
+   `set-role.js` preserva otros claims y solo permite `owner`, `device` o `none`. Tras cambiar un rol, el usuario debe cerrar sesión y volver a iniciarla para recibir el claim actualizado.
 
-## 2. Frontend en Vercel
+4. Desde la raíz, selecciona el proyecto correcto en Firebase CLI y publica reglas y funciones:
 
-1. Abre el archivo [html/js/firebase-config.js](file:///c:/Panel%20de%20control/html/js/firebase-config.js):
-   - Reemplaza `apiKey` y `databaseURL` con tus credenciales de Firebase.
-2. Al abrir la web (en local o en Vercel):
-   - Te aparecerá la pantalla de **Sesión Segura**.
-   - Ingresa con `admin` (o tu email) y la contraseña que creaste en el paso 1A.
-   - Una vez autenticado, el panel cargará todos los datos en tiempo real y el botón "Cerrar sesión" te permitirá desloguearte en cualquier momento.
-   - En Firebase Authentication > Settings > Authorized domains agrega `smart-panel-beryl.vercel.app`; sin esa autorización Firebase bloquea el inicio de sesión desde Vercel.
-   - La agenda queda guardada en `users/{uid}/events`, por lo que al iniciar sesión con la misma cuenta en otro dispositivo aparecerán los mismos eventos. Los eventos antiguos del usuario `pedrorouge2022@gmail.com` se copian automáticamente desde `home/events` al iniciar sesión por primera vez después de actualizar reglas.
+   ```powershell
+   firebase use <alias-del-proyecto>
+   firebase deploy --only database,functions
+   ```
 
----
+   Las reglas nuevas niegan por defecto el acceso a `/home` salvo las rutas asignadas a `owner` y `device`. La agenda y los tokens push siguen aislados por UID. No publiques estas reglas antes de asignar el claim `owner` a la cuenta que usa la web: quedará autenticada, pero sin acceso al panel.
+5. Confirma el dominio de Vercel en Firebase Authentication → Settings → Authorized domains.
 
-## 3. Microcontrolador ESP32-S3 (PlatformIO)
+La Function `scheduleEventReminders` crea tareas indexadas al guardar eventos. `calendarPush` despacha vencimientos y reintenta fallos con una espera temporal. Las tareas vencidas/cambiadas se verifican contra el evento actual antes de notificar.
 
-El firmware se encuentra en [esp32_gateway/](file:///c:/Panel%20de%20control/esp32_gateway).
+## Preparar el firmware ESP32
 
-1. Abre [esp32_gateway/include/config.h](file:///c:/Panel%20de%20control/esp32_gateway/include/config.h):
-   - Coloca tu **SSID y contraseña de Wi-Fi**.
-   - Coloca tu `FIREBASE_API_KEY` y `FIREBASE_DATABASE_URL`.
-   - Verifica que `FIREBASE_USER_EMAIL` y `FIREBASE_USER_PASSWORD` coincidan con el usuario creado para la placa en el paso 1A.
-   - Configura las **IPs locales de tus enchufes y switches inteligentes** en `SMART_LIGHTS`, la pileta en `POOL_RELAY_IP` y el portón en `GATE_RELAY_IP`.
-2. Conecta el **ESP32-S3** por USB a tu computadora.
-3. En PlatformIO (VS Code), pulsa **Upload (→)**.
-4. Abre el **Monitor Serial (115200 baudios)**:
-   - Verás la conexión a tu Wi-Fi, la validación del Token JWT en Firebase Auth, y la suscripción en tiempo real al Stream.
+1. Copia `esp32_gateway/include/config.example.h` como `esp32_gateway/include/config.local.h`.
+2. Introduce localmente la nueva contraseña Wi-Fi y las credenciales rotadas del usuario con claim `device`.
+3. `config.local.h` está ignorado por Git. No lo añadas al repositorio ni compartas binarios de firmware sin considerar que incluyen credenciales.
+4. Compila y carga desde PlatformIO. El firmware ahora falla la compilación si falta el archivo local; también rechaza comandos físicos si NTP no sincronizó una hora confiable.
+5. El portón informa `pulse_sent` o `pulse_failed`; no informa abierto/cerrado. Añade un sensor de posición antes de mostrar esos estados físicos.
+
+## Modelo inicial de datos
+
+`firebase_initial_data.json` ya no crea PINs débiles en `/home/auth` ni representa el portón como cerrado sin sensor. Si la base existente aún contiene esos campos, elimínalos manualmente desde Realtime Database. El estado del portón se considera desconocido hasta contar con sensores.
+
+## Configuración web
+
+La configuración Web Firebase en `html/js/firebase-config.js` contiene identificadores públicos de cliente. La API key web no sustituye reglas de Database ni debe considerarse autorización. La autorización se aplica con Firebase Auth y el claim personalizado `role=owner`.
+
+## Operación
+
+- Verifica cada cambio de reglas en Firebase Emulator Suite o en un proyecto de prueba antes de producción.
+- Prueba con cuatro casos: anónimo, usuario autenticado sin rol, `owner` y `device`. El usuario común no debe poder leer estado doméstico ni escribir comandos; el propietario puede emitir comandos; el dispositivo puede actualizar estado y consumir/limpiar únicamente las órdenes permitidas.
+- No uses credenciales del usuario propietario en el firmware. El ESP32 debe conservar su usuario dedicado.

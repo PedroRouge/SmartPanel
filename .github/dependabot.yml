@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      quality-toolchain:
+        patterns:
+          - "@firebase/*"
+          - "@playwright/*"
+          - "firebase"
+          - "firebase-tools"
+
+  - package-ecosystem: npm
+    directory: "/functions"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: pip
+    directory: "/legacy_backup"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

@@ -3,17 +3,14 @@
 // Firebase Messaging se ejecuta dentro del mismo worker que controla la PWA.
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js");
-firebase.initializeApp({
-  apiKey: "AIzaSyAnf7z9wl24JNJgFutE0qRvnnBnquNWoNc",
-  authDomain: "smart-panel-53d7b.firebaseapp.com",
-  databaseURL: "https://smart-panel-53d7b-default-rtdb.firebaseio.com",
-  projectId: "smart-panel-53d7b",
-  storageBucket: "smart-panel-53d7b.firebasestorage.app",
-  messagingSenderId: "1085885262056",
-  appId: "1:1085885262056:web:90373760572ff556f1015d"
-});
+importScripts("/js/firebase-runtime-config.js?v=71");
 try {
-  var messaging = firebase.messaging();
+  var messaging = null;
+  if (self.SMART_PANEL_FIREBASE_RUNTIME_CONFIG && self.SMART_PANEL_FIREBASE_RUNTIME_CONFIG.apiKey) {
+    firebase.initializeApp(self.SMART_PANEL_FIREBASE_RUNTIME_CONFIG);
+    messaging = firebase.messaging();
+  }
+  if (messaging) {
   messaging.onBackgroundMessage(function (payload) {
     if (payload.notification) { return; }
     var data = payload.data || {};
@@ -24,6 +21,7 @@ try {
       data: { url: data.url || "/" }
     });
   });
+  }
 } catch (error) {
   // Mantiene la PWA funcional en navegadores donde FCM web no está soportado.
   console.warn("[FCM] Messaging no disponible en este navegador.", error);
@@ -46,16 +44,18 @@ self.addEventListener("notificationclick", function (event) {
 });
 
 var CACHE_PREFIX = "smart-panel-shell-";
-var CACHE_NAME = CACHE_PREFIX + "69";
+var CACHE_NAME = CACHE_PREFIX + "70";
 var STATIC_FILES = [
   "/",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
-  "/css/styles.css?v=69",
-  "/js/firebase-config.js?v=69",
-  "/js/app.js?v=69"
+  "/css/styles.css?v=70",
+  "/js/bootstrap.js?v=70",
+  "/js/firebase-runtime-config.js?v=71",
+  "/js/firebase-config.js?v=71",
+  "/js/app.js?v=70"
 ];
 
 self.addEventListener("install", function (event) {

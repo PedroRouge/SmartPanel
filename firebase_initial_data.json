@@ -1,35 +1,10 @@
 {
   "home": {
-    "auth": {
-      "username": "admin",
-      "pin": "1234"
-    },
     "state": {
-      "lights": {
-        "living": false,
-        "kitchen": false,
-        "bedroom": false,
-        "garden": false
-      },
-      "poolOn": false,
-      "gateOpen": false
+      "lights": {},
+      "gateStatus": "unknown"
     },
-    "commands": {
-      "lights": {
-        "living": false,
-        "kitchen": false,
-        "bedroom": false,
-        "garden": false
-      },
-      "poolOn": false,
-      "gateOpen": false,
-      "tv": {
-        "targetId": "tv-living",
-        "action": "",
-        "value": "",
-        "timestamp": 0
-      }
-    },
+    "commands": {},
     "tvs": {
       "tv-living": {
         "id": "tv-living",
@@ -37,10 +12,8 @@
         "room": "Living",
         "model": "Smart TV",
         "ip": "192.168.0.52",
-        "poweredOn": false,
         "volume": 35,
         "muted": false,
-        "online": true,
         "powerControlReady": true
       },
       "tv-pedro": {
@@ -49,10 +22,8 @@
         "room": "Habitación Pedro",
         "model": "Smart TV",
         "ip": "192.168.0.10",
-        "poweredOn": false,
         "volume": 30,
         "muted": false,
-        "online": true,
         "powerControlReady": true
       },
       "tv-padres": {
@@ -61,10 +32,8 @@
         "room": "Habitación Padres",
         "model": "Smart TV",
         "ip": "192.168.0.53",
-        "poweredOn": false,
         "volume": 30,
         "muted": false,
-        "online": true,
         "powerControlReady": true
       },
       "tv-lucas": {
@@ -73,22 +42,18 @@
         "room": "Habitación Lucas",
         "model": "Smart TV",
         "ip": "192.168.0.51",
-        "poweredOn": false,
         "volume": 25,
         "muted": false,
-        "online": true,
         "powerControlReady": true
       }
     },
     "events": {},
     "gateway": {
       "status": {
-        "online": true,
-        "ip": "192.168.0.150",
+        "online": false,
         "last_seen": 0,
         "uptime": 0,
-        "rssi": -50,
-        "version": "1.0.0-esp32s3"
+        "version": "not-connected"
       }
     }
   }
