@@ -40,7 +40,9 @@ test("la política web mantiene CSP sin scripts inline y el build coincide", () 
 test("las reglas Firebase no habilitan escritura general a cualquier usuario", () => {
   const rules = JSON.parse(read("firebase_rules.json")).rules;
   assert.equal(rules.home.state[".write"], "auth != null && auth.token.role == 'device'");
-  assert.equal(rules.home.commands[".read"], "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || auth.token.role == 'device')");
+  assert.equal(rules.home.state[".read"], "auth != null && auth.token.role == 'admin'");
+  assert.equal(rules.home.commands.timestamp[".write"], "auth != null && auth.token.role == 'admin'");
+  assert.equal(rules.home.commands[".read"], "auth != null && (auth.token.role == 'admin' || auth.token.role == 'device')");
   assert.equal(rules.scheduledReminders[".read"], false);
   assert.equal(rules.scheduledReminders[".write"], false);
 });
@@ -81,14 +83,15 @@ test("la configuración Firebase se inyecta solo durante el despliegue", () => {
   assert.doesNotMatch(worker, /AIza[0-9A-Za-z_-]{30,}/);
 });
 
-test("login limita el acceso al email permitido, autocompleta y persiste localmente", () => {
+test("login valida el claim admin, autocompleta y persiste localmente", () => {
   const html = read("html/index.html");
   const app = read("html/js/app.js");
   assert.match(html, /id="auth-form" autocomplete="on"/);
   assert.match(html, /id="auth-username"[^>]*autocomplete="username"/);
   assert.match(html, /id="auth-password"[^>]*autocomplete="current-password"/);
   assert.match(app, /auth\.setPersistence\(firebase\.auth\.Auth\.Persistence\.LOCAL\)/);
-  assert.match(app, /OWNER_EMAIL = "pedrorouge2022@gmail\.com"/);
-  assert.doesNotMatch(app, /claims\.role !== "owner"/);
+  assert.match(app, /tokenResult\.claims\.role !== "admin"/);
+  assert.match(app, /getIdTokenResult\(true\)/);
+  assert.doesNotMatch(app, /OWNER_EMAIL/);
   assert.doesNotMatch(app, /input\.value\s*=\s*""/);
 });

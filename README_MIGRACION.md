@@ -20,11 +20,11 @@ No pegues contraseñas, tokens ni una clave privada de cuenta de servicio en el 
 
    ```powershell
    $env:GOOGLE_APPLICATION_CREDENTIALS = 'C:\ruta-privada\firebase-admin.json'
-   node scripts/set-role.js 'correo-propietario' owner
+   node scripts/set-role.js 'correo-propietario' admin
    node scripts/set-role.js 'correo-esp32' device
    ```
 
-   `set-role.js` preserva otros claims y solo permite `owner`, `device` o `none`. Tras cambiar un rol, el usuario debe cerrar sesión y volver a iniciarla para recibir el claim actualizado.
+   `set-role.js` preserva otros claims y solo permite `admin`, `device` o `none`. Tras cambiar un rol, el usuario debe cerrar sesión y volver a iniciarla para recibir el claim actualizado.
 
 4. Desde la raíz, selecciona el proyecto correcto en Firebase CLI y publica reglas y funciones:
 
@@ -33,7 +33,7 @@ No pegues contraseñas, tokens ni una clave privada de cuenta de servicio en el 
    firebase deploy --only database,functions
    ```
 
-   Las reglas nuevas niegan por defecto el acceso a `/home` salvo las rutas asignadas a `owner` y `device`. La agenda y los tokens push siguen aislados por UID. No publiques estas reglas antes de asignar el claim `owner` a la cuenta que usa la web: quedará autenticada, pero sin acceso al panel.
+   Las reglas nuevas niegan por defecto el acceso a `/home` salvo las rutas asignadas a `admin` y `device`. La agenda y los tokens push siguen aislados por UID. No publiques estas reglas antes de asignar el claim `admin` a la cuenta que usa la web: quedará autenticada, pero sin acceso al panel.
 5. Confirma el dominio de Vercel en Firebase Authentication → Settings → Authorized domains.
 
 La Function `scheduleEventReminders` crea tareas indexadas al guardar eventos. `calendarPush` despacha vencimientos y reintenta fallos con una espera temporal. Las tareas vencidas/cambiadas se verifican contra el evento actual antes de notificar.
@@ -52,10 +52,10 @@ La Function `scheduleEventReminders` crea tareas indexadas al guardar eventos. `
 
 ## Configuración web
 
-La configuración Web Firebase en `html/js/firebase-config.js` contiene identificadores públicos de cliente. La API key web no sustituye reglas de Database ni debe considerarse autorización. La autorización se aplica con Firebase Auth y el claim personalizado `role=owner`.
+La configuración Web Firebase en `html/js/firebase-config.js` contiene identificadores públicos de cliente. La API key web no sustituye reglas de Database ni debe considerarse autorización. La autorización se aplica con Firebase Auth y el claim personalizado `role=admin`.
 
 ## Operación
 
 - Verifica cada cambio de reglas en Firebase Emulator Suite o en un proyecto de prueba antes de producción.
-- Prueba con cuatro casos: anónimo, usuario autenticado sin rol, `owner` y `device`. El usuario común no debe poder leer estado doméstico ni escribir comandos; el propietario puede emitir comandos; el dispositivo puede actualizar estado y consumir/limpiar únicamente las órdenes permitidas.
+   - Prueba con cuatro casos: anónimo, usuario autenticado sin rol, `admin` y `device`. El usuario común no debe poder leer estado doméstico ni escribir comandos; el administrador puede emitir comandos; el dispositivo puede actualizar estado y consumir/limpiar únicamente las órdenes permitidas.
 - No uses credenciales del usuario propietario en el firmware. El ESP32 debe conservar su usuario dedicado.

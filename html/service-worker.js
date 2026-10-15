@@ -3,7 +3,7 @@
 // Firebase Messaging se ejecuta dentro del mismo worker que controla la PWA.
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js");
-importScripts("/js/firebase-runtime-config.js?v=73");
+importScripts("/js/firebase-runtime-config.js?v=74");
 try {
   var messaging = null;
   if (self.SMART_PANEL_FIREBASE_RUNTIME_CONFIG && self.SMART_PANEL_FIREBASE_RUNTIME_CONFIG.apiKey) {
@@ -29,7 +29,8 @@ try {
 self.addEventListener("notificationclick", function (event) {
   var notificationUrl = event.notification.data && event.notification.data.url || "/#inicio";
   event.notification.close();
-  var target = new URL(notificationUrl, self.location.origin).href;
+  var parsedTarget = new URL(notificationUrl, self.location.origin);
+  var target = parsedTarget.origin === self.location.origin ? parsedTarget.href : self.location.origin + "/";
   event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (clients) {
     for (var i = 0; i < clients.length; i++) {
       if (new URL(clients[i].url).origin === self.location.origin && "focus" in clients[i]) {
@@ -44,18 +45,18 @@ self.addEventListener("notificationclick", function (event) {
 });
 
 var CACHE_PREFIX = "smart-panel-shell-";
-var CACHE_NAME = CACHE_PREFIX + "73";
+var CACHE_NAME = CACHE_PREFIX + "74";
 var STATIC_FILES = [
   "/",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
-  "/css/styles.css?v=73",
+  "/css/styles.css?v=74",
   "/js/bootstrap.js?v=70",
-  "/js/firebase-runtime-config.js?v=73",
-  "/js/firebase-config.js?v=73",
-  "/js/app.js?v=73"
+  "/js/firebase-runtime-config.js?v=74",
+  "/js/firebase-config.js?v=74",
+  "/js/app.js?v=74"
 ];
 
 self.addEventListener("install", function (event) {

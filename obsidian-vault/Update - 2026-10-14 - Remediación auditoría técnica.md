@@ -40,9 +40,9 @@ Estas comprobaciones estáticas pasan. No equivalen a pruebas de reglas en Fireb
 ## Pendientes necesarios antes de producción
 
 1. Rotar la clave Wi-Fi y la contraseña Firebase que aparecieron en una versión anterior. El historial Git conserva esos valores; el cambio de archivos actuales no los revoca. La reescritura del historial y la coordinación con clones requieren una decisión operativa del propietario.
-2. Crear/actualizar roles `owner` y `device`, renovar las sesiones web y desplegar reglas y Functions en el proyecto correcto. Confirmar primero la identidad del usuario propietario para evitar bloquear acceso.
+2. Crear/actualizar roles `admin` y `device`, renovar las sesiones web y desplegar reglas y Functions en el proyecto correcto. Confirmar primero la identidad del usuario propietario para evitar bloquear acceso.
 3. Crear `config.local.h` con secretos rotados y preparar credenciales de servicio fuera del repositorio. El firmware no compila sin este archivo intencionalmente.
-4. Validar reglas con Firebase Emulator o proyecto de staging; desplegar y comprobar cuentas owner, device y usuario sin rol.
+4. Validar reglas con Firebase Emulator o proyecto de staging; desplegar y comprobar cuentas admin, device y usuario sin rol.
 5. Conectar ESP32, validar cada salida con carga segura y comprobar relé, respuestas LAN/IR y recuperación de conectividad.
 
 ## Deuda que queda abierta

@@ -1,8 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "73";
-  var OWNER_EMAIL = "pedrorouge2022@gmail.com";
+  var APP_BUILD_VERSION = "74";
   var STORAGE_KEY = "smart-panel-state-v3";
   var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
@@ -207,18 +206,27 @@
         auth.onAuthStateChanged(function (user) {
           if (user) {
             console.log("[Firebase Auth] Usuario autenticado:", user.email || user.uid);
-            if (!user.email || user.email.toLowerCase() !== OWNER_EMAIL) {
-              apiAuthenticated = false;
-              detachFirebaseListeners();
+            apiAuthenticated = false;
+            detachFirebaseListeners();
+            showAuthGate("Verificando permisos de administrador...");
+            user.getIdTokenResult(true).then(function (tokenResult) {
+              if (!auth.currentUser || auth.currentUser.uid !== user.uid) { return; }
+              if (tokenResult.claims.role !== "admin") {
+                return auth.signOut().then(function () {
+                  showAuthGate("Esta cuenta no tiene permisos de administrador.");
+                  updateAccountStatus(null);
+                });
+              }
+              acceptSession((user.email || user.uid).split("@")[0]);
+              updateAccountStatus(user);
+              probeFirebaseHttps(user);
+            }).catch(function (error) {
+              console.error("[Firebase Auth] No se pudieron validar los permisos:", error && error.code);
               return auth.signOut().then(function () {
-                showAuthGate("Esta cuenta no esta habilitada para Smart Panel.");
+                showAuthGate("No se pudieron validar los permisos. Inicia sesión nuevamente.");
                 updateAccountStatus(null);
               });
-            }
-            var name = user.email.split("@")[0];
-            acceptSession(name);
-            updateAccountStatus(user);
-            probeFirebaseHttps(user);
+            });
           } else {
             console.log("[Firebase Auth] Sesión no iniciada (acceso restringido por reglas).");
             apiAuthenticated = false;
@@ -377,7 +385,7 @@
     function onEventsError(error) {
       console.error("[Agenda] Error leyendo los eventos del usuario:", error);
       if (!auth || !auth.currentUser || auth.currentUser.uid !== user.uid) { return; }
-      if (!usingLegacyFallback && user.email === "pedrorouge2022@gmail.com" && error.code === "PERMISSION_DENIED") {
+      if (!usingLegacyFallback && apiAuthenticated && error.code === "PERMISSION_DENIED") {
         usingLegacyFallback = true;
         activeEventsRef.off();
         activeEventsRef = db.ref("home/events");
@@ -455,7 +463,7 @@
 
   // La ruta antigua solo era accesible por su propietario histórico.
   function migrateLegacyEvents(user) {
-    if (!user || user.email !== "pedrorouge2022@gmail.com") { return Promise.resolve(); }
+    if (!user || !apiAuthenticated) { return Promise.resolve(); }
     var destination = db.ref("users/" + user.uid + "/events");
     return Promise.all([destination.once("value"), db.ref("home/events").once("value")]).then(function (snapshots) {
       if (snapshots[0].exists() || !snapshots[1].exists()) { return; }
@@ -1137,12 +1145,6 @@
       }
 
       var email = userInput;
-      if (email !== OWNER_EMAIL) {
-        errorEl.textContent = "Esta cuenta no esta habilitada para Smart Panel.";
-        errorEl.hidden = false;
-        return;
-      }
-
       submit.disabled = true;
       submit.textContent = "Verificando...";
       errorEl.hidden = true;
@@ -1158,7 +1160,7 @@
       // Intentar iniciar sesión
       auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
         .then(function () { return auth.signInWithEmailAndPassword(email, pass); })
-        .then(function (userCredential) {
+        .then(function () {
         submit.disabled = false;
         submit.textContent = "Iniciar sesión";
       }).catch(function (error) {
@@ -1386,7 +1388,7 @@
     return user.getIdToken().then(function (idToken) {
       var baseUrl = config.databaseURL.replace(/\/+$/, "");
       var path = "/users/" + encodeURIComponent(user.uid) + "/events/" + encodeURIComponent(eventId) + ".json";
-      // Firebase Auth ID tokens authenticate RTDB REST requests via auth=.
+      // Firebase RTDB's REST endpoint accepts user ID tokens in the auth query parameter.
       return fetch(baseUrl + path + "?auth=" + encodeURIComponent(idToken), {
         method: "PUT",
         cache: "no-store",
@@ -3304,8 +3306,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v73";
-    byId("script-build-version").textContent = "JS v73";
+    byId("frontend-version").textContent = "HTML v74";
+    byId("script-build-version").textContent = "JS v74";
 
     initializeConfirmDialog();
     initializeTabs();
