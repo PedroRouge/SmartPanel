@@ -16,7 +16,7 @@ concurrency:
 jobs:
   frontend-and-functions:
     name: Frontend, Firebase y contratos
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Descargar código
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,7 +70,7 @@ jobs:
 
   python-api:
     name: API Python
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Descargar código
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -88,7 +88,7 @@ jobs:
 
   esp32-build:
     name: Compilar firmware ESP32-S3
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Descargar código
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -111,7 +111,7 @@ jobs:
     name: Publicar sitio en Vercel
     needs: [frontend-and-functions, python-api, esp32-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOYMENTS_ENABLED == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: production
     steps:
@@ -148,7 +148,7 @@ jobs:
     name: Publicar reglas Firebase
     needs: [frontend-and-functions, python-api, esp32-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.FIREBASE_DEPLOYMENTS_ENABLED == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: firebase-production
     steps:

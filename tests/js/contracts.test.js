@@ -69,6 +69,12 @@ test("el canvas de arquitectura tiene IDs y enlaces internos válidos", () => {
   }
 });
 
+test("CI fija el sistema operativo del runner para evitar cambios automáticos", () => {
+  const workflow = read(".github/workflows/ci-cd.yml");
+  assert.doesNotMatch(workflow, /runs-on:\s*ubuntu-latest/);
+  assert.match(workflow, /runs-on:\s*ubuntu-24\.04/);
+});
+
 test("las reglas Firebase no habilitan escritura general a cualquier usuario", () => {
   const rules = JSON.parse(read("firebase_rules.json")).rules;
   assert.equal(rules.home.state[".write"], undefined);
