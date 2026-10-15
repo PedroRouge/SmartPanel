@@ -17,4 +17,4 @@ La hoja `html/css/styles.css` conserva estilos de componentes y compatibilidad e
 
 Se priorizan controles táctiles de al menos 44 px donde corresponde, áreas seguras del dispositivo, foco visible y respeto por `prefers-reduced-motion`. La hoja Swiss desactiva sombras y filtros de desenfoque heredados, incluidos los avisos y la navegación móvil.
 
-Ver [[Temas-CSS]], [[Navegación y dashboard responsive]] y [[Estilos de la interfaz]]. La entrada general está en [[00-Smart-Panel-Architecture]].
+Ver [[Temas-CSS]], [[Navegación y dashboard responsive]], [[Performance-iPads]] y [[Estilos de la interfaz]]. La entrada general está en [[00-Smart-Panel-Architecture]].

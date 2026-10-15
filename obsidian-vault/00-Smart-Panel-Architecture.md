@@ -29,6 +29,7 @@ Smart Panel combina una interfaz web instalable, servicios Firebase y un gateway
 ## Decisiones y mapa
 
 - [[ADR-001-Superficies-sin-desenfoque]] registra la decisión de priorizar superficies planas para dispositivos modestos.
+- [[Performance-iPads]] registra las decisiones de rendimiento móvil y el alcance de sus pruebas.
 - [[Smart-Panel-Architecture.canvas]] representa el flujo entre interfaz, Firebase y gateway.
 - [[Smart-Panel-Modules.base]] reúne las notas de arquitectura y decisiones.
 

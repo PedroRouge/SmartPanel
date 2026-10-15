@@ -11,14 +11,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Smart Panel">
-  <meta name="smart-panel-version" content="79">
+  <meta name="smart-panel-version" content="80">
   <title>Smart Panel</title>
-  <script src="js/theme-init.js?v=79"></script>
+  <script src="js/theme-init.js?v=80"></script>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="css/styles.css?v=79">
-  <link rel="stylesheet" href="css/swiss-ui.css?v=79">
+  <link rel="stylesheet" href="css/styles.css?v=80">
+  <link rel="stylesheet" href="css/swiss-ui.css?v=80">
   <!-- Firebase SDK v10 — defer preserva el orden de carga y no bloquea el parser HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
@@ -27,16 +27,17 @@
   <script src="js/bootstrap.js?v=71" defer></script>
   <script src="js/firebase-runtime-config.js?v=75" defer></script>
   <script src="js/firebase-config.js?v=75" defer></script>
-  <script src="js/app.js?v=79" defer></script>
+  <script src="js/app.js?v=80" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Saltar al contenido principal</a>
   <div class="app-shell">
     <header class="topbar">
       <a class="brand" href="#inicio" aria-label="Smart Panel, inicio">
         <span class="brand-mark" aria-hidden="true">S</span>
         <span>Smart Panel</span>
       </a>
-      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v79</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
+      <div class="version-reader" aria-live="polite"><span id="frontend-version">HTML v80</span><span class="version-divider">·</span><span id="script-build-version">JS sin confirmar</span><span class="version-divider">·</span><span class="status-dot is-checking" id="backend-health-dot"></span><span id="backend-version">API comprobando...</span></div>
       <div class="home-quick-status" aria-label="Estado actual de la casa">
         <span class="quick-status-item" title="Conexi&#243;n con el ESP32"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h4l2 3 4-6 2 3h4"/><path d="M7 7h.01M17 17h.01"/></svg><i class="status-dot is-checking" id="quick-esp-dot"></i><span id="quick-esp">ESP32</span></span>
         <span class="quick-status-item" title="Órdenes ON reportadas por el gateway; no es lectura de sensores"><svg class="quick-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M8.2 14.5a7 7 0 1 1 7.6 0c-.9.6-1.3 1.4-1.5 2.5h-4.6c-.2-1.1-.6-1.9-1.5-2.5Z"/></svg><strong id="quick-lights">--</strong></span>
@@ -70,7 +71,7 @@
       <button class="tab-button" type="button" role="tab" id="tab-estado" aria-controls="panel-estado" aria-selected="false" data-tab="estado" tabindex="-1"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg><span class="tab-label">Estado</span></button>
     </nav>
 
-    <main class="main-content">
+    <main class="main-content" id="main-content" tabindex="-1">
       <p class="command-feedback" id="command-feedback" aria-live="polite" hidden></p>
       <section class="view is-visible" id="panel-inicio" role="tabpanel" aria-labelledby="tab-inicio" data-panel="inicio">
         <div class="welcome-row">
@@ -307,7 +308,7 @@
             <span>Contraseña</span>
             <div class="password-wrapper">
               <input id="auth-password" name="password" type="password" autocomplete="current-password" required>
-              <button class="password-toggle-btn" id="auth-password-toggle" type="button" aria-label="Mostrar u ocultar contraseña" title="Mostrar u ocultar contraseña" tabindex="-1">
+              <button class="password-toggle-btn" id="auth-password-toggle" type="button" aria-label="Mostrar u ocultar contraseña" title="Mostrar u ocultar contraseña">
                 <span id="password-toggle-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z'/><circle cx='12' cy='12' r='3'/></svg></span>
               </button>
             </div>

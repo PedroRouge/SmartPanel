@@ -8,7 +8,8 @@
     { "id": "a101000000000006", "type": "file", "x": 1410, "y": 100, "width": 360, "height": 190, "file": "Reglas de Realtime Database.md" },
     { "id": "a101000000000007", "type": "file", "x": 1880, "y": 100, "width": 380, "height": 220, "file": "Firmware ESP32 Gateway.md" },
     { "id": "a101000000000008", "type": "file", "x": 500, "y": 430, "width": 340, "height": 190, "file": "PWA y Service Worker.md" },
-    { "id": "a101000000000009", "type": "text", "x": 1410, "y": 410, "width": 360, "height": 190, "text": "## Datos de interfaz\nFirebase Authentication protege el panel. Realtime Database distribuye órdenes y estado según las reglas de acceso.\n\nLa configuración local del gateway se guarda fuera del repositorio." }
+    { "id": "a101000000000009", "type": "text", "x": 1410, "y": 410, "width": 360, "height": 190, "text": "## Datos de interfaz\nFirebase Authentication protege el panel. Realtime Database distribuye órdenes y estado según las reglas de acceso.\n\nLa configuración local del gateway se guarda fuera del repositorio." },
+    { "id": "a10100000000000a", "type": "file", "x": 470, "y": 700, "width": 360, "height": 200, "file": "Performance-iPads.md" }
   ],
   "edges": [
     { "id": "b201000000000001", "fromNode": "a101000000000001", "toNode": "a101000000000002", "fromSide": "right", "toSide": "left", "label": "documenta" },
@@ -18,6 +19,8 @@
     { "id": "b201000000000005", "fromNode": "a101000000000002", "toNode": "a101000000000008", "fromSide": "bottom", "toSide": "top", "label": "instala shell" },
     { "id": "b201000000000006", "fromNode": "a101000000000003", "toNode": "a101000000000006", "fromSide": "right", "toSide": "left", "label": "lee y escribe con permisos" },
     { "id": "b201000000000007", "fromNode": "a101000000000006", "toNode": "a101000000000007", "fromSide": "right", "toSide": "left", "label": "autoriza dispositivo" },
-    { "id": "b201000000000008", "fromNode": "a101000000000009", "toNode": "a101000000000006", "fromSide": "top", "toSide": "bottom", "label": "define acceso" }
+    { "id": "b201000000000008", "fromNode": "a101000000000009", "toNode": "a101000000000006", "fromSide": "top", "toSide": "bottom", "label": "define acceso" },
+    { "id": "b201000000000009", "fromNode": "a101000000000001", "toNode": "a10100000000000a", "fromSide": "bottom", "toSide": "top", "label": "documenta pruebas móviles" },
+    { "id": "b20100000000000a", "fromNode": "a10100000000000a", "toNode": "a101000000000004", "fromSide": "right", "toSide": "bottom", "label": "guía UI ligera" }
   ]
 }
