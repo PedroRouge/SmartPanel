@@ -105,7 +105,7 @@ jobs:
         run: cp esp32_gateway/include/config.example.h esp32_gateway/include/config.local.h
 
       - name: Compilar para ESP32-S3
-        run: pio run -d esp32_gateway -e esp32-s3-devkitc-1
+        run: pio run -d esp32_gateway -e esp32-s3-devkitc-1-n16r8
 
   deploy:
     name: Publicar sitio en Vercel

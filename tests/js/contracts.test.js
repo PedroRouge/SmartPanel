@@ -64,6 +64,12 @@ test("el firmware conserva validaciones explícitas para órdenes TV y reloj", (
 
 test("la plataforma y bibliotecas PlatformIO están fijadas", () => {
   const platformio = read("esp32_gateway/platformio.ini");
+  const board = JSON.parse(read("esp32_gateway/boards/esp32-s3-devkitc-1-n16r8.json"));
+  assert.match(platformio, /default_envs = esp32-s3-devkitc-1-n16r8/);
+  assert.match(platformio, /board_build\.arduino\.memory_type = qio_opi/);
+  assert.match(platformio, /-D BOARD_HAS_PSRAM/);
+  assert.equal(board.upload.flash_size, "16MB");
+  assert.match(board.name, /N16R8.*8 MB OPI PSRAM/);
   assert.match(platformio, /^platform = espressif32@\d+\.\d+\.\d+$/m);
   assert.match(platformio, /Firebase-ESP-Client\.git#[0-9a-f]{40}/);
   assert.match(platformio, /ArduinoJson @ \d+\.\d+\.\d+/);

@@ -5,7 +5,7 @@ import sys
 from servidor import load_user_records, normalize_username, save_user_records, set_user_credentials
 
 
-def set_credentials(username_argument, password_argument=None, from_stdin=False):
+def set_credentials(username_argument, from_stdin=False):
     username = username_argument or input("Usuario: ").strip()
     try:
         username = normalize_username(username)
@@ -13,9 +13,7 @@ def set_credentials(username_argument, password_argument=None, from_stdin=False)
         print("Error: {}".format(error), file=sys.stderr)
         return 2
 
-    if password_argument is not None:
-        password = password_argument
-    elif from_stdin:
+    if from_stdin:
         password = sys.stdin.readline().rstrip("\r\n")
     else:
         password = getpass("Nueva contraseña (8-128 caracteres): ")
@@ -63,7 +61,6 @@ def main():
 
     set_parser = subparsers.add_parser("set", help="Crear o cambiar usuario y contraseña")
     set_parser.add_argument("username", nargs="?", help="Nombre de usuario (opcional; si se omite, se solicita interactivamente)")
-    set_parser.add_argument("--password", "-p", help="Contraseña (opcional; si se omite, se solicita de forma segura)")
     set_parser.add_argument("--stdin", action="store_true", help="Leer la contraseña desde la entrada estándar")
 
     remove_parser = subparsers.add_parser("remove", help="Eliminar una cuenta conservando al menos una")
@@ -74,7 +71,7 @@ def main():
     args = parser.parse_args()
 
     if args.action == "set":
-        return set_credentials(args.username, args.password, args.stdin)
+        return set_credentials(args.username, args.stdin)
     if args.action == "remove":
         return remove_user(args.username)
     try:

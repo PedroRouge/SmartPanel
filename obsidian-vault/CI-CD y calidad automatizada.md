@@ -74,7 +74,7 @@ python -m unittest discover -s legacy_backup/tests -v
 npm ci --prefix functions
 npm audit --prefix functions --omit=dev --audit-level=high
 cp esp32_gateway/include/config.example.h esp32_gateway/include/config.local.h
-pio run -d esp32_gateway -e esp32-s3-devkitc-1
+pio run -d esp32_gateway -e esp32-s3-devkitc-1-n16r8
 ```
 
 Se necesita Java 21 para Firebase Emulator. En PowerShell reemplaza `cp` por `Copy-Item`. El header de credenciales local está ignorado por Git.

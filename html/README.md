@@ -38,10 +38,11 @@ El sistema utiliza usuarios con contraseñas hasheadas mediante `scrypt`, almace
   ```bash
   python manage_users.py set [usuario]
   ```
-- **Crear usuarios de forma no interactiva (o en scripts/Docker)**:
+- **Crear usuarios desde un prompt que no muestra la contraseña**:
   ```bash
-  python manage_users.py set admin --password "tu_contraseña_segura"
+  python manage_users.py set admin
   ```
+- Para automatizaciones, `--stdin` permite leerla desde un gestor de secretos sin incluirla en los argumentos del proceso.
 - **Listar o eliminar usuarios**:
   ```bash
   python manage_users.py list
@@ -70,3 +71,5 @@ Para activar el esquema autenticado, publica primero el frontend actualizado y r
 Las luces, portón y pileta siguen usando el estado local del navegador; falta un contrato de endpoints para controlarlos desde el puente.
 
 Las cámaras guardan nombre y URL en `localStorage`, pero nunca usuario ni contraseña. Las credenciales solo viven en memoria hasta recargar. Luces, motor de pileta y portón conservan su simulación local.
+
+La API Python heredada bloquea CORS por defecto. Si una instalación todavía la consume desde otro origen, configura `SMART_PANEL_CORS_ORIGINS` con una lista separada por comas de orígenes exactos (por ejemplo, `https://panel.example.com`); no uses `*`.

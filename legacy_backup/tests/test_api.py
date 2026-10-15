@@ -71,12 +71,36 @@ class ApiEndpointTests(unittest.TestCase):
             self.assertEqual(response.status, 200)
             self.assertTrue(payload["required"])
             self.assertFalse(payload["authenticated"])
+            self.assertIsNone(response.headers.get("Access-Control-Allow-Origin"))
+
+    def test_unconfigured_origin_cannot_preflight_cross_origin_requests(self):
+        request = Request(
+            self.base_url + "/api/events",
+            headers={"Origin": "https://attacker.example"},
+            method="OPTIONS",
+        )
+        with self.assertRaises(HTTPError) as result:
+            urlopen(request, timeout=3)
+        self.assertEqual(result.exception.code, 403)
 
     def test_private_events_endpoint_rejects_anonymous_requests(self):
         request = Request(self.base_url + "/api/events")
         with self.assertRaises(HTTPError) as result:
             urlopen(request, timeout=3)
         self.assertEqual(result.exception.code, 401)
+
+    def test_login_rate_limit_ignores_spoofed_proxy_ip_header(self):
+        request = Request(
+            self.base_url + "/api/auth/login",
+            data=json.dumps({"username": "not-a-user", "password": "wrong-password"}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.99"},
+            method="POST",
+        )
+        with self.assertRaises(HTTPError) as result:
+            urlopen(request, timeout=3)
+        self.assertEqual(result.exception.code, 401)
+        self.assertIn("127.0.0.1", servidor._login_failures)
+        self.assertNotIn("203.0.113.99", servidor._login_failures)
 
 
 if __name__ == "__main__":
