@@ -17,11 +17,17 @@ test("sin sesión, el formulario de autenticación está visible", async ({ page
   await expect(page.locator("#auth-error")).toBeHidden();
 });
 
+test("el acceso por teclado incluye mostrar contraseña y saltar al contenido", async ({ page }) => {
+  await expect(page.locator("#auth-password-toggle")).not.toHaveAttribute("tabindex", "-1");
+  await expect(page.locator(".skip-link")).toHaveAttribute("href", "#main-content");
+  await expect(page.locator("#main-content")).toHaveAttribute("tabindex", "-1");
+});
+
 test("abre el dashboard y conserva una única pestaña seleccionada", async ({ page }) => {
   await expect(page).toHaveTitle("Smart Panel");
   await expect(page.locator('[data-panel="inicio"]')).toBeVisible();
   await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
-  await expect(page.locator("#frontend-version")).toHaveText("HTML v79");
+  await expect(page.locator("#frontend-version")).toHaveText("HTML v80");
 });
 
 test("respeta el tema del sistema y guarda el tema elegido", async ({ page }) => {
@@ -59,7 +65,9 @@ test("respeta el tema del sistema y guarda el tema elegido", async ({ page }) =>
 test("el encabezado y el control de tema caben en celular, tablet y escritorio", async ({ page }) => {
   for (const viewport of [
     { width: 320, height: 640 },
+    { width: 390, height: 844 },
     { width: 768, height: 1024 },
+    { width: 1024, height: 768 },
     { width: 1440, height: 900 },
   ]) {
     await page.setViewportSize(viewport);
@@ -69,6 +77,20 @@ test("el encabezado y el control de tema caben en celular, tablet y escritorio",
     );
     expect(hasHorizontalOverflow, `desborde horizontal a ${viewport.width}px`).toBe(false);
   }
+});
+
+test("las pestañas móviles conservan objetivos táctiles y se pueden desplazar", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  const nav = page.locator(".tab-bar");
+  const firstTab = page.locator('.tab-button[data-tab="inicio"]');
+  const lastTab = page.locator('.tab-button[data-tab="estado"]');
+  await expect(firstTab).toBeVisible();
+  const firstBox = await firstTab.boundingBox();
+  expect(firstBox.width).toBeGreaterThanOrEqual(44);
+  const scrollable = await nav.evaluate((element) => element.scrollWidth > element.clientWidth);
+  expect(scrollable).toBe(true);
+  await lastTab.scrollIntoViewIfNeeded();
+  await expect(lastTab).toBeInViewport();
 });
 
 test("la UI evita filtros de desenfoque en superficies pesadas", async ({ page }) => {
