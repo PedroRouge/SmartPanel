@@ -92,9 +92,9 @@ void setup() {
     Serial.begin(115200);
     delay(800);
 
-    // ESP32-S3-DevKitC-1 v1.1 onboard addressable RGB LED (GPIO38).
+    // Use the RGB pin selected by the active ESP32-S3 board variant (GPIO48 here).
     // Keep the fixed 3.3 V power indicator untouched.
-    neopixelWrite(38, 0, 0, 64);
+    neopixelWrite(PIN_NEOPIXEL, 0, 0, 64);
 
     Serial.println("\n==================================================");
     Serial.println("  SMART PANEL - GATEWAY IOT LOCAL (ESP32-S3)     ");
