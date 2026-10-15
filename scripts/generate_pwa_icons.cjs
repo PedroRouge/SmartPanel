@@ -4,8 +4,8 @@ const { chromium } = require("playwright");
 
 const iconDirectory = path.resolve(__dirname, "../html/icons");
 
-async function renderPhoto(browser, source, outputName, size) {
-  const dataUri = `data:image/jpeg;base64,${source.toString("base64")}`;
+async function renderMark(browser, source, outputName, size) {
+  const dataUri = `data:image/svg+xml;base64,${source.toString("base64")}`;
   const page = await browser.newPage({ viewport: { width: size, height: size }, deviceScaleFactor: 1 });
   await page.setContent(`<!doctype html><html><head><style>html,body{width:${size}px;height:${size}px;margin:0;overflow:hidden}img{display:block;width:100%;height:100%;object-fit:cover}</style></head><body><img src="${dataUri}" alt=""></body></html>`);
   await page.locator("img").screenshot({ path: path.join(iconDirectory, outputName), animations: "disabled" });
@@ -36,17 +36,17 @@ function makeIco(entries) {
 }
 
 async function main() {
-  const source = fs.readFileSync(path.join(iconDirectory, "app-icon-source.jpg"));
+  const source = fs.readFileSync(path.join(iconDirectory, "smart-panel-mark.svg"));
   const browser = await chromium.launch({ headless: true });
   try {
-    await renderPhoto(browser, source, "icon-192.png", 192);
-    await renderPhoto(browser, source, "icon-512.png", 512);
-    await renderPhoto(browser, source, "apple-touch-icon.png", 180);
-    await renderPhoto(browser, source, "icon-512-dark.png", 512);
-    await renderPhoto(browser, source, "icon-maskable.png", 512);
-    await renderPhoto(browser, source, "favicon-16.png", 16);
-    await renderPhoto(browser, source, "favicon-32.png", 32);
-    await renderPhoto(browser, source, "favicon-48.png", 48);
+    await renderMark(browser, source, "icon-192.png", 192);
+    await renderMark(browser, source, "icon-512.png", 512);
+    await renderMark(browser, source, "apple-touch-icon.png", 180);
+    await renderMark(browser, source, "icon-512-dark.png", 512);
+    await renderMark(browser, source, "icon-maskable.png", 512);
+    await renderMark(browser, source, "favicon-16.png", 16);
+    await renderMark(browser, source, "favicon-32.png", 32);
+    await renderMark(browser, source, "favicon-48.png", 48);
     fs.writeFileSync(path.join(iconDirectory, "favicon.ico"), makeIco([
       { size: 16, file: "favicon-16.png" },
       { size: 32, file: "favicon-32.png" },

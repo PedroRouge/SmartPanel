@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 176" role="img" aria-labelledby="title">
+  <title id="title">Smart Panel</title>
+  <defs>
+    <linearGradient id="panel" x1="12" y1="8" x2="164" y2="168" gradientUnits="userSpaceOnUse"><stop stop-color="#17243A"/><stop offset="1" stop-color="#0A0E1A"/></linearGradient>
+    <linearGradient id="signal" x1="43" y1="41" x2="132" y2="145" gradientUnits="userSpaceOnUse"><stop stop-color="#78B8FF"/><stop offset="1" stop-color="#3D8BFF"/></linearGradient>
+  </defs>
+  <g transform="translate(4 4) scale(.328125)">
+    <rect x="12" y="12" width="488" height="488" rx="138" fill="url(#panel)"/>
+    <path d="M102 246 256 119l154 127v151a24 24 0 0 1-24 24H126a24 24 0 0 1-24-24V246Z" fill="none" stroke="url(#signal)" stroke-width="27" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M183 421v-96a73 73 0 0 1 146 0v96" fill="none" stroke="#EAF3FF" stroke-width="25" stroke-linecap="round"/>
+    <path d="M256 278v48" stroke="#78B8FF" stroke-width="25" stroke-linecap="round"/><circle cx="256" cy="252" r="20" fill="#78B8FF"/>
+  </g>
+  <text x="190" y="112" fill="#172033" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="62" font-weight="700" letter-spacing="-2.5">Smart Panel</text>
+</svg>
