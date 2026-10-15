@@ -3,7 +3,7 @@
 // Firebase Messaging se ejecuta dentro del mismo worker que controla la PWA.
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js");
-importScripts("/js/firebase-runtime-config.js?v=71");
+importScripts("/js/firebase-runtime-config.js?v=72");
 try {
   var messaging = null;
   if (self.SMART_PANEL_FIREBASE_RUNTIME_CONFIG && self.SMART_PANEL_FIREBASE_RUNTIME_CONFIG.apiKey) {
@@ -44,18 +44,18 @@ self.addEventListener("notificationclick", function (event) {
 });
 
 var CACHE_PREFIX = "smart-panel-shell-";
-var CACHE_NAME = CACHE_PREFIX + "71";
+var CACHE_NAME = CACHE_PREFIX + "72";
 var STATIC_FILES = [
   "/",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
-  "/css/styles.css?v=71",
+  "/css/styles.css?v=72",
   "/js/bootstrap.js?v=70",
-  "/js/firebase-runtime-config.js?v=71",
-  "/js/firebase-config.js?v=71",
-  "/js/app.js?v=71"
+  "/js/firebase-runtime-config.js?v=72",
+  "/js/firebase-config.js?v=72",
+  "/js/app.js?v=72"
 ];
 
 self.addEventListener("install", function (event) {

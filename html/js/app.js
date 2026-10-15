@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "71";
+  var APP_BUILD_VERSION = "72";
   var STORAGE_KEY = "smart-panel-state-v3";
   var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
@@ -1100,12 +1100,6 @@
     var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
     var isUnconfigured = !config.apiKey || config.apiKey.indexOf("TU_API_KEY") !== -1;
     var errorEl = byId("auth-error");
-    [byId("auth-username"), byId("auth-password")].forEach(function (input) {
-      if (!input) { return; }
-      input.value = "";
-      input.addEventListener("focus", function () { input.removeAttribute("readonly"); }, { once: true });
-    });
-
     if (isUnconfigured && errorEl) {
       errorEl.innerHTML = "⚠️ Falta vincular tu proyecto de Firebase.<br><button type='button' class='firebase-setup-link' id='quick-firebase-setup'>Toca aquí para configurar Firebase</button>";
       errorEl.hidden = false;
@@ -1166,7 +1160,9 @@
       }
 
       // Intentar iniciar sesión
-      auth.signInWithEmailAndPassword(email, pass).then(function (userCredential) {
+      auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+        .then(function () { return auth.signInWithEmailAndPassword(email, pass); })
+        .then(function (userCredential) {
         submit.disabled = false;
         submit.textContent = "Iniciar sesión";
       }).catch(function (error) {
@@ -3312,8 +3308,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v71";
-    byId("script-build-version").textContent = "JS v70";
+    byId("frontend-version").textContent = "HTML v72";
+    byId("script-build-version").textContent = "JS v72";
 
     initializeConfirmDialog();
     initializeTabs();

@@ -80,3 +80,13 @@ test("la configuración Firebase se inyecta solo durante el despliegue", () => {
   assert.match(generator, /process\.env\.FIREBASE_WEB_VAPID_KEY/);
   assert.doesNotMatch(worker, /AIza[0-9A-Za-z_-]{30,}/);
 });
+
+test("login permite autocompletar y persiste la sesion localmente", () => {
+  const html = read("html/index.html");
+  const app = read("html/js/app.js");
+  assert.match(html, /id="auth-form" autocomplete="on"/);
+  assert.match(html, /id="auth-username"[^>]*autocomplete="username"/);
+  assert.match(html, /id="auth-password"[^>]*autocomplete="current-password"/);
+  assert.match(app, /auth\.setPersistence\(firebase\.auth\.Auth\.Persistence\.LOCAL\)/);
+  assert.doesNotMatch(app, /input\.value\s*=\s*""/);
+});
