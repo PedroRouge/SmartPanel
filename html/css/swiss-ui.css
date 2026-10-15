@@ -105,11 +105,12 @@ textarea {
 .brand-mark,
 .sidebar-brand .brand-mark,
 .auth-mark {
-  border: 1px solid var(--accent);
+  border: 0 !important;
   border-radius: 0 !important;
-  background: var(--accent) !important;
-  color: var(--on-accent) !important;
+  background: transparent !important;
+  color: inherit !important;
 }
+.brand-mark-icon { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 .version-reader,
 .quick-status-item,

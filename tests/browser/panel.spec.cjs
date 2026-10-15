@@ -27,7 +27,7 @@ test("abre el dashboard y conserva una única pestaña seleccionada", async ({ p
   await expect(page).toHaveTitle("Smart Panel");
   await expect(page.locator('[data-panel="inicio"]')).toBeVisible();
   await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
-  await expect(page.locator("#frontend-version")).toHaveText("HTML v81");
+  await expect(page.locator("#frontend-version")).toHaveText("HTML v82");
 });
 
 test("respeta el tema del sistema y guarda el tema elegido", async ({ page }) => {
@@ -141,7 +141,7 @@ test("un iPad en horizontal conserva áreas táctiles de 44px", async ({ browser
 });
 
 test("el manifest y los fallbacks PWA sirven todos los iconos declarados", async ({ page }) => {
-  const manifestResponse = await page.request.get("/manifest.webmanifest");
+  const manifestResponse = await page.request.get("/manifest.json");
   expect(manifestResponse.ok()).toBe(true);
   const manifest = await manifestResponse.json();
   for (const icon of manifest.icons) {
@@ -149,7 +149,7 @@ test("el manifest y los fallbacks PWA sirven todos los iconos declarados", async
     expect(response.ok(), icon.src).toBe(true);
     expect(response.headers()["content-type"]).toContain("image/png");
   }
-  for (const path of ["/icons/favicon.ico", "/icons/favicon-32.png", "/icons/apple-touch-icon.png", "/icons/app-icon-light.svg", "/icons/app-icon-dark.svg"]) {
+  for (const path of ["/icons/favicon.ico", "/icons/favicon-32.png", "/icons/apple-touch-icon.png", "/icons/icon-512.png"]) {
     const response = await page.request.get(path);
     expect(response.ok(), path).toBe(true);
   }
