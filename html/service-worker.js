@@ -45,10 +45,10 @@ self.addEventListener("notificationclick", function (event) {
 });
 
 var CACHE_PREFIX = "smart-panel-shell-";
-var CACHE_NAME = CACHE_PREFIX + "81";
+var CACHE_NAME = CACHE_PREFIX + "82";
 var STATIC_FILES = [
   "/",
-  "/manifest.webmanifest",
+  "/manifest.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/icon-512-dark.png",
@@ -56,16 +56,13 @@ var STATIC_FILES = [
   "/icons/apple-touch-icon.png",
   "/icons/favicon.ico",
   "/icons/favicon-32.png",
-  "/icons/app-icon-light.svg",
-  "/icons/app-icon-dark.svg",
-  "/icons/app-icon-mask.svg",
-  "/css/styles.css?v=81",
-  "/css/swiss-ui.css?v=81",
-  "/js/theme-init.js?v=81",
+  "/css/styles.css?v=82",
+  "/css/swiss-ui.css?v=82",
+  "/js/theme-init.js?v=82",
   "/js/bootstrap.js?v=71",
   "/js/firebase-runtime-config.js?v=75",
   "/js/firebase-config.js?v=75",
-  "/js/app.js?v=81"
+  "/js/app.js?v=82"
 ];
 
 self.addEventListener("install", function (event) {
@@ -114,7 +111,7 @@ self.addEventListener("fetch", function (event) {
     return;
   }
 
-  var isAppAsset = url.pathname.indexOf("/css/") === 0 || url.pathname.indexOf("/js/") === 0 || url.pathname.indexOf("/icons/") === 0 || url.pathname === "/manifest.webmanifest";
+  var isAppAsset = url.pathname.indexOf("/css/") === 0 || url.pathname.indexOf("/js/") === 0 || url.pathname.indexOf("/icons/") === 0 || url.pathname === "/manifest.json";
   if (!isAppAsset) { return; }
 
   // Estrategia Network-First para assets JS/CSS para evitar que queden atascados con versiones viejas

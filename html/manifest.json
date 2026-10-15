@@ -8,8 +8,8 @@
   "display_override": ["window-controls-overlay", "standalone"],
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#FFFFFF",
-  "theme_color": "#FFFFFF",
+  "background_color": "#121212",
+  "theme_color": "#121212",
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -27,7 +27,7 @@
       "src": "/icons/icon-maskable.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     }
   ]
 }
