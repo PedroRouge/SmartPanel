@@ -559,9 +559,7 @@ void updateStateTimestamp() {
         Serial.println("[Estado] NTP not synchronized yet; skipping updatedAt.");
         return;
     }
-    FirebaseJson patch;
-    patch.set("updatedAt", (double)nowSec * 1000.0);
-    if (!Firebase.RTDB.updateNode(&fbdo, "/home/state", &patch)) {
+    if (!Firebase.RTDB.setDouble(&fbdo, "/home/state/updatedAt", (double)nowSec * 1000.0)) {
         Serial.printf("[Estado] No se pudo guardar updatedAt: %s\n", fbdo.errorReason().c_str());
     }
 }
@@ -620,11 +618,10 @@ void handleGateCommand(long long commandTimestamp) {
     bool ok = executeHttpLocalCommand(GATE_RELAY_PULSE_URL);
     time_t nowSec = time(nullptr);
     if (nowSec > 100000) {
-        FirebaseJson patch;
-        patch.set("gateStatus", ok ? "pulse_sent" : "pulse_failed");
-        patch.set("gateStatusAt", (double)commandTimestamp);
-        patch.set("updatedAt", (double)nowSec * 1000.0);
-        if (!Firebase.RTDB.updateNode(&fbdo, "/home/state", &patch)) {
+        bool statusOk = Firebase.RTDB.setString(&fbdo, "/home/state/gateStatus", ok ? "pulse_sent" : "pulse_failed");
+        statusOk = Firebase.RTDB.setDouble(&fbdo, "/home/state/gateStatusAt", (double)commandTimestamp) && statusOk;
+        statusOk = Firebase.RTDB.setDouble(&fbdo, "/home/state/updatedAt", (double)nowSec * 1000.0) && statusOk;
+        if (!statusOk) {
             Serial.printf("[Porton] No se pudo publicar el resultado: %s\n", fbdo.errorReason().c_str());
         }
     } else {

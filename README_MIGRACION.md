@@ -59,3 +59,10 @@ La configuración Web Firebase en `html/js/firebase-config.js` contiene identifi
 - Verifica cada cambio de reglas en Firebase Emulator Suite o en un proyecto de prueba antes de producción.
    - Prueba con cuatro casos: anónimo, usuario autenticado sin rol, `admin` y `device`. El usuario común no debe poder leer estado doméstico ni escribir comandos; el administrador puede emitir comandos; el dispositivo puede actualizar estado y consumir/limpiar únicamente las órdenes permitidas.
 - No uses credenciales del usuario propietario en el firmware. El ESP32 debe conservar su usuario dedicado.
+## Audit update 2026-10-15
+
+- The ESP32 Firebase password was rotated; the replacement is stored only in the ignored `esp32_gateway/include/config.local.h`. Rebuild and flash firmware with this local configuration before connecting the device.
+- Previous Wi-Fi credentials remain in public Git history and must be changed in the router. Do not commit the replacement; update only the ignored local configuration after the router change.
+- The private LAN IP map now lives only in the ignored local configuration. `config.example.h` contains generic example addresses.
+- Firebase rules now grant the device writes only to explicit state paths and validate event, push-token, and gateway-status data.
+- The ESP32 still sends unauthenticated HTTP commands to local equipment; confirm each equipment endpoint is isolated to the trusted LAN before connecting the gateway.
