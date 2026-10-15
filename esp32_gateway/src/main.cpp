@@ -9,6 +9,7 @@
 #include <freertos/task.h>
 #include <freertos/queue.h>
 #include <esp_task_wdt.h>
+#include <driver/rmt.h>
 #include <time.h>
 
 #include "config.h"
@@ -23,6 +24,7 @@
 // =========================================================================
 FirebaseData streamData;
 FirebaseData fbdo;
+FirebaseData heartbeatData;
 FirebaseAuth auth;
 FirebaseConfig config;
 
@@ -63,6 +65,69 @@ const unsigned long HEARTBEAT_INTERVAL    = 15000;  // 15 s
 unsigned long lastStreamCheck = 0;
 const unsigned long STREAM_CHECK_INTERVAL = 30000;  // 30 s
 bool streamSubscribed = false;
+bool rgbLedReady = false;
+bool lastWifiLedState = false;
+
+void setRgbLed(uint8_t red, uint8_t green, uint8_t blue);
+void updateWifiLed();
+
+void initRgbLed() {
+    rmt_config_t rmtConfig = {};
+    rmtConfig.rmt_mode = RMT_MODE_TX;
+    rmtConfig.channel = RMT_CHANNEL_0;
+    rmtConfig.gpio_num = static_cast<gpio_num_t>(RGB_LED_PIN);
+    rmtConfig.clk_div = 2;  // 40 MHz, 25 ns por tick
+    rmtConfig.mem_block_num = 1;
+    rmtConfig.tx_config.loop_en = false;
+    rmtConfig.tx_config.carrier_en = false;
+    rmtConfig.tx_config.idle_output_en = true;
+    rmtConfig.tx_config.idle_level = RMT_IDLE_LEVEL_LOW;
+
+    if (rmt_config(&rmtConfig) != ESP_OK || rmt_driver_install(RMT_CHANNEL_0, 0, 0) != ESP_OK) {
+        Serial.println("[RGB] No se pudo inicializar el LED direccionable.");
+        return;
+    }
+    rgbLedReady = true;
+    setRgbLed(0, 0, 32);  // Azul hasta confirmar conexión Wi-Fi
+}
+
+void setRgbLed(uint8_t red, uint8_t green, uint8_t blue) {
+    if (!rgbLedReady) { return; }
+
+    // WS2812 transmite los canales en orden G-R-B, con el bit más significativo primero.
+    const uint8_t grb[] = { green, red, blue };
+    rmt_item32_t items[24] = {};
+    size_t bitIndex = 0;
+    for (uint8_t channel : grb) {
+        for (int bit = 7; bit >= 0; bit--) {
+            const bool one = (channel & (1U << bit)) != 0;
+            items[bitIndex].level0 = 1;
+            items[bitIndex].duration0 = one ? 32 : 14;
+            items[bitIndex].level1 = 0;
+            items[bitIndex].duration1 = one ? 16 : 34;
+            bitIndex++;
+        }
+    }
+
+    if (rmt_write_items(RMT_CHANNEL_0, items, 24, true) != ESP_OK) {
+        Serial.println("[RGB] Error al actualizar el LED.");
+    } else {
+        delayMicroseconds(80);  // Reset/latch del WS2812 (> 50 us)
+    }
+}
+
+void updateWifiLed() {
+    const bool connected = WiFi.status() == WL_CONNECTED;
+    if (connected == lastWifiLedState) { return; }
+    lastWifiLedState = connected;
+    if (connected) {
+        setRgbLed(0, 32, 0);
+        Serial.println("[RGB] Verde: Wi-Fi conectado.");
+    } else {
+        setRgbLed(0, 0, 32);
+        Serial.println("[RGB] Azul: Wi-Fi desconectado.");
+    }
+}
 
 // =========================================================================
 // PROTOTIPOS
@@ -91,6 +156,8 @@ void clearExecutedCommand(const String& path);
 void setup() {
     Serial.begin(115200);
     delay(800);
+
+    initRgbLed();
 
     Serial.println("\n==================================================");
     Serial.println("  SMART PANEL - GATEWAY IOT LOCAL (ESP32-S3)     ");
@@ -139,6 +206,8 @@ void setup() {
 void loop() {
     // Alimentar Watchdog
     esp_task_wdt_reset();
+
+    updateWifiLed();
 
     // Auto-reconexión Wi-Fi
     if (WiFi.status() != WL_CONNECTED) {
@@ -370,6 +439,7 @@ void initFirebase() {
 
     streamData.setBSSLBufferSize(4096, 1024);
     fbdo.setBSSLBufferSize(4096, 1024);
+    heartbeatData.setBSSLBufferSize(4096, 1024);
 
     // Esperar validación del token (máx 12 s)
     Serial.print("[Firebase] Esperando token JWT");
@@ -412,8 +482,8 @@ void sendHeartbeat() {
     json.set("last_seen", nowMs);
     json.set("version", "2.1.0-dualcore");
 
-    if (!Firebase.RTDB.setJSON(&fbdo, "/home/gateway/status", &json)) {
-        Serial.printf("[Heartbeat] Error: %s\n", fbdo.errorReason().c_str());
+    if (!Firebase.RTDB.setJSON(&heartbeatData, "/home/gateway/status", &json)) {
+        Serial.printf("[Heartbeat] Error: %s\n", heartbeatData.errorReason().c_str());
     }
 }
 
