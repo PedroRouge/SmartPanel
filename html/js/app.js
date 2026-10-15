@@ -1,7 +1,8 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "71";
+  var APP_BUILD_VERSION = "73";
+  var OWNER_EMAIL = "pedrorouge2022@gmail.com";
   var STORAGE_KEY = "smart-panel-state-v3";
   var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
@@ -206,25 +207,18 @@
         auth.onAuthStateChanged(function (user) {
           if (user) {
             console.log("[Firebase Auth] Usuario autenticado:", user.email || user.uid);
-            var name = user.email ? user.email.split("@")[0] : "admin";
-            user.getIdTokenResult().then(function (tokenResult) {
-              if (!tokenResult.claims || tokenResult.claims.role !== "owner") {
-                apiAuthenticated = false;
-                detachFirebaseListeners();
-                return auth.signOut().then(function () {
-                  showAuthGate("La cuenta no tiene el rol propietario configurado. Solicita al administrador que asigne el rol y vuelve a iniciar sesión.");
-                  updateAccountStatus(null);
-                });
-              }
-              acceptSession(name);
-              updateAccountStatus(user);
-              probeFirebaseHttps(user);
-            }).catch(function (error) {
-              console.error("[Firebase Auth] No se pudo validar el rol de la cuenta:", error);
+            if (!user.email || user.email.toLowerCase() !== OWNER_EMAIL) {
               apiAuthenticated = false;
               detachFirebaseListeners();
-              showAuthGate("No se pudo validar el permiso de esta cuenta. Comprueba la conexión e inicia sesión de nuevo.");
-            });
+              return auth.signOut().then(function () {
+                showAuthGate("Esta cuenta no esta habilitada para Smart Panel.");
+                updateAccountStatus(null);
+              });
+            }
+            var name = user.email.split("@")[0];
+            acceptSession(name);
+            updateAccountStatus(user);
+            probeFirebaseHttps(user);
           } else {
             console.log("[Firebase Auth] Sesión no iniciada (acceso restringido por reglas).");
             apiAuthenticated = false;
@@ -1100,12 +1094,6 @@
     var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
     var isUnconfigured = !config.apiKey || config.apiKey.indexOf("TU_API_KEY") !== -1;
     var errorEl = byId("auth-error");
-    [byId("auth-username"), byId("auth-password")].forEach(function (input) {
-      if (!input) { return; }
-      input.value = "";
-      input.addEventListener("focus", function () { input.removeAttribute("readonly"); }, { once: true });
-    });
-
     if (isUnconfigured && errorEl) {
       errorEl.innerHTML = "⚠️ Falta vincular tu proyecto de Firebase.<br><button type='button' class='firebase-setup-link' id='quick-firebase-setup'>Toca aquí para configurar Firebase</button>";
       errorEl.hidden = false;
@@ -1138,7 +1126,7 @@
       var errorEl = byId("auth-error");
 
       if (!userInput) {
-        errorEl.textContent = "Ingresa tu usuario o email.";
+        errorEl.textContent = "Ingresa tu email.";
         errorEl.hidden = false;
         return;
       }
@@ -1148,10 +1136,12 @@
         return;
       }
 
-      // Convertir usuario sin '@' en email válido para Firebase Auth
-      var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
-      var defaultDomain = config.authDefaultDomain || "smartpanel.local";
-      var email = userInput.indexOf("@") === -1 ? userInput + "@" + defaultDomain : userInput;
+      var email = userInput;
+      if (email !== OWNER_EMAIL) {
+        errorEl.textContent = "Esta cuenta no esta habilitada para Smart Panel.";
+        errorEl.hidden = false;
+        return;
+      }
 
       submit.disabled = true;
       submit.textContent = "Verificando...";
@@ -1166,7 +1156,9 @@
       }
 
       // Intentar iniciar sesión
-      auth.signInWithEmailAndPassword(email, pass).then(function (userCredential) {
+      auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+        .then(function () { return auth.signInWithEmailAndPassword(email, pass); })
+        .then(function (userCredential) {
         submit.disabled = false;
         submit.textContent = "Iniciar sesión";
       }).catch(function (error) {
@@ -3312,8 +3304,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v71";
-    byId("script-build-version").textContent = "JS v70";
+    byId("frontend-version").textContent = "HTML v73";
+    byId("script-build-version").textContent = "JS v73";
 
     initializeConfirmDialog();
     initializeTabs();

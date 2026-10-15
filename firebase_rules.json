@@ -2,7 +2,7 @@
   "rules": {
     "home": {
       "state": {
-        ".read": "auth != null && auth.token.role == 'owner'",
+        ".read": "auth != null && auth.token.email == 'pedrorouge2022@gmail.com'",
         ".write": "auth != null && auth.token.role == 'device'",
         "updatedAt": { ".validate": "newData.isNumber() && newData.val() > 0" },
         "lights": {
@@ -17,52 +17,52 @@
         }
       },
       "commands": {
-        ".read": "auth != null && (auth.token.role == 'owner' || auth.token.role == 'device')",
+        ".read": "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || auth.token.role == 'device')",
         "timestamp": {
-          ".write": "auth != null && auth.token.role == 'owner'",
+          ".write": "auth != null && auth.token.email == 'pedrorouge2022@gmail.com'",
           ".validate": "newData.isNumber() && newData.val() > 0"
         },
         "lights": {
           "$light": {
-            ".write": "auth != null && (auth.token.role == 'owner' || (auth.token.role == 'device' && !newData.exists()))",
+            ".write": "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || (auth.token.role == 'device' && !newData.exists()))",
             ".validate": "($light == 'living' || $light == 'kitchen' || $light == 'bedroom' || $light == 'garden') && newData.isBoolean()"
           }
         },
         "poolOn": {
-          ".write": "auth != null && (auth.token.role == 'owner' || (auth.token.role == 'device' && !newData.exists()))",
+          ".write": "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || (auth.token.role == 'device' && !newData.exists()))",
           ".validate": "newData.isBoolean()"
         },
         "gateTrigger": {
-          ".write": "auth != null && (auth.token.role == 'owner' || (auth.token.role == 'device' && !newData.exists()))",
+          ".write": "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || (auth.token.role == 'device' && !newData.exists()))",
           ".validate": "newData.isNumber() && newData.val() > 0"
         },
         "tv": {
-          ".write": "auth != null && (auth.token.role == 'owner' || (auth.token.role == 'device' && !newData.exists()))",
+          ".write": "auth != null && (auth.token.email == 'pedrorouge2022@gmail.com' || (auth.token.role == 'device' && !newData.exists()))",
           ".validate": "newData.hasChildren(['timestamp', 'targetId', 'action']) && newData.child('timestamp').isNumber() && newData.child('timestamp').val() > 0 && (newData.child('targetId').val() == 'tv-living' || newData.child('targetId').val() == 'tv-pedro' || newData.child('targetId').val() == 'tv-padres' || newData.child('targetId').val() == 'tv-lucas') && ((newData.child('action').val() == 'power' || newData.child('action').val() == 'toggle_mute') || (newData.child('action').val() == 'set_volume' && newData.child('value').isNumber() && newData.child('value').val() >= 0 && newData.child('value').val() <= 100) || (newData.child('action').val() == 'launch_app' && (newData.child('value').val() == 'Netflix' || newData.child('value').val() == 'YouTube' || newData.child('value').val() == 'Flow' || newData.child('value').val() == 'Prime Video' || newData.child('value').val() == 'Disney+' || newData.child('value').val() == 'Spotify')) || (newData.child('action').val() == 'remote_key' && (newData.child('value').val() == 'UP' || newData.child('value').val() == 'DOWN' || newData.child('value').val() == 'LEFT' || newData.child('value').val() == 'RIGHT' || newData.child('value').val() == 'ENTER' || newData.child('value').val() == 'OK' || newData.child('value').val() == 'BACK' || newData.child('value').val() == 'HOME' || newData.child('value').val() == 'MENU' || newData.child('value').val() == 'PLAY_PAUSE')) )"
         }
       },
       "gateway": {
         "status": {
-          ".read": "auth != null && auth.token.role == 'owner'",
+          ".read": "auth != null && auth.token.email == 'pedrorouge2022@gmail.com'",
           ".write": "auth != null && auth.token.role == 'device'",
           ".validate": "newData.hasChildren(['online', 'last_seen', 'version']) && newData.child('online').isBoolean() && newData.child('last_seen').isNumber() && newData.child('version').isString()"
         }
       },
       "tvs": {
-        ".read": "auth != null && auth.token.role == 'owner'",
+        ".read": "auth != null && auth.token.email == 'pedrorouge2022@gmail.com'",
         "$tvId": {
-          ".write": "auth != null && auth.token.role == 'owner' && ($tvId == 'tv-living' || $tvId == 'tv-pedro' || $tvId == 'tv-padres' || $tvId == 'tv-lucas')",
+          ".write": "auth != null && auth.token.email == 'pedrorouge2022@gmail.com' && ($tvId == 'tv-living' || $tvId == 'tv-pedro' || $tvId == 'tv-padres' || $tvId == 'tv-lucas')",
           ".validate": "newData.hasChildren(['id', 'name', 'room', 'model', 'volume', 'muted']) && newData.child('id').val() == $tvId && newData.child('name').isString() && newData.child('name').val().length <= 80 && newData.child('room').isString() && newData.child('room').val().length <= 80 && newData.child('model').isString() && newData.child('model').val().length <= 80 && newData.child('volume').isNumber() && newData.child('volume').val() >= 0 && newData.child('volume').val() <= 100 && newData.child('muted').isBoolean()"
         }
       },
       "events": {
-        ".read": "auth != null && auth.token.role == 'owner'",
-        ".write": "auth != null && auth.token.role == 'owner'"
+        ".read": "auth != null && auth.token.email == 'pedrorouge2022@gmail.com'",
+        ".write": "auth != null && auth.token.email == 'pedrorouge2022@gmail.com'"
       },
       "pushAlerts": {
         "$alertId": {
           ".read": false,
-          ".write": "auth != null && auth.token.role == 'owner'",
+          ".write": "auth != null && auth.token.email == 'pedrorouge2022@gmail.com'",
           ".validate": "newData.hasChildren(['title']) && newData.child('title').isString() && newData.child('title').val().length <= 120 && (!newData.hasChild('body') || (newData.child('body').isString() && newData.child('body').val().length <= 500))"
         }
       }
