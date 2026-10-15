@@ -22,7 +22,6 @@ const size_t NUM_LIGHTS = sizeof(SMART_LIGHTS) / sizeof(SMART_LIGHTS[0]);
 #define POOL_RELAY_PROTOCOL PROTO_SHELLY
 #define GATE_RELAY_IP "192.168.1.111"
 #define GATE_RELAY_PULSE_URL "http://192.168.1.111/relay/0?turn=on&timer=1"
-#define IR_SEND_PIN 4
 #define TV_LIVING_IP "192.168.1.52"
 #define TV_PEDRO_IP "192.168.1.10"
 #define TV_PADRES_IP "192.168.1.53"
