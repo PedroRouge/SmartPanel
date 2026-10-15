@@ -164,7 +164,12 @@ jobs:
       - name: Instalar CLI fijada
         run: npm ci
 
-      - name: Desplegar reglas y funciones verificadas
+      - name: Desplegar reglas verificadas
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-        run: npx firebase-tools@15.34.0 deploy --only database,functions --project smart-panel-53d7b --non-interactive --token="$FIREBASE_TOKEN"
+        run: npx firebase-tools@15.34.0 deploy --only database --project smart-panel-53d7b --non-interactive --token="$FIREBASE_TOKEN"
+
+      - name: Desplegar Cloud Functions verificadas
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: npx firebase-tools@15.34.0 deploy --only functions --project smart-panel-53d7b --non-interactive --token="$FIREBASE_TOKEN"

@@ -136,7 +136,9 @@ test("CI fija el sistema operativo del runner para evitar cambios automáticos",
 
 test("el despliegue de Firebase publica reglas y Cloud Functions", () => {
   const workflow = read(".github/workflows/ci-cd.yml");
-  assert.match(workflow, /deploy --only database,functions/);
+  const databaseDeploy = workflow.indexOf("deploy --only database --project smart-panel-53d7b");
+  const functionsDeploy = workflow.indexOf("deploy --only functions --project smart-panel-53d7b");
+  assert.ok(databaseDeploy >= 0 && functionsDeploy > databaseDeploy, "las reglas deben desplegarse antes de Cloud Functions");
 });
 
 test("Cloud Functions usa Node.js 22 en manifiesto y lockfile", () => {
