@@ -37,6 +37,20 @@ test("la política web mantiene CSP sin scripts inline y el build coincide", () 
   assert.equal(htmlVersion[1], jsVersion[1], "la versión de HTML y JavaScript no coincide");
 });
 
+test("el bootstrap no borra la caché activa y el tema se precarga", () => {
+  const html = read("html/index.html");
+  const bootstrap = read("html/js/bootstrap.js");
+  const worker = read("html/service-worker.js");
+  const themeScriptIndex = html.indexOf('src="js/theme-init.js');
+  const stylesheetIndex = html.indexOf('href="css/styles.css');
+
+  assert.doesNotMatch(bootstrap, /caches\.delete\s*\(/);
+  assert.match(worker, /self\.addEventListener\("activate"/);
+  assert.match(worker, /key !== CACHE_NAME/);
+  assert.ok(themeScriptIndex >= 0 && themeScriptIndex < stylesheetIndex, "el tema debe aplicarse antes del CSS");
+  assert.match(worker, /\/js\/theme-init\.js\?v=\d+/);
+});
+
 test("las reglas Firebase no habilitan escritura general a cualquier usuario", () => {
   const rules = JSON.parse(read("firebase_rules.json")).rules;
   assert.equal(rules.home.state[".write"], undefined);
