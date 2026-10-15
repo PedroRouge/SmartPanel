@@ -3,6 +3,7 @@ const { getDatabase } = require("firebase-admin/database");
 const { getMessaging } = require("firebase-admin/messaging");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onValueCreated, onValueWritten } = require("firebase-functions/v2/database");
+const { eventStartAt, reminderTaskId } = require("./reminders");
 
 initializeApp();
 const db = getDatabase();
@@ -10,18 +11,6 @@ const messaging = getMessaging();
 const TZ = "America/Argentina/Buenos_Aires";
 // Reemplazá por el dominio público real configurado en Vercel.
 const APP_URL = "https://smart-panel-beryl.vercel.app";
-
-function eventStartAt(event) {
-  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(event.date || "");
-  if (!dateMatch) return null;
-  const time = event.all_day ? "09:00" : (event.start_time || "09:00");
-  const timeMatch = /^(\d{2}):(\d{2})$/.exec(time);
-  if (!timeMatch) return null;
-  const [, year, month, day] = dateMatch;
-  const [, hour, minute] = timeMatch;
-  // Buenos Aires uses UTC-03:00. All-day events use 09:00 local time.
-  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour) + 3, Number(minute)));
-}
 
 async function sendToTokens(tokens, title, body, notificationTag) {
   let failures = 0;
@@ -75,11 +64,9 @@ const REMINDERS = [
 const REMINDER_CATCH_UP_MS = 10 * 60 * 1000;
 const REMINDER_LOCK_MS = 2 * 60 * 1000;
 
-function reminderTaskId(uid, eventId, kind) {
-  return Buffer.from(`${uid}/${eventId}/${kind}`).toString("base64url");
-}
-
-exports.scheduleEventReminders = onValueWritten("users/{uid}/events/{eventId}", async (event) => {
+exports.scheduleEventReminders = onValueWritten(
+  { ref: "users/{uid}/events/{eventId}", retry: true },
+  async (event) => {
   const { uid, eventId } = event.params;
   const tasksRef = db.ref("scheduledReminders");
   const taskRefs = REMINDERS.map(({ kind }) => tasksRef.child(reminderTaskId(uid, eventId, kind)));
@@ -99,7 +86,8 @@ exports.scheduleEventReminders = onValueWritten("users/{uid}/events/{eventId}", 
     if (dueAt < now - REMINDER_CATCH_UP_MS || startsAt.getTime() <= now) return ref.remove();
     return ref.set({ uid, eventId, kind, dueAt, lockUntil: 0, nextAttemptAt: dueAt });
   }));
-});
+  },
+);
 
 exports.calendarPush = onSchedule({ schedule: "every 1 minutes", timeZone: TZ, timeoutSeconds: 300, maxInstances: 1 }, async () => {
   const now = Date.now();

@@ -80,7 +80,13 @@ test("la política web mantiene CSP sin scripts inline y el build coincide", () 
     .find((header) => header.key.toLowerCase() === "content-security-policy");
   assert.ok(csp, "falta Content-Security-Policy");
   assert.doesNotMatch(csp.value, /unsafe-inline/);
+  assert.match(csp.value, /script-src[^;]*https:\/\/apis\.google\.com/);
   assert.doesNotMatch(html, /<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/i);
+  assert.doesNotMatch(html.match(/<meta name="viewport"[^>]*>/i)?.[0] || "", /user-scalable=no|maximum-scale\s*=\s*1/i);
+  const headers = policy.headers.flatMap((entry) => entry.headers);
+  assert.equal(headers.find((header) => header.key === "Permissions-Policy")?.value, "camera=(), microphone=(), geolocation=()");
+  assert.equal(headers.find((header) => header.key === "X-Content-Type-Options")?.value, "nosniff");
+  assert.equal(headers.find((header) => header.key === "Referrer-Policy")?.value, "strict-origin-when-cross-origin");
 
   const htmlVersion = html.match(/id="frontend-version">HTML v(\d+)</);
   const jsVersion = read("html/js/app.js").match(/APP_BUILD_VERSION\s*=\s*"(\d+)"/);
@@ -98,6 +104,7 @@ test("el bootstrap no borra la caché activa y el tema se precarga", () => {
   assert.doesNotMatch(bootstrap, /caches\.delete\s*\(/);
   assert.match(worker, /self\.addEventListener\("activate"/);
   assert.match(worker, /key !== CACHE_NAME/);
+  assert.match(worker, /"\/icons\/favicon-48\.png"/);
   assert.ok(themeScriptIndex >= 0 && themeScriptIndex < stylesheetIndex, "el tema debe aplicarse antes del CSS");
   assert.match(worker, /\/js\/theme-init\.js\?v=\d+/);
 });
@@ -124,6 +131,18 @@ test("CI fija el sistema operativo del runner para evitar cambios automáticos",
   const workflow = read(".github/workflows/ci-cd.yml");
   assert.doesNotMatch(workflow, /runs-on:\s*ubuntu-latest/);
   assert.match(workflow, /runs-on:\s*ubuntu-24\.04/);
+});
+
+test("el despliegue de Firebase publica reglas y Cloud Functions", () => {
+  const workflow = read(".github/workflows/ci-cd.yml");
+  assert.match(workflow, /deploy --only database,functions/);
+});
+
+test("Cloud Functions usa Node.js 22 en manifiesto y lockfile", () => {
+  const manifest = JSON.parse(read("functions/package.json"));
+  const lockfile = JSON.parse(read("functions/package-lock.json"));
+  assert.equal(manifest.engines.node, "22");
+  assert.equal(lockfile.packages[""].engines.node, "22");
 });
 
 test("las reglas Firebase no habilitan escritura general a cualquier usuario", () => {

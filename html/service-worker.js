@@ -45,7 +45,7 @@ self.addEventListener("notificationclick", function (event) {
 });
 
 var CACHE_PREFIX = "smart-panel-shell-";
-var CACHE_NAME = CACHE_PREFIX + "83";
+var CACHE_NAME = CACHE_PREFIX + "84";
 var STATIC_FILES = [
   "/",
   "/manifest.json",
@@ -56,6 +56,7 @@ var STATIC_FILES = [
   "/icons/apple-touch-icon.png",
   "/icons/favicon.ico",
   "/icons/favicon-32.png",
+  "/icons/favicon-48.png",
   "/css/styles.css?v=83",
   "/css/swiss-ui.css?v=83",
   "/js/theme-init.js?v=83",
