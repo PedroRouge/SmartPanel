@@ -1,51 +1,44 @@
-# Push notifications para Smart Panel
+# Notificaciones gratuitas de Smart Panel
 
-La PWA conserva un solo Service Worker (`html/service-worker.js`) para caché y FCM. El navegador despierta ese worker cuando llega un push: no queda ejecutándose de forma continua. La agenda local sigue mostrando avisos dentro de la app; el envío con la app cerrada lo realiza Firebase Functions, que consulta la agenda y manda el mensaje a FCM.
+La app conserva Firebase Spark, Realtime Database y Firebase Cloud Messaging. El envío programado en segundo plano se ejecuta desde Google Apps Script cada cinco minutos; no usa Cloud Functions, Cloud Scheduler, Cloud Build ni un servidor pago. Las notificaciones locales siguen funcionando cuando la app está abierta.
 
-## Configuración
+## Activación inicial (una sola vez)
 
-1. En Firebase Console, habilitá **Cloud Messaging** y generá una clave Web Push (VAPID) en Project settings → Cloud Messaging → Web configuration. Copiá la clave pública.
-2. La clave pública VAPID compartida ya quedó configurada como `vapidKey` en `html/js/firebase-config.js`.
-3. En Project settings → General → Your apps → Web app, confirmá que la configuración coincida con la que está en `firebase-config.js` y `service-worker.js`.
-4. El dominio HTTPS `https://smart-panel-beryl.vercel.app` ya quedó configurado como `APP_URL` en `functions/index.js`.
-5. Publicá las reglas de `firebase_rules.json` en Realtime Database. Las reglas agregan `/pushTokens/{uid}` para que cada usuario autenticado solo pueda escribir y leer sus propios tokens. Las funciones usan Admin SDK y no exponen credenciales servidoras en Vercel.
-6. Desde la raíz, instalá Firebase CLI si hace falta, iniciá sesión, seleccioná el proyecto `smart-panel-53d7b` y desplegá:
+La automatización necesita una identidad de servidor para leer la agenda de todos los usuarios y enviar con FCM. No compartas ni subas su clave privada a GitHub.
 
-   ```sh
-   firebase use smart-panel-53d7b
-   firebase deploy --only database,functions
-   ```
+1. En Google Cloud Console, abre el proyecto `smart-panel-53d7b` y crea una cuenta de servicio llamada `smart-panel-free-push`.
+2. Asígnale únicamente estos roles del proyecto:
+   - **Firebase Realtime Database Admin** (`roles/firebasedatabase.admin`), para leer agendas y tokens y guardar marcas de entrega.
+   - **Firebase Cloud Messaging API Admin** (`roles/firebasecloudmessaging.admin`), para enviar mensajes FCM.
+3. Habilita **Firebase Cloud Messaging API** si Google lo solicita. Esto no activa facturación; no habilites Blaze ni agregues una cuenta de pagos.
+4. Crea una clave JSON para esa cuenta de servicio. Conserva el archivo fuera del repositorio y elimina la descarga local después de copiar los datos.
+5. En [Apps Script](https://script.google.com/), crea un proyecto independiente. En **Configuración del proyecto**, activa **Mostrar el archivo de manifiesto `appsscript.json`**. Reemplaza `Code.gs` y el manifiesto con `scripts/free-push/Code.gs` y `scripts/free-push/appsscript.json` de este repositorio.
+6. En Apps Script → **Configuración del proyecto → Propiedades del script**, crea:
+   - `FIREBASE_SERVICE_ACCOUNT_EMAIL`: valor `client_email` del JSON.
+   - `FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY`: valor completo `private_key` del JSON, conservando los saltos de línea `\n`.
+7. Ejecuta manualmente `verifySmartPanelFreePushAccess` y concede los permisos de solicitudes HTTPS y activadores. La función valida el acceso a Realtime Database y a FCM; un HTTP 400 de FCM es esperado en el mensaje de prueba porque usa un token ficticio, y demuestra que el endpoint rechazó el formato/token, no el acceso.
+8. Ejecuta `installSmartPanelFreePushTrigger` una vez. Acepta el permiso para crear activadores. Confirma en **Activadores** que `runSmartPanelFreePush` quedó programado cada cinco minutos.
+9. En la web HTTPS, inicia sesión y pulsa **Activar avisos** en cada dispositivo. El navegador debe permitir notificaciones.
 
-   El SDK web tambien requiere que la API FCM Registration este habilitada en Google Cloud Console. En este proyecto, el despliegue de Cloud Functions quedo pendiente porque Firebase exige el plan Blaze para activar Cloud Build; por eso los avisos en segundo plano/con la web cerrada no se envian hasta desplegar esas funciones. La interfaz comprueba el permiso, registra el token y envia una notificacion nativa de prueba para validar cada dispositivo. FCM no requiere guardar una clave privada en el frontend.
-7. Desplegá el frontend en Vercel. Abrí la web mediante HTTPS, iniciá sesión y tocá **Activar avisos**. El permiso se pide desde ese gesto; el token queda asociado a `pushTokens/{uid}`.
-8. Para verificar la recepción, Firebase Console → Messaging → crear un mensaje de prueba y seleccionar el token FCM guardado. Probá con la PWA en segundo plano y cerrada.
+La cuenta de servicio y la clave son credenciales sensibles: dales acceso solo a este proyecto, no las pegues en chats ni las guardes en el repositorio. Si se filtra la clave, revócala en Google Cloud Console y crea otra.
 
-## Mensajes de agenda y sistema
+## Qué envía
 
-`functions/index.js` escanea `users/{uid}/events` cada cinco minutos. Envía una alerta el día anterior desde las 09:00 y el día del evento desde las 07:00, hora de Argentina, y registra cada envío en `/pushSent` para no repetirlo. Requiere que las fechas de agenda estén en `YYYY-MM-DD` y que cada evento tenga `title` y `date`.
+- Recorre los eventos de `/users/{uid}/events` y envía recordatorios 24 horas y 2 horas antes del horario del evento, en hora de Buenos Aires. Para eventos de día completo toma las 09:00.
+- Guarda una marca idempotente en `/pushSent` después de un envío correcto y descarta tokens que FCM informa como vencidos.
+- Lee `/home/pushAlerts`, envía esos avisos a los tokens registrados y elimina cada aviso entregado.
+- Un bloqueo evita que dos ejecuciones del mismo proyecto procesen los avisos a la vez. El margen de recuperación de avisos de agenda es de diez minutos.
 
-Para disparar una alerta de sistema desde una Cloud Function o servidor confiable, escribí en Realtime Database:
+El archivo ejecutable está en `scripts/free-push/Code.gs`. Apps Script no forma parte del pipeline de GitHub Actions: su trigger se crea una sola vez desde tu cuenta Google. El pipeline solo publica reglas de RTDB y el sitio.
 
-```json
-{
-  "home": {
-    "pushAlerts": {
-      "alert-id": {
-        "title": "Pileta",
-        "body": "El ciclo programado terminó."
-      }
-    }
-  }
-}
-```
+## Costos y límites
 
-El trigger `systemPush` la entrega a los dispositivos registrados y luego la elimina. No escribas este nodo desde un cliente público para eventos críticos; generá el aviso desde el backend que valida el origen del evento.
+Esta configuración no pide habilitar facturación. Apps Script tiene cuotas diarias y puede retrasar ejecuciones; los avisos pueden llegar con hasta unos cinco minutos de demora. Las cuotas gratuitas de Firebase también tienen límites de almacenamiento y transferencia. Si una cuota se excede, el servicio puede limitarse hasta que se renueve el cupo; no habilites facturación para resolverlo.
 
-## Plataformas y límites
+Si todavía no configuraste Apps Script, los avisos locales se muestran únicamente mientras Smart Panel está abierto. El worker necesita que completes la activación inicial para enviar con la app cerrada.
 
-- Android y navegadores de escritorio compatibles: requiere HTTPS, permiso explícito y un navegador con Push API/Service Worker.
-- iPhone/iPad: iOS/iPadOS 16.4 o posterior requiere que el usuario agregue el sitio a Inicio y abra esa web app instalada antes de aceptar el permiso. La tabla vigente de Firebase no marca FCM JavaScript como oficialmente compatible con iOS Safari; por eso el botón informa “Push no compatible” en esos entornos. Para cubrir iOS de forma soportada, se debe usar Web Push estándar con un emisor que implemente el protocolo de Apple, o una app nativa.
-- Safari en macOS ofrece Web Push, pero la compatibilidad de FCM se debe comprobar en la versión concreta del navegador; la alternativa interoperable también es Web Push estándar.
-- Los navegadores y el sistema operativo pueden limitar entregas por ahorro de batería, permisos, modo concentración o políticas del usuario. Un Service Worker no permanece corriendo continuamente.
+## Compatibilidad
 
-Referencias oficiales: [configurar FCM web](https://firebase.google.com/docs/cloud-messaging/web/get-started), [recibir mensajes web](https://firebase.google.com/docs/cloud-messaging/web/receive-messages), [entornos soportados por Firebase JS](https://firebase.google.com/docs/web/environments-js-sdk), [Web Push de Apple](https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers).
+- Android y navegadores de escritorio compatibles: requieren HTTPS, permiso explícito y soporte para Push API/Service Worker.
+- iPhone/iPad: el soporte de FCM web depende de la versión de iOS/iPadOS, de instalar la PWA en Inicio y de las limitaciones actuales de Firebase; el botón de la app informa si el navegador no es compatible.
+- Los modos de ahorro de batería, concentración y permisos del sistema operativo pueden retrasar o impedir una notificación push.

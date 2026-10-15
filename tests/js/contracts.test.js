@@ -138,18 +138,22 @@ test("CI fija el sistema operativo del runner para evitar cambios automáticos",
   assert.match(workflow, /runs-on:\s*ubuntu-24\.04/);
 });
 
-test("el despliegue de Firebase publica reglas y Cloud Functions", () => {
+test("el despliegue gratuito publica reglas Firebase sin Cloud Functions", () => {
   const workflow = read(".github/workflows/ci-cd.yml");
   const databaseDeploy = workflow.indexOf("deploy --only database --project smart-panel-53d7b");
-  const functionsDeploy = workflow.indexOf("deploy --only functions --project smart-panel-53d7b");
-  assert.ok(databaseDeploy >= 0 && functionsDeploy > databaseDeploy, "las reglas deben desplegarse antes de Cloud Functions");
+  assert.ok(databaseDeploy >= 0, "falta el despliegue de reglas RTDB");
+  assert.doesNotMatch(workflow, /deploy --only functions|functions\/package-lock/);
+  assert.equal(JSON.parse(read("firebase.json")).functions, undefined, "Firebase CLI no debe intentar publicar Cloud Functions");
 });
 
-test("Cloud Functions usa Node.js 22 en manifiesto y lockfile", () => {
-  const manifest = JSON.parse(read("functions/package.json"));
-  const lockfile = JSON.parse(read("functions/package-lock.json"));
-  assert.equal(manifest.engines.node, "22");
-  assert.equal(lockfile.packages[""].engines.node, "22");
+test("el worker gratuito de Apps Script se ejecuta cada cinco minutos y usa credencial de servicio", () => {
+  const source = read("scripts/free-push/Code.gs");
+  const manifest = JSON.parse(read("scripts/free-push/appsscript.json"));
+  assert.match(source, /everyMinutes\(5\)/);
+  assert.match(source, /FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY/);
+  assert.match(source, /firebase\.messaging/);
+  assert.equal(manifest.timeZone, "America/Argentina/Buenos_Aires");
+  assert.doesNotMatch(source, /firebase-functions|firebase-admin/);
 });
 
 test("las reglas Firebase no habilitan escritura general a cualquier usuario", () => {
@@ -161,8 +165,7 @@ test("las reglas Firebase no habilitan escritura general a cualquier usuario", (
   assert.equal(rules.home.commands.timestamp[".write"], "auth != null && auth.token.role == 'admin'");
   assert.equal(rules.home.commands[".read"], "auth != null && (auth.token.role == 'admin' || auth.token.role == 'device')");
   assert.equal(rules.home.gateway.status.$other[".validate"], false);
-  assert.equal(rules.scheduledReminders[".read"], false);
-  assert.equal(rules.scheduledReminders[".write"], false);
+  assert.equal(rules.scheduledReminders, undefined, "no se conserva una cola usada solo por Cloud Functions");
 });
 
 test("el firmware conserva validaciones explícitas para órdenes TV y reloj", () => {

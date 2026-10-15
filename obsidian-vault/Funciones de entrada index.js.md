@@ -1,17 +1,14 @@
 ---
-tipo: archivo
-modulo: backend/functions/entrypoint
-estado: listo
-fecha: 2026-10-14
+tipo: componente
+modulo: backend/notificaciones
+estado: reemplazado
+fecha: 2026-10-15
 tags:
   - capa/backend
-  - codigo/javascript
-  - feature/core
+  - servicio/firebase
 ---
 # Funciones de entrada index.js
 
-unctions/index.js es el punto de entrada Cloud Functions. Implementa [[Funciones Cloud de notificaciones]] y utiliza [[Dependencias de Firebase Functions]].
+Esta nota documenta la implementación anterior de Cloud Functions, retirada para mantener Firebase Spark sin facturación. El worker vigente es Google Apps Script: [[Guía de notificaciones push]].
 
-Configuración del despliegue: [[Configuración Firebase y despliegue]]. Políticas y nodos: [[Reglas de Realtime Database]].
-
-#javascript #capa/backend #codigo/javascript #feature/core
+#archivo #capa/backend #servicio/firebase

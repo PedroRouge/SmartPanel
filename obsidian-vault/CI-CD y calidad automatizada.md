@@ -56,11 +56,11 @@ En **Settings → Branches**, protege `main`, exige pull request y marca los che
 - `API Python`
 - `Compilar firmware ESP32-S3`
 
-El deploy se ejecuta al integrar cambios en `main`. Las ramas y pull requests solo construyen y prueban. Para `FIREBASE_TOKEN`, inicia Firebase CLI con `firebase login:ci` y guarda el token directamente como secreto GitHub; no lo confirmes en el repositorio ni lo compartas por chat. Habilita facturación en el proyecto si Cloud Functions la requiere.
+El deploy está condicionado a la configuración del repositorio. Firebase publica únicamente las reglas de Realtime Database; no hay despliegue de Cloud Functions ni hace falta activar facturación. Los push en segundo plano usan el worker gratuito descrito en [[Guía de notificaciones push]].
 
 ### Actualizaciones
 
-[Dependabot](../.github/dependabot.yml) revisa semanalmente las dependencias npm de raíz y Functions, además de las acciones GitHub.
+[Dependabot](../.github/dependabot.yml) revisa semanalmente las dependencias npm del proyecto y las acciones GitHub.
 
 ## Ejecución local
 
@@ -71,8 +71,6 @@ npm run test:rules
 node --test tests/js/*.test.js
 python -m pip install -r legacy_backup/requirements.txt
 python -m unittest discover -s legacy_backup/tests -v
-npm ci --prefix functions
-npm audit --prefix functions --omit=dev --audit-level=high
 cp esp32_gateway/include/config.example.h esp32_gateway/include/config.local.h
 pio run -d esp32_gateway -e esp32-s3-devkitc-1-n16r8
 ```
@@ -84,14 +82,14 @@ Se necesita Java 21 para Firebase Emulator. En PowerShell reemplaza `cp` por `Co
 - La prueba de navegador corta solicitudes externas; cubre la interfaz, no autentica contra Firebase real ni prueba televisores.
 - Firebase Emulator valida reglas localmente; no modifica producción.
 - La compilación verifica código y enlace del firmware, pero no simula señales eléctricas ni el relé.
-- La auditoría de npm reportó avisos en el toolchain de desarrollo; las dependencias de producción de Functions sí se auditan como puerta CI. Dependabot propone actualizaciones para revisar.
-- Cloud Functions ya tienen job de deploy condicionado a `main`; requiere el secreto `FIREBASE_TOKEN`. Las reglas RTDB no se publican automaticamente para evitar un bloqueo antes de asignar claims de admin.
+- La CI audita dependencias npm y ejecuta pruebas de UI, contratos y reglas. El emulador local requiere Java 21.
+- El envío push programado requiere una instalación única de Apps Script; GitHub Actions no aloja un proceso programado.
 
 ## Nodos relacionados
 
 - [[Proyecto PlatformIO ESP32]]
 - [[Configuración Vercel]]
-- [[Funciones Cloud de notificaciones]]
+- [[Guía de notificaciones push]]
 - [[Update - 2026-10-14 - Remediación auditoría técnica]]
 - [Workflow de GitHub Actions](../.github/workflows/ci-cd.yml)
 

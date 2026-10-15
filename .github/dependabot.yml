@@ -12,11 +12,6 @@ updates:
           - "firebase"
           - "firebase-tools"
 
-  - package-ecosystem: npm
-    directory: "/functions"
-    schedule:
-      interval: weekly
-
   - package-ecosystem: pip
     directory: "/legacy_backup"
     schedule:
