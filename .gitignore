@@ -47,3 +47,5 @@ test-results/
 # Node.js dependencies
 node_modules/
 functions/node_modules/
+scripts/free-push/.clasp.json
+scripts/free-push/clasp-oauth.json
