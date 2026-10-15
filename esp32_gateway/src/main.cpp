@@ -81,6 +81,7 @@ void initNTP();
 void sendHeartbeat();
 void checkStreamHealth();
 bool executeHttpLocalCommand(const String& url);
+bool isPrivateLanUrl(const String& url);
 void handleLightCommand(const String& lightName, bool targetState);
 void handlePoolCommand(bool targetState);
 void handleGateCommand(long long commandTimestamp);
@@ -526,9 +527,33 @@ void streamTimeoutCallback(bool timeout) {
 // =========================================================================
 // EJECUCIÓN HTTP LOCAL (corre en Core 0 / workerTask)
 // =========================================================================
+bool isPrivateLanUrl(const String& url) {
+    if (!url.startsWith("http://")) { return false; }
+
+    int hostEnd = url.length();
+    const char delimiters[] = { '/', ':', '?', '#' };
+    for (char delimiter : delimiters) {
+        int position = url.indexOf(delimiter, 7);
+        if (position >= 0 && position < hostEnd) { hostEnd = position; }
+    }
+
+    IPAddress address;
+    if (hostEnd <= 7 || !address.fromString(url.substring(7, hostEnd))) { return false; }
+
+    const uint8_t first = address[0];
+    const uint8_t second = address[1];
+    return first == 10 ||
+           (first == 172 && second >= 16 && second <= 31) ||
+           (first == 192 && second == 168);
+}
+
 bool executeHttpLocalCommand(const String& url) {
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("[HTTP Local] Sin Wi-Fi — comando diferido.");
+        return false;
+    }
+    if (!isPrivateLanUrl(url)) {
+        Serial.println("[HTTP Local] Destino rechazado: solo se permiten IP privadas IPv4.");
         return false;
     }
 
