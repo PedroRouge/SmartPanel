@@ -72,13 +72,26 @@ _login_failures = {}
 _login_failures_lock = threading.Lock()
 LOGIN_FAILURE_WINDOW = 15 * 60
 MAX_LOGIN_FAILURES = 6
+CORS_ALLOWED_ORIGINS = {
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("SMART_PANEL_CORS_ORIGINS", "").split(",")
+    if origin.strip()
+}
 
 
 def _load_or_create_secret(path, length):
     path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.chmod(0o700)
+    except OSError:
+        pass
     if path.is_file():
         secret = path.read_text(encoding="utf-8").strip()
         if secret:
+            try:
+                path.chmod(0o600)
+            except OSError:
+                pass
             return secret
     secret = secrets.token_urlsafe(length)
     path.write_text(secret + "\n", encoding="utf-8")
@@ -621,15 +634,22 @@ def fetch_weather(query):
 
 
 class SmartPanelHandler(BaseHTTPRequestHandler):
+    def allowed_cors_origin(self):
+        origin = self.headers.get("Origin", "").rstrip("/")
+        return origin if origin in CORS_ALLOWED_ORIGINS else None
+
     def send_json(self, status, payload):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+        origin = self.allowed_cors_origin()
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
         self.end_headers()
         self.wfile.write(body)
 
@@ -663,7 +683,7 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
         return False
 
     def login(self):
-        client_key = self.headers.get("CF-Connecting-IP") or self.client_address[0]
+        client_key = self.client_address[0]
         if login_is_rate_limited(client_key):
             self.send_json(429, {"error": "Demasiados intentos. Espera 15 minutos."})
             return
@@ -786,8 +806,14 @@ class SmartPanelHandler(BaseHTTPRequestHandler):
             connection.close()
 
     def do_OPTIONS(self):
+        origin = self.allowed_cors_origin()
+        if not origin:
+            self.send_response(403)
+            self.end_headers()
+            return
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
         self.send_header("Access-Control-Max-Age", "600")
