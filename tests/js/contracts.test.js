@@ -81,6 +81,7 @@ test("la política web mantiene CSP sin scripts inline y el build coincide", () 
   assert.ok(csp, "falta Content-Security-Policy");
   assert.doesNotMatch(csp.value, /unsafe-inline/);
   assert.match(csp.value, /script-src[^;]*https:\/\/apis\.google\.com/);
+  assert.match(csp.value, /frame-src[^;]*https:\/\/smart-panel-53d7b\.firebaseapp\.com/);
   assert.doesNotMatch(html, /<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/i);
   assert.doesNotMatch(html.match(/<meta name="viewport"[^>]*>/i)?.[0] || "", /user-scalable=no|maximum-scale\s*=\s*1/i);
   const headers = policy.headers.flatMap((entry) => entry.headers);
