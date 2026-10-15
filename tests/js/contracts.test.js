@@ -52,9 +52,9 @@ test("el sistema de iconos PWA tiene fallbacks, tamaños y propósito seguros", 
   for (const file of ["icon-192.png", "icon-512.png", "icon-maskable.png", "apple-touch-icon.png", "favicon.ico", "favicon-32.png"]) {
     assert.ok(worker.includes(`/icons/${file}`), `el service worker no precarga ${file}`);
   }
-  const sourceImage = fs.readFileSync(path.join(root, "html/icons/app-icon-source.jpg"));
-  assert.deepEqual([...sourceImage.subarray(0, 2)], [0xff, 0xd8]);
-  assert.match(read("scripts/generate_pwa_icons.cjs"), /app-icon-source\.jpg/);
+  const sourceMark = read("html/icons/smart-panel-mark.svg");
+  assert.match(sourceMark, /<svg\b[^>]*viewBox="0 0 512 512"/);
+  assert.match(read("scripts/generate_pwa_icons.cjs"), /smart-panel-mark\.svg/);
 
   const svgs = [...html.matchAll(/<svg\b([^>]*)>/gi)].map((match) => match[1]);
   assert.ok(svgs.length > 0);
