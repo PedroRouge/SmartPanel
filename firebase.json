@@ -1,5 +1,4 @@
 {
-  "functions": { "source": "functions" },
   "database": { "rules": "firebase_rules.json" },
   "emulators": {
     "database": { "port": 9000 },

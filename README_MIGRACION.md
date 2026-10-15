@@ -15,28 +15,27 @@ No pegues contraseñas, tokens ni una clave privada de cuenta de servicio en el 
 ## Preparar Firebase
 
 1. Confirma que existen en Firebase Authentication la cuenta propietaria y la cuenta dedicada al ESP32. Email/Password debe estar habilitado.
-2. Configura credenciales de Firebase Admin SDK en una ubicación privada fuera del repositorio mediante Application Default Credentials (`GOOGLE_APPLICATION_CREDENTIALS`). La clave de Admin SDK nunca va en la PWA, el firmware ni Git.
-3. Desde la carpeta `functions`, instala dependencias y asigna los claims personalizados. Usa el correo real de cada cuenta:
+2. Configura las credenciales de administración en una ubicación privada fuera del repositorio. Una clave de cuenta de servicio nunca va en la PWA, el firmware ni Git.
+3. Asegúrate de que la cuenta web tenga el claim personalizado `role=admin` y la cuenta del ESP32 `role=device`. Tras cambiar un rol, cada usuario debe cerrar sesión y volver a iniciarla para recibir el claim actualizado.
 
-   ```powershell
-   $env:GOOGLE_APPLICATION_CREDENTIALS = 'C:\ruta-privada\firebase-admin.json'
-   node scripts/set-role.js 'correo-propietario' admin
-   node scripts/set-role.js 'correo-esp32' device
+   Para asignar claims en Firebase, usa Application Default Credentials privadas y la herramienta incluida:
+
+   ```sh
+   GOOGLE_APPLICATION_CREDENTIALS=/ruta/privada/firebase-admin.json node scripts/set-role.js correo admin
+   GOOGLE_APPLICATION_CREDENTIALS=/ruta/privada/firebase-admin.json node scripts/set-role.js correo-esp32 device
    ```
 
-   `set-role.js` preserva otros claims y solo permite `admin`, `device` o `none`. Tras cambiar un rol, el usuario debe cerrar sesión y volver a iniciarla para recibir el claim actualizado.
-
-4. Desde la raíz, selecciona el proyecto correcto en Firebase CLI y publica reglas y funciones:
+4. Desde la raíz, selecciona el proyecto correcto en Firebase CLI y publica solo las reglas:
 
    ```powershell
    firebase use <alias-del-proyecto>
-   firebase deploy --only database,functions
+   firebase deploy --only database
    ```
 
    Las reglas nuevas niegan por defecto el acceso a `/home` salvo las rutas asignadas a `admin` y `device`. La agenda y los tokens push siguen aislados por UID. No publiques estas reglas antes de asignar el claim `admin` a la cuenta que usa la web: quedará autenticada, pero sin acceso al panel.
 5. Confirma el dominio de Vercel en Firebase Authentication → Settings → Authorized domains.
 
-La Function `scheduleEventReminders` crea tareas indexadas al guardar eventos. `calendarPush` despacha vencimientos y reintenta fallos con una espera temporal. Las tareas vencidas/cambiadas se verifican contra el evento actual antes de notificar.
+El proyecto permanece en Firebase Spark. No despliegues Cloud Functions: requieren Blaze. Para enviar avisos push cuando la app está cerrada, sigue [PUSH_NOTIFICATIONS.md](PUSH_NOTIFICATIONS.md) y configura el worker gratuito de Apps Script.
 
 ## Preparar el firmware ESP32
 

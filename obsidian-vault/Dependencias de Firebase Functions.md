@@ -1,17 +1,14 @@
 ---
-tipo: configuracion
-modulo: backend/functions/dependencias
-estado: listo
-fecha: 2026-10-14
+tipo: modulo
+modulo: backend/notificaciones
+estado: retirado
+fecha: 2026-10-15
 tags:
   - capa/backend
-  - herramienta/nodejs
-  - servicio/firebase-functions
+  - servicio/firebase
 ---
 # Dependencias de Firebase Functions
 
-unctions/package.json fija runtime Node.js 20 y dependencias irebase-admin y irebase-functions para las funciones del servidor.
+El proyecto ya no tiene dependencias de Cloud Functions. Firebase Realtime Database y Firebase Cloud Messaging permanecen en el plan gratuito. El worker programado corre en Apps Script sin instalar paquetes npm; consulta [[Guía de notificaciones push]].
 
-Sirve a [[Funciones de entrada index.js]] y [[Funciones Cloud de notificaciones]]. Firebase CLI apunta a este paquete mediante [[Configuración Firebase y despliegue]].
-
-#json #capa/backend #herramienta/nodejs #servicio/firebase-functions
+#json #capa/backend #servicio/firebase

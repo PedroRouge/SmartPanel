@@ -1,8 +1,8 @@
 ---
 tipo: componente
-modulo: backend/functions/notificaciones
-estado: listo
-fecha: 2026-10-14
+modulo: backend/notificaciones
+estado: reemplazado
+fecha: 2026-10-15
 tags:
   - capa/backend
   - feature/core
@@ -10,8 +10,8 @@ tags:
 ---
 # Funciones Cloud de notificaciones
 
-Funciones exportadas desde unctions/index.js: calendarPush revisa eventos periódicamente y systemPush reacciona a avisos creados en home/pushAlerts. Helpers resuelven fechas, destinatarios/tokens y envío multicast.
+La versión basada en Cloud Functions fue retirada porque el proyecto no usará facturación. El envío programado gratuito usa Apps Script cada cinco minutos y Firebase Cloud Messaging; el setup está en [[Guía de notificaciones push]].
 
-Usa [[Dependencias de Firebase Functions]], [[Configuración Firebase y despliegue]], [[Reglas de Realtime Database]] y tokens que registra [[Registro de push]]. La agenda origen se modela en [[Agenda y calendario]].
+Los avisos locales dentro de la PWA siguen activos aunque el worker remoto no esté configurado.
 
-#javascript #capa/backend #feature/core #servicio/firebase-messaging
+#capa/backend #feature/core #servicio/firebase-messaging
