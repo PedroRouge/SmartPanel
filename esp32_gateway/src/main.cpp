@@ -148,7 +148,7 @@ bool isPrivateLanUrl(const String& url);
 void handleLightCommand(const String& lightName, bool targetState);
 void handlePoolCommand(bool targetState);
 void handleGateCommand(long long commandTimestamp);
-void handleTvCommand(const String& targetId, const String& action, const String& value);
+bool handleTvCommand(const String& targetId, const String& action, const String& value);
 void workerTask(void* param);
 void streamCallback(FirebaseStream data);
 void streamTimeoutCallback(bool timeout);
@@ -293,8 +293,21 @@ void workerTask(void* param) {
                     handleGateCommand(cmd.timestamp);
                     break;
                 case CMD_TV:
-                    handleTvCommand(String(cmd.deviceId), String(cmd.action), String(cmd.value));
+                {
+                    String targetId = String(cmd.deviceId);
+                    String action = String(cmd.action);
+                    bool success = handleTvCommand(targetId, action, String(cmd.value));
+
+                    FirebaseJson result;
+                    result.set("timestamp", (double)cmd.timestamp);
+                    result.set("targetId", targetId);
+                    result.set("action", action);
+                    result.set("success", success);
+                    if (!Firebase.RTDB.setJSON(&fbdo, "/home/state/tvCommandResult", &result)) {
+                        Serial.printf("[TV] No se pudo publicar el resultado: %s\n", fbdo.errorReason().c_str());
+                    }
                     break;
+                }
             }
             if (cmd.sourcePath[0] != '\0') { clearExecutedCommand(String(cmd.sourcePath)); }
         }
@@ -732,7 +745,7 @@ void handleGateCommand(long long commandTimestamp) {
     }
 }
 
-void handleTvCommand(const String& targetId, const String& action, const String& value) {
+bool handleTvCommand(const String& targetId, const String& action, const String& value) {
     Serial.printf("[TV] %s | Acción: %s | Valor: %s\n", targetId.c_str(), action.c_str(), value.c_str());
 
     String tvIp = TV_LIVING_IP;
@@ -741,22 +754,24 @@ void handleTvCommand(const String& targetId, const String& action, const String&
     else if (targetId == "tv-lucas")  { tvIp = TV_LUCAS_IP;  }
 
     if (action == "power") {
-        executeHttpLocalCommand("http://" + tvIp + ":8080/power");
+        return executeHttpLocalCommand("http://" + tvIp + ":8080/power");
 
     } else if (action == "set_volume") {
         int vol = value.toInt();
-        executeHttpLocalCommand("http://" + tvIp + ":8080/volume?level=" + String(vol));
+        return executeHttpLocalCommand("http://" + tvIp + ":8080/volume?level=" + String(vol));
 
     } else if (action == "toggle_mute") {
-        executeHttpLocalCommand("http://" + tvIp + ":8080/mute");
+        return executeHttpLocalCommand("http://" + tvIp + ":8080/mute");
 
     } else if (action == "launch_app") {
         String encodedApp = value;
         encodedApp.replace("+", "%2B");
         encodedApp.replace(" ", "%20");
-        executeHttpLocalCommand("http://" + tvIp + ":8080/app?name=" + encodedApp);
+        return executeHttpLocalCommand("http://" + tvIp + ":8080/app?name=" + encodedApp);
 
     } else if (action == "remote_key") {
-        executeHttpLocalCommand("http://" + tvIp + ":8080/key?name=" + value);
+        return executeHttpLocalCommand("http://" + tvIp + ":8080/key?name=" + value);
     }
+
+    return false;
 }

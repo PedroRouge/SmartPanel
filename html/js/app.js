@@ -1053,11 +1053,12 @@
     renderTVs();
     renderMedia();
 
+    var commandAt = Date.now();
     var commandPayload = {
       targetId: tv.id,
       action: action,
       value: value !== undefined ? value : null,
-      timestamp: Date.now()
+      timestamp: commandAt
     };
     var updates = { "home/commands/tv": commandPayload };
     if (action === "set_volume") {
@@ -1069,10 +1070,24 @@
       updates["home/tvs/" + tv.id + "/poweredOn"] = tvState.poweredOn;
     }
 
+    setCommandFeedback("Orden publicada. Esperando el resultado del ESP32...", "pending");
+    feedback.textContent = tv.name + " - esperando respuesta del ESP32...";
+    var commandPublished = false;
     updateFirebasePaths(updates).then(function () {
-      feedback.textContent = tv.name + " - orden enviada; el televisor no tiene confirmaci\u00f3n f\u00edsica.";
-      setCommandFeedback("Solicitud de " + tv.name + " publicada en Firebase; el ESP32 no ha confirmado la ejecuci\u00f3n.", "pending");
-      recordActivity("Comando multimedia: " + tv.name, "pending", "Solicitud publicada (" + action.replace(/_/g, " ") + "); ejecucion fisica aun no confirmada");
+      commandPublished = true;
+      return waitForFirebaseValue("home/state/tvCommandResult/timestamp", commandAt, 10000);
+    }).then(function () {
+      return fetchFirebaseValueViaRest(auth.currentUser, "home/state/tvCommandResult");
+    }).then(function (result) {
+      if (!result || Number(result.timestamp) !== commandAt || result.targetId !== tv.id) {
+        throw new Error("El resultado recibido no corresponde a esta orden.");
+      }
+      if (result.success !== true) {
+        throw new Error("El ESP32 recibió la orden, pero el servicio de control de la TV en el puerto 8080 no respondió correctamente.");
+      }
+      feedback.textContent = tv.name + " - el servicio de control respondió; el estado físico de la pantalla no está confirmado.";
+      setCommandFeedback("El ESP32 ejecutó la solicitud para " + tv.name + "; el servicio respondió, pero no hay telemetría del estado físico.", "success");
+      recordActivity("Comando multimedia: " + tv.name, "ok", "El ESP32 obtuvo respuesta del servicio local para " + action.replace(/_/g, " ") + "; estado físico sin confirmar");
     }).catch(function (error) {
       tvState.volume = previous.volume;
       tvState.muted = previous.muted;
@@ -1082,8 +1097,24 @@
       saveState();
       renderTVs();
       renderMedia();
-      feedback.textContent = "Error: " + error.message;
-      setCommandFeedback("No se pudo enviar la orden multimedia: " + error.message, "error");
+      if (commandPublished) {
+        var rollback = {};
+        if (action === "set_volume") {
+          rollback["home/tvs/" + tv.id + "/volume"] = previous.volume;
+          rollback["home/tvs/" + tv.id + "/muted"] = previous.muted;
+        } else if (action === "toggle_mute") {
+          rollback["home/tvs/" + tv.id + "/muted"] = previous.muted;
+        } else if (action === "power") {
+          rollback["home/tvs/" + tv.id + "/poweredOn"] = previous.poweredOn;
+        }
+        if (Object.keys(rollback).length) {
+          updateFirebasePaths(rollback).catch(function (rollbackError) {
+            console.warn("No se pudo revertir el estado optimista de la TV:", rollbackError);
+          });
+        }
+      }
+      feedback.textContent = "No se confirmó la orden de " + tv.name + ": " + error.message;
+      setCommandFeedback("Firebase publicó la solicitud, pero la ejecución de " + tv.name + " falló: " + error.message, "error");
       recordActivity("Comando multimedia: " + tv.name, "error", error.message);
     });
   }
