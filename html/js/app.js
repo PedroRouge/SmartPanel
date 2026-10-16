@@ -590,13 +590,17 @@
       if (stopped) { return Promise.reject(new Error("Se cancelo la espera de confirmacion.")); }
       return fetchFirebaseValueViaRest(user, path).then(function (value) {
         if (stopped) { throw new Error("Se cancelo la espera de confirmacion."); }
-        if (value === target) { return value; }
-        if (Date.now() >= expires) { throw new Error(timeoutMessage || "El ESP32 no confirmo la accion a tiempo."); }
-        return new Promise(function (resolve) { setTimeout(resolve, 900); }).then(poll);
+        // Usar Number() para comparar timestamps: Firebase REST puede devolver floats
+        // (ej. 1729040252123.0) que no pasan la comparación estricta === con enteros JS.
+        var numericMatch = (typeof target === "number" && Number(value) === target);
+        var exactMatch   = (typeof target !== "number" && value === target);
+        if (numericMatch || exactMatch) { return value; }
+        if (Date.now() >= expires) { throw new Error(timeoutMessage || "El ESP32 no confirmó la acción a tiempo."); }
+        return new Promise(function (resolve) { setTimeout(resolve, 800); }).then(poll);
       });
     }
     var timeout = new Promise(function (_, reject) {
-      timer = setTimeout(function () { stopped = true; reject(new Error(timeoutMessage || "El ESP32 no confirmo la accion a tiempo.")); }, timeoutMs);
+      timer = setTimeout(function () { stopped = true; reject(new Error(timeoutMessage || "El ESP32 no confirmó la acción a tiempo.")); }, timeoutMs);
     });
     return Promise.race([poll(), timeout]).finally(function () { stopped = true; clearTimeout(timer); });
   }
@@ -1070,24 +1074,37 @@
       updates["home/tvs/" + tv.id + "/poweredOn"] = tvState.poweredOn;
     }
 
-    setCommandFeedback("Orden publicada. Esperando confirmación del control Android TV...", "pending");
-    feedback.textContent = tv.name + " - esperando respuesta del control Android TV...";
+    setCommandFeedback("Orden publicada. Esperando confirmación del ESP32...", "pending");
+    feedback.textContent = tv.name + " - esperando respuesta del ESP32...";
     var commandPublished = false;
     updateFirebasePaths(updates).then(function () {
       commandPublished = true;
-      return waitForFirebaseValue("home/state/tvCommandResult/timestamp", commandAt, 20000, "El puente Android TV no confirmó la orden a tiempo.");
+      // Primero limpiar cualquier resultado previo para evitar falso-positivo.
+      // Se hace con un PATCH que pone el nodo a null (elimina en Firebase RTDB).
+      var clearStale = {};
+      clearStale["home/state/tvCommandResult"] = null;
+      return updateFirebasePaths(clearStale).catch(function () { /* no bloquear si falla */ });
+    }).then(function () {
+      // Esperar hasta 15 s que el ESP32 escriba el resultado en Firebase.
+      // El ESP32 tiene un TTL guard de 10 s + hasta ~5 s de handshake TLS.
+      return waitForFirebaseValue(
+        "home/state/tvCommandResult/timestamp",
+        commandAt,
+        15000,
+        "El ESP32 no confirmó la orden a tiempo. Verificá que el gateway esté en línea y la TV accesible."
+      );
     }).then(function () {
       return fetchFirebaseValueViaRest(auth.currentUser, "home/state/tvCommandResult");
     }).then(function (result) {
       if (!result || Number(result.timestamp) !== commandAt || result.targetId !== tv.id) {
-        throw new Error("El resultado recibido no corresponde a esta orden.");
+        throw new Error("El resultado recibido no corresponde a esta orden (posible desfase de reloj).");
       }
       if (result.success !== true) {
-        throw new Error(result.message || "El puente Android TV no pudo completar la orden. Verificá que la TV esté encendida y vinculada.");
+        throw new Error(result.message || "El ESP32 no pudo completar la orden. Verificá que la TV esté encendida y vinculada.");
       }
-      feedback.textContent = tv.name + " - el control Android TV confirmó el envío; no se recibe telemetría del estado físico.";
-      setCommandFeedback("El control Android TV ejecutó la solicitud para " + tv.name + "; el estado físico de la pantalla no está confirmado.", "success");
-      recordActivity("Comando multimedia: " + tv.name, "ok", "Android TV Remote confirmó el envío de " + action.replace(/_/g, " ") + "; estado físico sin telemetría");
+      feedback.textContent = tv.name + " - el ESP32 confirmó el envío del comando.";
+      setCommandFeedback("El ESP32 ejecutó la solicitud para " + tv.name + ". El estado físico de la pantalla no está confirmado por telemetría.", "success");
+      recordActivity("Comando multimedia: " + tv.name, "ok", "ESP32 confirmó el envío de " + action.replace(/_/g, " ") + "; estado físico sin telemetría");
     }).catch(function (error) {
       tvState.volume = previous.volume;
       tvState.muted = previous.muted;
@@ -1113,8 +1130,8 @@
           });
         }
       }
-      feedback.textContent = "No se confirmó la orden de " + tv.name + ": " + error.message;
-      setCommandFeedback("Firebase publicó la solicitud, pero falló el control Android TV de " + tv.name + ": " + error.message, "error");
+      feedback.textContent = "Sin confirmación del ESP32 para " + tv.name + ": " + error.message;
+      setCommandFeedback("Error en el control de " + tv.name + ": " + error.message, "error");
       recordActivity("Comando multimedia: " + tv.name, "error", error.message);
     });
   }

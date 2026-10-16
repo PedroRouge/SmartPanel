@@ -343,6 +343,11 @@ void workerTask(void* param) {
                     String action = String(cmd.action);
                     String value = String(cmd.value);
                     String errorMsg = "";
+
+                    // Limpiar resultado previo en Firebase ANTES de ejecutar,
+                    // para evitar que el frontend lea un resultado viejo como confirmación.
+                    Firebase.RTDB.deleteNode(&fbdo, "/home/state/tvCommandResult");
+
                     bool success = handleTvCommand(targetId, action, value, errorMsg);
 
                     FirebaseJson result;
@@ -385,8 +390,9 @@ bool isCommandFresh(long long cmdTimestampMs) {
 
     if (diffMs < 0) { diffMs = -diffMs; }
 
-    if (diffMs > 10000LL) {
-        Serial.printf("[TTL Guard] Comando RECHAZADO — antigüedad: %lld ms (> 10s)\n", diffMs);
+    // 15 s: margen para latencia de Firebase stream (~1-2 s) + handshake TLS a la TV (~5 s)
+    if (diffMs > 15000LL) {
+        Serial.printf("[TTL Guard] Comando RECHAZADO — antigüedad: %lld ms (> 15s)\n", diffMs);
         return false;
     }
     Serial.printf("[TTL Guard] Comando VÁLIDO — antigüedad: %lld ms\n", diffMs);
