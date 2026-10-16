@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "83";
+  var APP_BUILD_VERSION = "84";
   var STORAGE_KEY = "smart-panel-state-v3";
   var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
@@ -581,7 +581,7 @@
     });
   }
 
-  function waitForFirebaseValue(path, target, timeoutMs) {
+  function waitForFirebaseValue(path, target, timeoutMs, timeoutMessage) {
     var user = auth && auth.currentUser;
     var expires = Date.now() + timeoutMs;
     var stopped = false;
@@ -591,12 +591,12 @@
       return fetchFirebaseValueViaRest(user, path).then(function (value) {
         if (stopped) { throw new Error("Se cancelo la espera de confirmacion."); }
         if (value === target) { return value; }
-        if (Date.now() >= expires) { throw new Error("El ESP32 no confirmo la accion a tiempo."); }
+        if (Date.now() >= expires) { throw new Error(timeoutMessage || "El ESP32 no confirmo la accion a tiempo."); }
         return new Promise(function (resolve) { setTimeout(resolve, 900); }).then(poll);
       });
     }
     var timeout = new Promise(function (_, reject) {
-      timer = setTimeout(function () { stopped = true; reject(new Error("El ESP32 no confirmo la accion a tiempo.")); }, timeoutMs);
+      timer = setTimeout(function () { stopped = true; reject(new Error(timeoutMessage || "El ESP32 no confirmo la accion a tiempo.")); }, timeoutMs);
     });
     return Promise.race([poll(), timeout]).finally(function () { stopped = true; clearTimeout(timer); });
   }
@@ -1075,7 +1075,7 @@
     var commandPublished = false;
     updateFirebasePaths(updates).then(function () {
       commandPublished = true;
-      return waitForFirebaseValue("home/state/tvCommandResult/timestamp", commandAt, 20000);
+      return waitForFirebaseValue("home/state/tvCommandResult/timestamp", commandAt, 20000, "El puente Android TV no confirmó la orden a tiempo.");
     }).then(function () {
       return fetchFirebaseValueViaRest(auth.currentUser, "home/state/tvCommandResult");
     }).then(function (result) {
@@ -1083,7 +1083,7 @@
         throw new Error("El resultado recibido no corresponde a esta orden.");
       }
       if (result.success !== true) {
-        throw new Error("El puente Android TV no pudo completar la orden. Verificá que la TV esté encendida y vinculada.");
+        throw new Error(result.message || "El puente Android TV no pudo completar la orden. Verificá que la TV esté encendida y vinculada.");
       }
       feedback.textContent = tv.name + " - el control Android TV confirmó el envío; no se recibe telemetría del estado físico.";
       setCommandFeedback("El control Android TV ejecutó la solicitud para " + tv.name + "; el estado físico de la pantalla no está confirmado.", "success");
@@ -2640,7 +2640,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=83").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=85").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -3380,8 +3380,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v83";
-    byId("script-build-version").textContent = "JS v81";
+    byId("frontend-version").textContent = "HTML v84";
+    byId("script-build-version").textContent = "JS v84";
 
     initializeConfirmDialog();
     initializeTabs();
