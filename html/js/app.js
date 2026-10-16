@@ -1070,12 +1070,12 @@
       updates["home/tvs/" + tv.id + "/poweredOn"] = tvState.poweredOn;
     }
 
-    setCommandFeedback("Orden publicada. Esperando el resultado del ESP32...", "pending");
-    feedback.textContent = tv.name + " - esperando respuesta del ESP32...";
+    setCommandFeedback("Orden publicada. Esperando confirmación del control Android TV...", "pending");
+    feedback.textContent = tv.name + " - esperando respuesta del control Android TV...";
     var commandPublished = false;
     updateFirebasePaths(updates).then(function () {
       commandPublished = true;
-      return waitForFirebaseValue("home/state/tvCommandResult/timestamp", commandAt, 10000);
+      return waitForFirebaseValue("home/state/tvCommandResult/timestamp", commandAt, 20000);
     }).then(function () {
       return fetchFirebaseValueViaRest(auth.currentUser, "home/state/tvCommandResult");
     }).then(function (result) {
@@ -1083,11 +1083,11 @@
         throw new Error("El resultado recibido no corresponde a esta orden.");
       }
       if (result.success !== true) {
-        throw new Error("El ESP32 recibió la orden, pero el servicio de control de la TV en el puerto 8080 no respondió correctamente.");
+        throw new Error("El puente Android TV no pudo completar la orden. Verificá que la TV esté encendida y vinculada.");
       }
-      feedback.textContent = tv.name + " - el servicio de control respondió; el estado físico de la pantalla no está confirmado.";
-      setCommandFeedback("El ESP32 ejecutó la solicitud para " + tv.name + "; el servicio respondió, pero no hay telemetría del estado físico.", "success");
-      recordActivity("Comando multimedia: " + tv.name, "ok", "El ESP32 obtuvo respuesta del servicio local para " + action.replace(/_/g, " ") + "; estado físico sin confirmar");
+      feedback.textContent = tv.name + " - el control Android TV confirmó el envío; no se recibe telemetría del estado físico.";
+      setCommandFeedback("El control Android TV ejecutó la solicitud para " + tv.name + "; el estado físico de la pantalla no está confirmado.", "success");
+      recordActivity("Comando multimedia: " + tv.name, "ok", "Android TV Remote confirmó el envío de " + action.replace(/_/g, " ") + "; estado físico sin telemetría");
     }).catch(function (error) {
       tvState.volume = previous.volume;
       tvState.muted = previous.muted;
@@ -1114,7 +1114,7 @@
         }
       }
       feedback.textContent = "No se confirmó la orden de " + tv.name + ": " + error.message;
-      setCommandFeedback("Firebase publicó la solicitud, pero la ejecución de " + tv.name + " falló: " + error.message, "error");
+      setCommandFeedback("Firebase publicó la solicitud, pero falló el control Android TV de " + tv.name + ": " + error.message, "error");
       recordActivity("Comando multimedia: " + tv.name, "error", error.message);
     });
   }

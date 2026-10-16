@@ -504,7 +504,7 @@ void sendHeartbeat() {
     time_t nowSec = time(nullptr);
     long long nowMs = (nowSec > 100000) ? (long long)nowSec * 1000LL : (long long)millis();
     json.set("last_seen", nowMs);
-    json.set("version", "2.1.0-dualcore");
+    json.set("version", "2.2.0-dualcore-tvbridge");
 
     if (!Firebase.RTDB.setJSON(&heartbeatData, "/home/gateway/status", &json)) {
         databaseConnected = false;
@@ -579,6 +579,9 @@ void streamCallback(FirebaseStream data) {
     }
     // --- TV: /tv (JSON) ---
     else if (path == "/tv" && dataType == "json") {
+#if TV_COMMANDS_VIA_ANDROID_BRIDGE
+        Serial.println("[TV] Comando recibido; lo procesa el puente Android TV emparejado.");
+#else
         FirebaseJson json = data.jsonObject();
         FirebaseJsonData jd;
         long long ts = 0;
@@ -600,6 +603,7 @@ void streamCallback(FirebaseStream data) {
             strncpy(cmd.sourcePath, "/home/commands/tv", sizeof(cmd.sourcePath) - 1);
             enqueue = true;
         }
+#endif
     }
 
     if (enqueue && cmdQueue) {

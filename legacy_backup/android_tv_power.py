@@ -17,10 +17,20 @@ REMOTE_KEY_CODES = {
     "LEFT": "KEYCODE_DPAD_LEFT",
     "RIGHT": "KEYCODE_DPAD_RIGHT",
     "OK": "KEYCODE_DPAD_CENTER",
+    "ENTER": "KEYCODE_ENTER",
     "BACK": "KEYCODE_BACK",
     "HOME": "KEYCODE_HOME",
     "MENU": "KEYCODE_MENU",
-    "PLAY_PAUSE": "KEYCODE_MEDIA_PLAY_PAUSE"
+    "PLAY_PAUSE": "KEYCODE_MEDIA_PLAY_PAUSE",
+    "MUTE": "KEYCODE_VOLUME_MUTE"
+}
+ANDROID_TV_APP_IDS = {
+    "netflix": "com.netflix.ninja",
+    "youtube": "com.google.android.youtube.tv",
+    "disney+": "com.disney.disneyplus",
+    "spotify": "com.spotify.tv.android",
+    "prime video": "com.amazon.amazonvideo.livingroom",
+    "flow": "ar.com.flow.androidtv"
 }
 _pairing_sessions = {}
 _pairing_lock = threading.Lock()
@@ -244,3 +254,60 @@ def send_android_tv_key(host, key):
         raise RuntimeError("El emparejamiento Android TV venció; vuelve a emparejarlo.") from error
     except (CannotConnect, ConnectionClosed, OSError, asyncio.TimeoutError) as error:
         raise RuntimeError("No se pudo conectar con Android TV para enviar la tecla") from error
+
+
+async def _set_android_tv_volume(host, target_percent):
+    remote = create_remote(host)
+    try:
+        await remote.async_connect()
+        volume = remote.volume_info
+        if not volume or not volume.get("max"):
+            raise RuntimeError("Android TV no informó su volumen actual")
+        maximum = int(volume["max"])
+        current = int(volume["level"])
+        target = max(0, min(maximum, round(float(target_percent) * maximum / 100)))
+        key = "KEYCODE_VOLUME_UP" if target > current else "KEYCODE_VOLUME_DOWN"
+        for _ in range(abs(target - current)):
+            remote.send_key_command(key)
+            await asyncio.sleep(0.06)
+        await asyncio.sleep(0.25)
+        return round(target * 100 / maximum)
+    finally:
+        remote.disconnect()
+
+
+def set_android_tv_volume(host, target_percent):
+    try:
+        percent = float(target_percent)
+    except (TypeError, ValueError) as error:
+        raise ValueError("El volumen debe ser un número entre 0 y 100") from error
+    if not 0 <= percent <= 100:
+        raise ValueError("El volumen debe estar entre 0 y 100")
+    if not power_control_ready(host):
+        raise RuntimeError("Empareja este Android TV antes de usar el control remoto")
+    try:
+        return asyncio.run(_set_android_tv_volume(host, percent))
+    except (CannotConnect, ConnectionClosed, InvalidAuth, OSError, asyncio.TimeoutError) as error:
+        raise RuntimeError("No se pudo ajustar el volumen de Android TV") from error
+
+
+async def _launch_android_tv_app(host, app_id):
+    remote = create_remote(host)
+    try:
+        await remote.async_connect()
+        remote.send_launch_app_command(app_id)
+        await asyncio.sleep(0.1)
+    finally:
+        remote.disconnect()
+
+
+def launch_android_tv_app(host, app_name):
+    app_id = ANDROID_TV_APP_IDS.get(str(app_name).strip().lower())
+    if not app_id:
+        raise ValueError("No hay un ID de Android TV configurado para esa aplicación")
+    if not power_control_ready(host):
+        raise RuntimeError("Empareja este Android TV antes de abrir aplicaciones")
+    try:
+        asyncio.run(_launch_android_tv_app(host, app_id))
+    except (CannotConnect, ConnectionClosed, InvalidAuth, OSError, asyncio.TimeoutError) as error:
+        raise RuntimeError("No se pudo abrir la aplicación en Android TV") from error

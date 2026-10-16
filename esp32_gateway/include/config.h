@@ -45,3 +45,9 @@ struct WifiSmartDevice {
 #ifndef RGB_LED_PIN
 #define RGB_LED_PIN 48
 #endif
+
+// Android TV Remote pairing keys live on the local PC bridge, so route TV
+// commands there instead of attempting the unsupported TV HTTP port 8080.
+#ifndef TV_COMMANDS_VIA_ANDROID_BRIDGE
+#define TV_COMMANDS_VIA_ANDROID_BRIDGE 1
+#endif
