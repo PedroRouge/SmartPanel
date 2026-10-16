@@ -184,6 +184,7 @@ def process_current_command(firebase: FirebaseRest, last_timestamp: int) -> int:
             "targetId": command.get("targetId", ""),
             "action": command.get("action", ""),
             "success": False,
+            "message": str(error)[:200],
         }
         try:
             firebase.write("/home/state/tvCommandResult", result)

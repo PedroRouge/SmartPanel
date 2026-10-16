@@ -1,17 +1,17 @@
-# Control de Android TV
+# Control Autónomo de Android TV (CERO PC)
 
-Las órdenes de TV se envían por Android TV Remote desde el puente Python del PC. El ESP32 sigue atendiendo luces, pileta y portón; no intenta conectarse al puerto HTTP `8080` de las TVs.
+Las órdenes de TV ahora las ejecuta directamente el **ESP32-S3 por Wi-Fi local** utilizando el protocolo Android TV Remote v2 (TLS con mTLS en el puerto 6466). No se requiere PC encendida, scripts de Python ni tareas programadas en Windows.
 
-## Requisitos de operación
+## Arquitectura de Operación
 
-- El PC debe estar encendido, con la sesión de Windows iniciada y conectado a la misma red local que las TVs.
-- Las credenciales de Firebase del dispositivo se leen desde `include/config.local.h`; no se suben a Git.
-- El emparejamiento Android TV se guarda en el perfil del usuario de Windows.
-- El programador de tareas inicia el puente al iniciar sesión como `SmartPanel-AndroidTV-Bridge`.
-- Para iniciarlo manualmente desde la raíz del proyecto: `python scripts/android_tv_firebase_bridge.py`.
+1. **Lectura en tiempo real**: El ESP32 escucha el stream en `/home/commands/tv` mediante la biblioteca Firebase ESP Client en Core 1.
+2. **Despacho asíncrono**: Core 1 encola la orden a `workerTask` en Core 0 para no bloquear la comunicación de red.
+3. **Comunicación Wi-Fi mTLS**: El ESP32 abre un socket `WiFiClientSecure` con la IP del televisor en el puerto 6466, autentica mediante el certificado y clave RSA del televisor (`tv_certs.local.h`) y envía el mensaje Protobuf correspondiente (encendido, volumen, silencio, navegación, apps).
+4. **Respuesta en Firebase**: El ESP32 publica el resultado en `/home/state/tvCommandResult` con el timestamp de la orden, permitiendo que la interfaz web confirme el envío de inmediato.
 
-El puente descarta comandos vencidos, ejecuta una orden nueva y escribe el resultado en `home/state/tvCommandResult`. La web espera ese resultado y muestra error si el PC o la TV no están disponibles. El resultado confirma que Android TV Remote aceptó el envío; no equivale a telemetría del estado físico de la pantalla.
+## Actualizaciones Inalámbricas (ArduinoOTA)
 
-## Emparejar de nuevo
-
-Desde la raíz del proyecto, ejecutar `python legacy_backup/pair_android_tv.py <IP>` y completar el código en pantalla. Las IP se encuentran en `esp32_gateway/include/config.local.h`.
+El firmware incorpora soporte para ArduinoOTA protegido por contraseña:
+- **Puerto OTA**: 3232
+- **Hostname**: `smartpanel-esp32`
+- **Flasheo por Wi-Fi**: `pio run -e esp32-s3-ota -t upload`
