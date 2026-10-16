@@ -39,6 +39,7 @@
           "targetId": { ".validate": "newData.isString()" },
           "action": { ".validate": "newData.isString()" },
           "success": { ".validate": "newData.isBoolean()" },
+          "message": { ".validate": "newData.isString() && newData.val().length <= 500" },
           "$other": { ".validate": false }
         }
       },

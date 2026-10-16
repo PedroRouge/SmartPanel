@@ -25,6 +25,7 @@ functions/.runtimeconfig.json
 .DS_Store
 Thumbs.db
 desktop.ini
+.agents
 
 # Editores
 .vscode/
@@ -38,6 +39,7 @@ desktop.ini
 # Usá esp32_gateway/include/config.local.h para sobreescribir en local.
 # -----------------------------------------------------------------------
 esp32_gateway/include/config.local.h
+esp32_gateway/include/*.local.h
 esp32_gateway/.pio/
 .playwright-browsers/
 playwright-report/

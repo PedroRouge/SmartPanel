@@ -2160,7 +2160,7 @@
 
     var selected = getSelectedTv();
     byId("tv-list-empty").hidden = TV_DEVICES.length > 0;
-    byId("tv-api-status").textContent = "Comandos por ESP32-S3 · " + TV_DEVICES.length + " dispositivos configurados · estado físico sin confirmar";
+    byId("tv-api-status").textContent = "Android TV Wi-Fi (ESP32-S3) · " + TV_DEVICES.length + " dispositivos configurados · estado físico sin confirmar";
 
     TV_DEVICES.forEach(function (tv) {
       var btn = document.createElement("button");

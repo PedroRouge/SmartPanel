@@ -11,9 +11,7 @@
 #define FIREBASE_DATABASE_URL "https://YOUR_PROJECT-default-rtdb.firebaseio.com"
 #define FIREBASE_USER_EMAIL "esp32@YOUR_PROJECT.local"
 #define FIREBASE_USER_PASSWORD "REPLACE_WITH_A_UNIQUE_DEVICE_PASSWORD"
-
-// Set to 1 when Android TV commands are handled by the paired desktop bridge.
-#define TV_COMMANDS_VIA_ANDROID_BRIDGE 1
+#define OTA_PASSWORD "YOUR_SECURE_OTA_PASSWORD"
 
 #define SMART_PANEL_LOCAL_NETWORK_CONFIG
 const WifiSmartDevice SMART_LIGHTS[] = {
@@ -32,3 +30,17 @@ const size_t NUM_LIGHTS = sizeof(SMART_LIGHTS) / sizeof(SMART_LIGHTS[0]);
 #define TV_PEDRO_IP "192.168.1.10"
 #define TV_PADRES_IP "192.168.1.53"
 #define TV_LUCAS_IP "192.168.1.51"
+
+#if __has_include("tv_certs.local.h")
+#include "tv_certs.local.h"
+const SmartTvDevice SMART_TVS[] = {
+    { "tv-pedro",  TV_PEDRO_IP,  TV_PEDRO_CERT,  TV_PEDRO_KEY },
+    { "tv-living", TV_LIVING_IP, TV_LIVING_CERT, TV_LIVING_KEY },
+    { "tv-padres", TV_PADRES_IP, TV_PADRES_CERT, TV_PADRES_KEY },
+    { "tv-lucas",  TV_LUCAS_IP,  TV_LUCAS_CERT,  TV_LUCAS_KEY }
+};
+const size_t NUM_TVS = sizeof(SMART_TVS) / sizeof(SMART_TVS[0]);
+#else
+const SmartTvDevice SMART_TVS[] = {};
+const size_t NUM_TVS = 0;
+#endif

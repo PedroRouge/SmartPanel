@@ -120,3 +120,26 @@ test("el acceso de administrador depende del claim y no del email", async () => 
   await assertSucceeds(set(ref(adminDb, "home/commands/timestamp"), Date.now()));
   await assertFails(set(ref(oldOwnerEmailDb, "home/commands/timestamp"), Date.now()));
 });
+
+test("device puede reportar tvCommandResult con o sin message", async () => {
+  const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
+  const resultRef = ref(deviceDb, "home/state/tvCommandResult");
+
+  const successResult = {
+    timestamp: Date.now(),
+    targetId: "tv-pedro",
+    action: "power",
+    success: true,
+  };
+  await assertSucceeds(set(resultRef, successResult));
+
+  const errorResult = {
+    timestamp: Date.now(),
+    targetId: "tv-pedro",
+    action: "power",
+    success: false,
+    message: "Couldn't connect to 192.168.0.10:6466",
+  };
+  await assertSucceeds(set(resultRef, errorResult));
+});
+
