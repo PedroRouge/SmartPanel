@@ -23,7 +23,7 @@ anchor = """            ret = getIdToken(false, toStringPtr(_EMPTY_STR), toStrin
 
             // send error cb
 """
-replacement = """            ret = getIdToken(false, toStringPtr(_EMPTY_STR), toStringPtr(_EMPTY_STR));
+previous_patch = """            ret = getIdToken(false, toStringPtr(_EMPTY_STR), toStringPtr(_EMPTY_STR));
 
             // Stop the token task on rejected credentials or a temporary Auth lockout.
             // The next request is throttled by config.signer.reqTO in readyToRequest().
@@ -32,9 +32,31 @@ replacement = """            ret = getIdToken(false, toStringPtr(_EMPTY_STR), to
 
             // send error cb
 """
+replacement = """            ret = getIdToken(false, toStringPtr(_EMPTY_STR), toStringPtr(_EMPTY_STR));
+
+            // A rejected email/password request may mean Firebase Auth is throttling this client.
+            // Back off exponentially instead of retrying on every ready()/RTDB call.
+            if (!ret && config->signer.tokens.status == token_status_error)
+            {
+                const uint32_t maxAuthRetryMs = 3600000;
+                config->signer.reqTO = config->signer.reqTO >= maxAuthRetryMs / 2
+                    ? maxAuthRetryMs
+                    : config->signer.reqTO * 2;
+                break;
+            }
+
+            // Restore the initial retry interval once Firebase issues a token.
+            if (ret)
+                config->signer.reqTO = 60000;
+
+            // send error cb
+"""
 
 if replacement in source:
     print("Firebase auth retry backoff patch already applied")
+elif previous_patch in source:
+    core_file.write_text(source.replace(previous_patch, replacement, 1), encoding="utf-8")
+    print("Upgraded Firebase auth retry to exponential backoff")
 elif anchor in source:
     core_file.write_text(source.replace(anchor, replacement, 1), encoding="utf-8")
     print("Applied Firebase auth retry backoff patch")
