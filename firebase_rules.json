@@ -31,6 +31,15 @@
             ".write": "auth != null && auth.token.role == 'device'",
             ".validate": "newData.isNumber() && newData.val() > 0"
           }
+        },
+        "tvCommandResult": {
+          ".write": "auth != null && auth.token.role == 'device'",
+          ".validate": "newData.hasChildren(['timestamp', 'targetId', 'action', 'success']) && newData.child('timestamp').isNumber() && newData.child('timestamp').val() > 0 && (newData.child('targetId').val() == 'tv-living' || newData.child('targetId').val() == 'tv-pedro' || newData.child('targetId').val() == 'tv-padres' || newData.child('targetId').val() == 'tv-lucas') && (newData.child('action').val() == 'power' || newData.child('action').val() == 'toggle_mute' || newData.child('action').val() == 'set_volume' || newData.child('action').val() == 'launch_app' || newData.child('action').val() == 'remote_key') && newData.child('success').isBoolean()",
+          "timestamp": { ".validate": "newData.isNumber() && newData.val() > 0" },
+          "targetId": { ".validate": "newData.isString()" },
+          "action": { ".validate": "newData.isString()" },
+          "success": { ".validate": "newData.isBoolean()" },
+          "$other": { ".validate": false }
         }
       },
       "commands": {
