@@ -66,10 +66,11 @@ unsigned long lastStreamCheck = 0;
 const unsigned long STREAM_CHECK_INTERVAL = 30000;  // 30 s
 bool streamSubscribed = false;
 bool rgbLedReady = false;
-bool lastWifiLedState = false;
+bool databaseConnected = false;
+int lastConnectionLedState = -1;
 
 void setRgbLed(uint8_t red, uint8_t green, uint8_t blue);
-void updateWifiLed();
+void updateConnectionLed();
 
 void initRgbLed() {
     rmt_config_t rmtConfig = {};
@@ -88,7 +89,7 @@ void initRgbLed() {
         return;
     }
     rgbLedReady = true;
-    setRgbLed(0, 0, 32);  // Azul hasta confirmar conexión Wi-Fi
+    setRgbLed(32, 0, 0);  // Rojo hasta conectar Wi-Fi y confirmar RTDB
 }
 
 void setRgbLed(uint8_t red, uint8_t green, uint8_t blue) {
@@ -116,16 +117,21 @@ void setRgbLed(uint8_t red, uint8_t green, uint8_t blue) {
     }
 }
 
-void updateWifiLed() {
-    const bool connected = WiFi.status() == WL_CONNECTED;
-    if (connected == lastWifiLedState) { return; }
-    lastWifiLedState = connected;
-    if (connected) {
-        setRgbLed(0, 32, 0);
-        Serial.println("[RGB] Verde: Wi-Fi conectado.");
-    } else {
+void updateConnectionLed() {
+    const bool wifiConnected = WiFi.status() == WL_CONNECTED;
+    const int state = !wifiConnected ? 0 : (databaseConnected ? 2 : 1);
+    if (state == lastConnectionLedState) { return; }
+    lastConnectionLedState = state;
+
+    if (state == 0) {
+        setRgbLed(32, 0, 0);
+        Serial.println("[RGB] Rojo: Wi-Fi desconectado.");
+    } else if (state == 1) {
         setRgbLed(0, 0, 32);
-        Serial.println("[RGB] Azul: Wi-Fi desconectado.");
+        Serial.println("[RGB] Azul: Wi-Fi conectado, Firebase RTDB sin confirmar.");
+    } else {
+        setRgbLed(0, 32, 0);
+        Serial.println("[RGB] Verde: Wi-Fi y Firebase RTDB conectados.");
     }
 }
 
@@ -207,15 +213,17 @@ void loop() {
     // Alimentar Watchdog
     esp_task_wdt_reset();
 
-    updateWifiLed();
-
     // Auto-reconexión Wi-Fi
     if (WiFi.status() != WL_CONNECTED) {
+        databaseConnected = false;
+        updateConnectionLed();
         Serial.println("[Wi-Fi] Conexión perdida. Reconectando...");
         WiFi.reconnect();
         delay(3000);
         return;
     }
+
+    updateConnectionLed();
 
     unsigned long now = millis();
 
@@ -486,7 +494,12 @@ void sendHeartbeat() {
     json.set("version", "2.1.0-dualcore");
 
     if (!Firebase.RTDB.setJSON(&heartbeatData, "/home/gateway/status", &json)) {
+        databaseConnected = false;
+        updateConnectionLed();
         Serial.printf("[Heartbeat] Error: %s\n", heartbeatData.errorReason().c_str());
+    } else {
+        databaseConnected = true;
+        updateConnectionLed();
     }
 }
 
