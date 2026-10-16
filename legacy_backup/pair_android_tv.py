@@ -3,7 +3,7 @@ import asyncio
 import os
 import sys
 
-from android_tv_power import create_remote, credential_paths
+from android_tv_power import create_remote, credential_paths, mark_android_tv_paired
 from servidor import scan_local_tvs
 
 
@@ -37,6 +37,7 @@ async def pair(host):
         await remote.async_start_pairing()
         pairing_code = input("Ingresa el código de 6 caracteres mostrado en el ONN: ").strip()
         await remote.async_finish_pairing(pairing_code)
+        mark_android_tv_paired(host)
         try:
             os.chmod(key, 0o600)
         except OSError:

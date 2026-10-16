@@ -32,11 +32,37 @@ def credential_paths(host):
     return directory / (identity + ".crt"), directory / (identity + ".key")
 
 
+def pairing_marker_path(host):
+    certificate, _ = credential_paths(host)
+    return certificate.with_suffix(".paired")
+
+
+def mark_android_tv_paired(host):
+    certificate, key = credential_paths(host)
+    if not certificate.is_file() or not key.is_file():
+        raise RuntimeError("Faltan las credenciales Android TV")
+    marker = pairing_marker_path(host)
+    marker.write_text("paired\n", encoding="ascii")
+    try:
+        marker.chmod(0o600)
+    except OSError:
+        pass
+
+
 def power_control_ready(host):
     if AndroidTVRemote is None:
         return False
     certificate, key = credential_paths(host)
-    return certificate.is_file() and key.is_file()
+    return certificate.is_file() and key.is_file() and pairing_marker_path(host).is_file()
+
+
+def _discard_pairing_credentials(host):
+    certificate, key = credential_paths(host)
+    for path in (certificate, key, pairing_marker_path(host)):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def create_remote(host):
@@ -63,6 +89,7 @@ class _PairingSession:
             self.loop.run_until_complete(self._pair())
         except BaseException as error:
             self.error = error
+            _discard_pairing_credentials(self.host)
         finally:
             self.loop.close()
             self.finished.set()
@@ -89,6 +116,7 @@ class _PairingSession:
             self.started.set()
             pairing_code = await asyncio.wait_for(self.code_future, timeout=180)
             await remote.async_finish_pairing(pairing_code)
+            mark_android_tv_paired(self.host)
         finally:
             remote.disconnect()
 
@@ -134,6 +162,7 @@ def finish_android_tv_pairing(host, pairing_code):
         certificate.parent.chmod(0o700)
     except OSError:
         pass
+    mark_android_tv_paired(host)
     return {"paired": True}
 
 
