@@ -12,6 +12,9 @@
 #define FIREBASE_USER_EMAIL "esp32@YOUR_PROJECT.local"
 #define FIREBASE_USER_PASSWORD "REPLACE_WITH_A_UNIQUE_DEVICE_PASSWORD"
 
+// Set to 1 when Android TV commands are handled by the paired desktop bridge.
+#define TV_COMMANDS_VIA_ANDROID_BRIDGE 1
+
 #define SMART_PANEL_LOCAL_NETWORK_CONFIG
 const WifiSmartDevice SMART_LIGHTS[] = {
     { "living", "192.168.1.101", PROTO_TASMOTA },
