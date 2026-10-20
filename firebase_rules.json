@@ -41,6 +41,16 @@
           "success": { ".validate": "newData.isBoolean()" },
           "message": { ".validate": "newData.isString() && newData.val().length <= 500" },
           "$other": { ".validate": false }
+        },
+        "tvPower": {
+          "$tvId": {
+            ".write": "auth != null && auth.token.role == 'device' && ($tvId == 'tv-living' || $tvId == 'tv-pedro' || $tvId == 'tv-padres' || $tvId == 'tv-lucas')",
+            ".validate": "newData.hasChildren(['status', 'observedAt', 'reason']) && (newData.child('status').val() == 'on' || newData.child('status').val() == 'off' || newData.child('status').val() == 'unknown') && newData.child('observedAt').isNumber() && newData.child('observedAt').val() > 0 && (newData.child('reason').val() == 'reported' || newData.child('reason').val() == 'not_configured' || newData.child('reason').val() == 'connection_failed')",
+            "status": { ".validate": "newData.isString() && (newData.val() == 'on' || newData.val() == 'off' || newData.val() == 'unknown')" },
+            "observedAt": { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "reason": { ".validate": "newData.isString() && (newData.val() == 'reported' || newData.val() == 'not_configured' || newData.val() == 'connection_failed')" },
+            "$other": { ".validate": false }
+          }
         }
       },
       "commands": {
@@ -65,7 +75,7 @@
         },
         "tv": {
           ".write": "auth != null && (auth.token.role == 'admin' || (auth.token.role == 'device' && !newData.exists()))",
-          ".validate": "newData.hasChildren(['timestamp', 'targetId', 'action']) && newData.child('timestamp').isNumber() && newData.child('timestamp').val() > 0 && (newData.child('targetId').val() == 'tv-living' || newData.child('targetId').val() == 'tv-pedro' || newData.child('targetId').val() == 'tv-padres' || newData.child('targetId').val() == 'tv-lucas') && ((newData.child('action').val() == 'power' || newData.child('action').val() == 'toggle_mute') || (newData.child('action').val() == 'set_volume' && newData.child('value').isNumber() && newData.child('value').val() >= 0 && newData.child('value').val() <= 100) || (newData.child('action').val() == 'launch_app' && (newData.child('value').val() == 'Netflix' || newData.child('value').val() == 'YouTube' || newData.child('value').val() == 'Flow' || newData.child('value').val() == 'Prime Video' || newData.child('value').val() == 'Disney+' || newData.child('value').val() == 'Spotify')) || (newData.child('action').val() == 'remote_key' && (newData.child('value').val() == 'UP' || newData.child('value').val() == 'DOWN' || newData.child('value').val() == 'LEFT' || newData.child('value').val() == 'RIGHT' || newData.child('value').val() == 'ENTER' || newData.child('value').val() == 'OK' || newData.child('value').val() == 'BACK' || newData.child('value').val() == 'HOME' || newData.child('value').val() == 'MENU' || newData.child('value').val() == 'PLAY_PAUSE')) )"
+          ".validate": "newData.hasChildren(['timestamp', 'targetId', 'action']) && newData.child('timestamp').isNumber() && newData.child('timestamp').val() > 0 && (newData.child('targetId').val() == 'tv-living' || newData.child('targetId').val() == 'tv-pedro' || newData.child('targetId').val() == 'tv-padres' || newData.child('targetId').val() == 'tv-lucas') && ((newData.child('action').val() == 'power' || newData.child('action').val() == 'toggle_mute') || (newData.child('action').val() == 'set_volume' && newData.child('value').isNumber() && newData.child('value').val() >= 0 && newData.child('value').val() <= 25) || (newData.child('action').val() == 'launch_app' && (newData.child('value').val() == 'Netflix' || newData.child('value').val() == 'YouTube' || newData.child('value').val() == 'Flow' || newData.child('value').val() == 'Prime Video' || newData.child('value').val() == 'Disney+' || newData.child('value').val() == 'Spotify')) || (newData.child('action').val() == 'remote_key' && (newData.child('value').val() == 'UP' || newData.child('value').val() == 'DOWN' || newData.child('value').val() == 'LEFT' || newData.child('value').val() == 'RIGHT' || newData.child('value').val() == 'ENTER' || newData.child('value').val() == 'OK' || newData.child('value').val() == 'BACK' || newData.child('value').val() == 'HOME' || newData.child('value').val() == 'MENU' || newData.child('value').val() == 'PLAY_PAUSE')) )"
         }
       },
       "gateway": {

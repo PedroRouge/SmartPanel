@@ -65,6 +65,32 @@ test("device solo puede escribir campos conocidos en home/state", async () => {
   await assertFails(get(ref(guestDb, "home/state/commandReceipts/_home_commands_lights_living")));
 });
 
+test("device reporta telemetria de energia TV con estado y antiguedad validados", async () => {
+  const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
+  const adminDb = environment.authenticatedContext("admin", { role: "admin" }).database();
+  const state = ref(deviceDb, "home/state/tvPower/tv-pedro");
+  const observedAt = Date.now();
+
+  await assertSucceeds(set(state, { status: "on", observedAt, reason: "reported" }));
+  await assertSucceeds(set(state, { status: "off", observedAt: observedAt + 1, reason: "reported" }));
+  await assertSucceeds(set(state, { status: "unknown", observedAt: observedAt + 2, reason: "not_configured" }));
+  await assertFails(set(state, { status: "on", observedAt: "recent", reason: "reported" }));
+  await assertFails(set(state, { status: "on", observedAt: observedAt + 3, reason: "invalid" }));
+  await assertFails(set(ref(deviceDb, "home/state/tvPower/unknown-tv"), {
+    status: "on",
+    observedAt: observedAt + 4,
+    reason: "reported",
+  }));
+  await assertFails(set(ref(deviceDb, "home/state/tvPower/tv-lucas/extra"), true));
+  await assertFails(set(ref(adminDb, "home/state/tvPower/tv-pedro"), {
+    status: "on",
+    observedAt: observedAt + 5,
+    reason: "reported",
+  }));
+  await assertSucceeds(get(ref(adminDb, "home/state/tvPower/tv-pedro")));
+  await assertFails(get(ref(environment.authenticatedContext("guest").database(), "home/state/tvPower/tv-pedro")));
+});
+
 test("gateway status exige el esquema exacto y valores acotados", async () => {
   const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
   const status = ref(deviceDb, "home/gateway/status");
@@ -142,4 +168,3 @@ test("device puede reportar tvCommandResult con o sin message", async () => {
   };
   await assertSucceeds(set(resultRef, errorResult));
 });
-

@@ -27,6 +27,7 @@
 FirebaseData streamData;
 FirebaseData fbdo;
 FirebaseData heartbeatData;
+FirebaseData tvStatusData;
 FirebaseAuth auth;
 FirebaseConfig config;
 
@@ -56,6 +57,9 @@ struct Command {
 };
 
 QueueHandle_t cmdQueue;
+SemaphoreHandle_t tvRemoteMutex = nullptr;
+volatile bool tvStatusRefreshRequested = true;
+const unsigned long TV_STATUS_POLL_INTERVAL_MS = 30000;
 
 // =========================================================================
 // VARIABLES DE CONTROL
@@ -142,6 +146,7 @@ void initArduinoOTA();
 void initFirebase();
 void initNTP();
 void sendHeartbeat();
+void tvStatusTask(void* param);
 void checkStreamHealth();
 bool executeHttpLocalCommand(const String& url);
 bool isPrivateLanUrl(const String& url);
@@ -149,16 +154,20 @@ void handleLightCommand(const String& lightName, bool targetState);
 void handlePoolCommand(bool targetState);
 void handleGateCommand(long long commandTimestamp);
 bool handleTvCommand(const String& targetId, const String& action, const String& value, String& errorMsg);
-bool executeAndroidTvRemote(const char* host, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg);
+bool executeAndroidTvRemote(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState = nullptr);
+bool executeAndroidTvRemoteUnlocked(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState);
+bool readAndroidTvPowerState(const SmartTvDevice& tv, bool& powerState, String& errorMsg);
+void publishTvPowerState(const SmartTvDevice& tv, const char* powerState, const char* reason);
 bool sendAndroidTvKeyPacket(WiFiClientSecure& client, int keyCode);
-bool sendAndroidTvVolumePacket(WiFiClientSecure& client, int volume);
 bool sendAndroidTvAppLinkPacket(WiFiClientSecure& client, const String& appLink);
 void workerTask(void* param);
+void otaTask(void* param);
 void streamCallback(FirebaseStream data);
 void streamTimeoutCallback(bool timeout);
 bool isCommandFresh(long long cmdTimestampMs);
 bool isValidTvCommand(const String& targetId, const String& action, const String& value);
 void clearExecutedCommand(const String& path);
+void publishTvCommandResult(const String& targetId, const String& action, long long timestamp, bool success, const String& errorMsg);
 
 // =========================================================================
 // SETUP — Corre en Core 1 por defecto en Arduino-ESP32
@@ -187,6 +196,10 @@ void setup() {
     if (!cmdQueue) {
         Serial.println("[FreeRTOS] ERROR: No se pudo crear la cola de comandos.");
     }
+    tvRemoteMutex = xSemaphoreCreateMutex();
+    if (!tvRemoteMutex) {
+        Serial.println("[FreeRTOS] ERROR: No se pudo crear el bloqueo del control Android TV.");
+    }
 
     // 3. Crear tarea Worker en Core 0 (pila de 12 KB para soportar handshake TLS)
     xTaskCreatePinnedToCore(
@@ -211,17 +224,26 @@ void setup() {
     // 7. Firebase Realtime Database
     initFirebase();
 
+    if (xTaskCreatePinnedToCore(
+            tvStatusTask,
+            "TV_STATUS",
+            12288,
+            NULL,
+            1,
+            NULL,
+            0
+        ) != pdPASS) {
+        Serial.println("[TV Status] No se pudo iniciar la tarea de telemetría.");
+    }
+
     Serial.println("[Sistema] Gateway autónomo listo y escuchando órdenes.\n");
 }
 
 // =========================================================================
-// LOOP — Corre en Core 1
+// LOOP — Corre en Core 1 (OTA se maneja en su propia tarea)
 // =========================================================================
 void loop() {
     esp_task_wdt_reset();
-
-    // Atender peticiones de actualización OTA
-    ArduinoOTA.handle();
 
     // Reconexión Wi-Fi
     if (WiFi.status() != WL_CONNECTED) {
@@ -250,6 +272,16 @@ void loop() {
     }
 
     delay(20);
+}
+
+// =========================================================================
+// TAREA OTA DEDICADA (Core 1) — Siempre responsiva, independiente del loop
+// =========================================================================
+void otaTask(void* param) {
+    for (;;) {
+        ArduinoOTA.handle();
+        vTaskDelay(pdMS_TO_TICKS(10)); // Poll cada 10 ms — ventana OTA siempre abierta
+    }
 }
 
 // =========================================================================
@@ -286,7 +318,19 @@ void initArduinoOTA() {
     });
 
     ArduinoOTA.begin();
-    Serial.println("[OTA] Servicio ArduinoOTA iniciado en puerto 3232.");
+
+    // Tarea dedicada: OTA siempre responsiva sin depender del loop()
+    xTaskCreatePinnedToCore(
+        otaTask,
+        "OTA_TASK",
+        8192,  // 8 KB: Update.begin() necesita mas stack que el loop() por defecto
+        NULL,
+        2,     // Prioridad 2 (mayor que CMD_WORKER=1 para respuesta inmediata)
+        NULL,
+        1      // Core 1 junto con el loop y el stream de Firebase
+    );
+
+    Serial.println("[OTA] Servicio ArduinoOTA iniciado en puerto 3232 (tarea dedicada).");
 }
 
 // =========================================================================
@@ -304,6 +348,15 @@ void workerTask(void* param) {
             }
             if (!isCommandFresh(cmd.timestamp)) {
                 Serial.println("[Worker] Comando vencido o sin hora confiable; descartado.");
+                if (cmd.type == CMD_TV && cmd.timestamp > 0) {
+                    publishTvCommandResult(
+                        String(cmd.deviceId),
+                        String(cmd.action),
+                        cmd.timestamp,
+                        false,
+                        "La orden TV llegó vencida o el reloj no está sincronizado; no se ejecutó. Volvé a enviarla."
+                    );
+                }
                 if (cmd.timestamp > 0 && cmd.sourcePath[0] != '\0') { clearExecutedCommand(String(cmd.sourcePath)); }
                 continue;
             }
@@ -318,12 +371,26 @@ void workerTask(void* param) {
                     Serial.println("[Worker] Comando duplicado; ya tiene recibo.");
                     continue;
                 }
-                if (!receiptFound && receiptData.httpCode() != 404) {
+                if (!receiptFound &&
+                    receiptData.httpCode() != FIREBASE_ERROR_HTTP_CODE_NOT_FOUND &&
+                    receiptData.httpCode() != FIREBASE_ERROR_PATH_NOT_EXIST) {
                     Serial.printf("[Worker] No se pudo verificar el recibo (%d); comando no ejecutado.\n", receiptData.httpCode());
+                    if (cmd.type == CMD_TV) {
+                        String message = "No se pudo verificar el recibo del comando (HTTP " +
+                            String(receiptData.httpCode()) + "); no se ejecutó.";
+                        publishTvCommandResult(String(cmd.deviceId), String(cmd.action), cmd.timestamp, false, message);
+                        clearExecutedCommand(String(cmd.sourcePath));
+                    }
                     continue;
                 }
                 if (!Firebase.RTDB.setDouble(&fbdo, receiptPath.c_str(), (double)cmd.timestamp)) {
                     Serial.printf("[Worker] No se pudo reservar el comando: %s\n", fbdo.errorReason().c_str());
+                    if (cmd.type == CMD_TV) {
+                        String message = "No se pudo reservar el recibo del comando (HTTP " +
+                            String(fbdo.httpCode()) + "); no se ejecutó.";
+                        publishTvCommandResult(String(cmd.deviceId), String(cmd.action), cmd.timestamp, false, message);
+                        clearExecutedCommand(String(cmd.sourcePath));
+                    }
                     continue;
                 }
             }
@@ -344,25 +411,9 @@ void workerTask(void* param) {
                     String value = String(cmd.value);
                     String errorMsg = "";
 
-                    // Limpiar resultado previo en Firebase ANTES de ejecutar,
-                    // para evitar que el frontend lea un resultado viejo como confirmación.
-                    Firebase.RTDB.deleteNode(&fbdo, "/home/state/tvCommandResult");
-
                     bool success = handleTvCommand(targetId, action, value, errorMsg);
-
-                    FirebaseJson result;
-                    result.set("timestamp", (double)cmd.timestamp);
-                    result.set("targetId", targetId);
-                    result.set("action", action);
-                    result.set("success", success);
-                    if (!success && errorMsg.length() > 0) {
-                        result.set("message", errorMsg);
-                    }
-                    if (!Firebase.RTDB.setJSON(&fbdo, "/home/state/tvCommandResult", &result)) {
-                        Serial.printf("[TV] No se pudo publicar el resultado: %s\n", fbdo.errorReason().c_str());
-                    } else {
-                        Serial.println("[TV] Resultado publicado en Firebase con éxito.");
-                    }
+                    publishTvCommandResult(targetId, action, cmd.timestamp, success, errorMsg);
+                    if (action == "power") { tvStatusRefreshRequested = true; }
                     break;
                 }
             }
@@ -407,7 +458,7 @@ bool isValidTvCommand(const String& targetId, const String& action, const String
         if (value.length() == 0) return false;
         for (size_t i = 0; i < value.length(); i++) if (!isDigit(value[i])) return false;
         int volume = value.toInt();
-        return volume >= 0 && volume <= 100;
+        return volume >= 0 && volume <= 25;
     }
     if (action == "launch_app") {
         return value == "Netflix" || value == "YouTube" || value == "Flow" ||
@@ -424,6 +475,22 @@ bool isValidTvCommand(const String& targetId, const String& action, const String
 void clearExecutedCommand(const String& path) {
     if (!Firebase.ready()) { return; }
     Firebase.RTDB.deleteNode(&fbdo, path.c_str());
+}
+
+void publishTvCommandResult(const String& targetId, const String& action, long long timestamp, bool success, const String& errorMsg) {
+    FirebaseJson result;
+    result.set("timestamp", (double)timestamp);
+    result.set("targetId", targetId);
+    result.set("action", action);
+    result.set("success", success);
+    if (!success && errorMsg.length() > 0) {
+        result.set("message", errorMsg);
+    }
+    if (!Firebase.RTDB.setJSON(&fbdo, "/home/state/tvCommandResult", &result)) {
+        Serial.printf("[TV] No se pudo publicar el resultado: %s\n", fbdo.errorReason().c_str());
+    } else {
+        Serial.printf("[TV] Resultado %s publicado en Firebase.\n", success ? "exitoso" : "fallido");
+    }
 }
 
 // =========================================================================
@@ -509,6 +576,7 @@ void initFirebase() {
     streamData.setBSSLBufferSize(4096, 1024);
     fbdo.setBSSLBufferSize(4096, 1024);
     heartbeatData.setBSSLBufferSize(4096, 1024);
+    tvStatusData.setBSSLBufferSize(4096, 1024);
 
     Serial.print("[Firebase] Esperando token JWT");
     unsigned long startAuth = millis();
@@ -621,18 +689,31 @@ void streamCallback(FirebaseStream data) {
         }
     }
     // --- Android TV por Wi-Fi directo ---
-    else if (path == "/tv" && dataType == "json") {
-        FirebaseJson json = data.jsonObject();
+    else if ((path == "/tv" || path == "/") && dataType == "json") {
+        FirebaseJson rootJson = data.jsonObject();
+        FirebaseJson tvJson;
+        FirebaseJson* commandJson = &rootJson;
+        if (path == "/") {
+            FirebaseJsonData tvData;
+            if (!rootJson.get(tvData, "tv") ||
+                tvData.typeNum != FirebaseJson::JSON_OBJECT ||
+                !tvData.getJSON(tvJson)) {
+                Serial.println("[TV] Actualización raíz sin objeto tv; ignorada.");
+                return;
+            }
+            commandJson = &tvJson;
+        }
+
         FirebaseJsonData jd;
         long long ts = 0;
-        if (json.get(jd, "timestamp")) { ts = (long long)jd.doubleValue; }
+        if (commandJson->get(jd, "timestamp")) { ts = (long long)jd.doubleValue; }
 
         String targetId = "tv-living";
         String action   = "";
         String value    = "";
-        if (json.get(jd, "targetId")) { targetId = jd.stringValue; }
-        if (json.get(jd, "action"))   { action   = jd.stringValue; }
-        if (json.get(jd, "value") && jd.success && jd.typeNum != FirebaseJson::JSON_NULL) { value = jd.stringValue; }
+        if (commandJson->get(jd, "targetId")) { targetId = jd.stringValue; }
+        if (commandJson->get(jd, "action"))   { action   = jd.stringValue; }
+        if (commandJson->get(jd, "value") && jd.success && jd.typeNum != FirebaseJson::JSON_NULL) { value = jd.stringValue; }
 
         if (isValidTvCommand(targetId, action, value)) {
             cmd.type      = CMD_TV;
@@ -643,7 +724,7 @@ void streamCallback(FirebaseStream data) {
             strncpy(cmd.sourcePath, "/home/commands/tv", sizeof(cmd.sourcePath) - 1);
             enqueue = true;
         } else {
-            Serial.println("[TV] Comando TV recibido pero no válido según el esquema.");
+            Serial.printf("[TV] Comando TV inválido (destino=%s, acción=%s, valor=%s).\n", targetId.c_str(), action.c_str(), value.c_str());
         }
     }
 
@@ -813,12 +894,6 @@ bool sendAndroidTvKeyPacket(WiFiClientSecure& client, int keyCode) {
     return client.write(packet, p) == p;
 }
 
-bool sendAndroidTvVolumePacket(WiFiClientSecure& client, int volume) {
-    // msg.remote_set_volume_level.volume_level = volume
-    uint8_t packet[] = { 5, 146, 3, 2, 56, (uint8_t)(volume & 0x7F) };
-    return client.write(packet, sizeof(packet)) == sizeof(packet);
-}
-
 bool sendAndroidTvAppLinkPacket(WiFiClientSecure& client, const String& appLink) {
     size_t strLen = appLink.length();
     size_t subLen = 1 + (strLen < 128 ? 1 : 2) + strLen;
@@ -845,74 +920,363 @@ bool sendAndroidTvAppLinkPacket(WiFiClientSecure& client, const String& appLink)
     return client.write(packet, p) == p;
 }
 
-bool executeAndroidTvRemote(const char* host, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg) {
-    WiFiClientSecure client;
-    client.setInsecure(); // Las TVs usan certificados locales autofirmados
-    client.setCertificate(certPem);
-    client.setPrivateKey(keyPem);
-    client.setTimeout(4000);
+const uint32_t ANDROID_TV_FEATURE_KEY = 1U << 1;
+const uint32_t ANDROID_TV_FEATURE_POWER = 1U << 5;
+const uint32_t ANDROID_TV_FEATURE_VOLUME = 1U << 6;
+const uint32_t ANDROID_TV_FEATURE_APP_LINK = 1U << 9;
+const uint32_t ANDROID_TV_SUPPORTED_FEATURES =
+    ANDROID_TV_FEATURE_KEY | ANDROID_TV_FEATURE_POWER |
+    ANDROID_TV_FEATURE_VOLUME | ANDROID_TV_FEATURE_APP_LINK;
 
-    Serial.printf("[AndroidTV] Conectando por TLS a %s:6466...\n", host);
-    if (!client.connect(host, 6466)) {
-        errorMsg = String("No se pudo conectar a ") + host + ":6466 (TV apagada o fuera de red)";
-        Serial.printf("[AndroidTV] %s\n", errorMsg.c_str());
+bool appendProtoVarint(uint8_t* buffer, size_t capacity, size_t& length, uint32_t value) {
+    do {
+        if (length >= capacity) { return false; }
+        uint8_t byte = static_cast<uint8_t>(value & 0x7F);
+        value >>= 7;
+        if (value > 0) { byte |= 0x80; }
+        buffer[length++] = byte;
+    } while (value > 0);
+    return true;
+}
+
+bool appendProtoVarintField(uint8_t* buffer, size_t capacity, size_t& length, uint32_t field, uint32_t value) {
+    return appendProtoVarint(buffer, capacity, length, field << 3) &&
+        appendProtoVarint(buffer, capacity, length, value);
+}
+
+bool appendProtoBytesField(uint8_t* buffer, size_t capacity, size_t& length, uint32_t field, const uint8_t* value, size_t valueLength) {
+    if (!appendProtoVarint(buffer, capacity, length, (field << 3) | 2) ||
+        !appendProtoVarint(buffer, capacity, length, static_cast<uint32_t>(valueLength)) ||
+        valueLength > capacity - length) {
+        return false;
+    }
+    memcpy(buffer + length, value, valueLength);
+    length += valueLength;
+    return true;
+}
+
+bool sendAndroidTvMessage(WiFiClientSecure& client, const uint8_t* message, size_t messageLength) {
+    uint8_t header[5];
+    size_t headerLength = 0;
+    if (!appendProtoVarint(header, sizeof(header), headerLength, static_cast<uint32_t>(messageLength))) {
+        return false;
+    }
+    return client.write(header, headerLength) == headerLength &&
+        client.write(message, messageLength) == messageLength;
+}
+
+bool sendAndroidTvConfigurePacket(WiFiClientSecure& client, uint32_t features) {
+    uint8_t deviceInfo[48];
+    size_t deviceInfoLength = 0;
+    const uint8_t unknown2[] = "1";
+    const uint8_t packageName[] = "atvremote";
+    const uint8_t appVersion[] = "1.0.0";
+    if (!appendProtoVarintField(deviceInfo, sizeof(deviceInfo), deviceInfoLength, 3, 1) ||
+        !appendProtoBytesField(deviceInfo, sizeof(deviceInfo), deviceInfoLength, 4, unknown2, sizeof(unknown2) - 1) ||
+        !appendProtoBytesField(deviceInfo, sizeof(deviceInfo), deviceInfoLength, 5, packageName, sizeof(packageName) - 1) ||
+        !appendProtoBytesField(deviceInfo, sizeof(deviceInfo), deviceInfoLength, 6, appVersion, sizeof(appVersion) - 1)) {
         return false;
     }
 
-    // 1. Esperar mensaje inicial de configuración de la TV
-    unsigned long startWait = millis();
-    while (client.available() == 0 && client.connected() && millis() - startWait < 3000) {
-        vTaskDelay(pdMS_TO_TICKS(15));
+    uint8_t configure[80];
+    size_t configureLength = 0;
+    if (!appendProtoVarintField(configure, sizeof(configure), configureLength, 1, features) ||
+        !appendProtoBytesField(configure, sizeof(configure), configureLength, 2, deviceInfo, deviceInfoLength)) {
+        return false;
     }
-    if (client.available() == 0) {
-        client.stop();
-        errorMsg = "La TV no respondió a la negociación de configuración inicial";
+
+    uint8_t message[96];
+    size_t messageLength = 0;
+    if (!appendProtoBytesField(message, sizeof(message), messageLength, 1, configure, configureLength)) {
+        return false;
+    }
+    return sendAndroidTvMessage(client, message, messageLength);
+}
+
+bool sendAndroidTvSetActivePacket(WiFiClientSecure& client, uint32_t features) {
+    uint8_t setActive[8];
+    size_t setActiveLength = 0;
+    if (!appendProtoVarintField(setActive, sizeof(setActive), setActiveLength, 1, features)) {
+        return false;
+    }
+
+    uint8_t message[16];
+    size_t messageLength = 0;
+    if (!appendProtoBytesField(message, sizeof(message), messageLength, 2, setActive, setActiveLength)) {
+        return false;
+    }
+    return sendAndroidTvMessage(client, message, messageLength);
+}
+
+bool readAndroidTvByte(WiFiClientSecure& client, uint8_t& value, unsigned long startedAt, uint32_t timeoutMs) {
+    while (client.available() <= 0) {
+        if (!client.connected() || millis() - startedAt >= timeoutMs) { return false; }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    int byte = client.read();
+    if (byte < 0) { return false; }
+    value = static_cast<uint8_t>(byte);
+    return true;
+}
+
+bool readAndroidTvFrame(WiFiClientSecure& client, uint8_t* frame, size_t capacity, size_t& frameLength, uint32_t timeoutMs) {
+    const unsigned long startedAt = millis();
+    uint32_t length = 0;
+    for (uint8_t shift = 0; shift < 35; shift += 7) {
+        uint8_t byte = 0;
+        if (!readAndroidTvByte(client, byte, startedAt, timeoutMs) ||
+            (shift == 28 && (byte & 0xF0) != 0)) {
+            return false;
+        }
+        length |= static_cast<uint32_t>(byte & 0x7F) << shift;
+        if ((byte & 0x80) == 0) { break; }
+        if (shift == 28) { return false; }
+    }
+    if (length == 0 || length > capacity) { return false; }
+
+    for (uint32_t index = 0; index < length; index++) {
+        if (!readAndroidTvByte(client, frame[index], startedAt, timeoutMs)) { return false; }
+    }
+    frameLength = length;
+    return true;
+}
+
+bool readProtoVarint(const uint8_t* data, size_t length, size_t& offset, uint32_t& value) {
+    value = 0;
+    for (uint8_t shift = 0; shift < 35; shift += 7) {
+        if (offset >= length) { return false; }
+        const uint8_t byte = data[offset++];
+        if (shift == 28 && (byte & 0xF0) != 0) { return false; }
+        value |= static_cast<uint32_t>(byte & 0x7F) << shift;
+        if ((byte & 0x80) == 0) { return true; }
+    }
+    return false;
+}
+
+bool skipProtoField(const uint8_t* data, size_t length, size_t& offset, uint32_t wireType) {
+    uint32_t fieldLength = 0;
+    switch (wireType) {
+        case 0:
+            return readProtoVarint(data, length, offset, fieldLength);
+        case 1:
+            if (length - offset < 8) { return false; }
+            offset += 8;
+            return true;
+        case 2:
+            if (!readProtoVarint(data, length, offset, fieldLength) || fieldLength > length - offset) { return false; }
+            offset += fieldLength;
+            return true;
+        case 5:
+            if (length - offset < 4) { return false; }
+            offset += 4;
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool findProtoBytesField(const uint8_t* data, size_t length, uint32_t targetField, const uint8_t*& value, size_t& valueLength) {
+    size_t offset = 0;
+    while (offset < length) {
+        uint32_t tag = 0;
+        if (!readProtoVarint(data, length, offset, tag) || tag == 0) { return false; }
+        const uint32_t field = tag >> 3;
+        const uint32_t wireType = tag & 7;
+        if (field == targetField) {
+            if (wireType != 2) { return false; }
+            uint32_t fieldLength = 0;
+            if (!readProtoVarint(data, length, offset, fieldLength) || fieldLength > length - offset) { return false; }
+            value = data + offset;
+            valueLength = fieldLength;
+            return true;
+        }
+        if (!skipProtoField(data, length, offset, wireType)) { return false; }
+    }
+    return false;
+}
+
+bool findProtoVarintField(const uint8_t* data, size_t length, uint32_t targetField, uint32_t& value) {
+    size_t offset = 0;
+    while (offset < length) {
+        uint32_t tag = 0;
+        if (!readProtoVarint(data, length, offset, tag) || tag == 0) { return false; }
+        const uint32_t field = tag >> 3;
+        const uint32_t wireType = tag & 7;
+        if (field == targetField) {
+            return wireType == 0 && readProtoVarint(data, length, offset, value);
+        }
+        if (!skipProtoField(data, length, offset, wireType)) { return false; }
+    }
+    return false;
+}
+
+bool parseAndroidTvVolume(const uint8_t* data, size_t length, int& currentVolume, int& maxVolume) {
+    const uint8_t* volumeInfo = nullptr;
+    size_t volumeInfoLength = 0;
+    uint32_t current = 0;
+    uint32_t maximum = 0;
+    if (!findProtoBytesField(data, length, 50, volumeInfo, volumeInfoLength) ||
+        !findProtoVarintField(volumeInfo, volumeInfoLength, 6, maximum) ||
+        !findProtoVarintField(volumeInfo, volumeInfoLength, 7, current) ||
+        maximum == 0 || current > maximum || maximum > 10000) {
+        return false;
+    }
+    currentVolume = static_cast<int>(current);
+    maxVolume = static_cast<int>(maximum);
+    return true;
+}
+
+bool executeAndroidTvRemoteUnlocked(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState) {
+    WiFiClientSecure client;
+    client.setTimeout(4000);
+    client.setHandshakeTimeout(8);
+
+    Serial.printf("[AndroidTV] Conectando por TLS a %s:6466...\n", host);
+    IPAddress remoteIp;
+    if (!remoteIp.fromString(host)) {
+        errorMsg = String("IP del televisor inválida: ") + host;
+        return false;
+    }
+    if (!client.connect(remoteIp, 6466, tlsHostname, serverCertPem, certPem, keyPem)) {
+        char tlsError[128] = {};
+        int tlsErrorCode = client.lastError(tlsError, sizeof(tlsError));
+        errorMsg = String("TLS no pudo conectar a ") + host + ":6466 (" +
+            String(tlsErrorCode) + ": " + tlsError + ")";
         Serial.printf("[AndroidTV] %s\n", errorMsg.c_str());
         return false;
     }
 
     uint8_t rxBuf[256];
-    int rxLen = client.read(rxBuf, sizeof(rxBuf));
-    if (rxLen <= 0) {
+    size_t rxLen = 0;
+    if (!readAndroidTvFrame(client, rxBuf, sizeof(rxBuf), rxLen, 3000)) {
         client.stop();
-        errorMsg = "Error al leer configuración inicial de la TV";
+        errorMsg = "La TV no envió la configuración inicial del control remoto";
+        Serial.printf("[AndroidTV] %s\n", errorMsg.c_str());
         return false;
     }
 
-    // 2. Enviar remote_configure del cliente
-    const uint8_t clientConfig[] = {
-        29, // Longitud varint
-        10, 27, 8, 62, 18, 23, 24, 1, 34, 1, 49, 42, 9,
-        'a', 't', 'v', 'r', 'e', 'm', 'o', 't', 'e', '2',
-        50, 5, '1', '.', '0', '.', '0'
-    };
-    if (client.write(clientConfig, sizeof(clientConfig)) != sizeof(clientConfig)) {
+    const uint8_t* remoteConfigure = nullptr;
+    size_t remoteConfigureLength = 0;
+    uint32_t supportedFeatures = 0;
+    if (!findProtoBytesField(rxBuf, rxLen, 1, remoteConfigure, remoteConfigureLength) ||
+        !findProtoVarintField(remoteConfigure, remoteConfigureLength, 1, supportedFeatures)) {
+        client.stop();
+        errorMsg = "La configuración inicial de la TV no tiene un formato válido";
+        return false;
+    }
+
+    const uint32_t activeFeatures = supportedFeatures & ANDROID_TV_SUPPORTED_FEATURES;
+    uint32_t requiredFeature = powerState
+        ? 0
+        : (keyCode >= 0
+            ? ANDROID_TV_FEATURE_KEY
+            : (appLink.length() > 0 ? ANDROID_TV_FEATURE_APP_LINK : ANDROID_TV_FEATURE_VOLUME));
+    if (keyCode == 26) { requiredFeature |= ANDROID_TV_FEATURE_POWER; }
+    if ((activeFeatures & requiredFeature) != requiredFeature) {
+        client.stop();
+        errorMsg = "La TV no anunció soporte para esta acción de control remoto";
+        return false;
+    }
+
+    if (!sendAndroidTvConfigurePacket(client, activeFeatures)) {
         client.stop();
         errorMsg = "Fallo al enviar configuración del cliente a la TV";
         return false;
     }
-    client.flush();
 
-    // 3. Esperar confirmación remote_start de la TV
-    startWait = millis();
-    while (client.available() == 0 && client.connected() && millis() - startWait < 3000) {
-        vTaskDelay(pdMS_TO_TICKS(15));
+    // Android TV sends remote_set_active before remote_start; acknowledge activation first.
+    bool remoteStarted = false;
+    bool reportedPowerState = false;
+    int currentVolume = -1;
+    int maxVolume = -1;
+    const unsigned long handshakeStart = millis();
+    while (millis() - handshakeStart < 3000) {
+        const uint32_t remainingMs = 3000 - (millis() - handshakeStart);
+        if (!readAndroidTvFrame(client, rxBuf, sizeof(rxBuf), rxLen, remainingMs)) { break; }
+
+        const uint8_t* remoteSetActive = nullptr;
+        size_t remoteSetActiveLength = 0;
+        if (findProtoBytesField(rxBuf, rxLen, 2, remoteSetActive, remoteSetActiveLength)) {
+            if (!sendAndroidTvSetActivePacket(client, activeFeatures)) {
+                client.stop();
+                errorMsg = "Fallo al confirmar la activación del control remoto";
+                return false;
+            }
+            continue;
+        }
+
+        const uint8_t* remoteStart = nullptr;
+        size_t remoteStartLength = 0;
+        if (findProtoBytesField(rxBuf, rxLen, 40, remoteStart, remoteStartLength)) {
+            uint32_t stateValue = 0;
+            if (findProtoVarintField(remoteStart, remoteStartLength, 1, stateValue) && stateValue > 1) {
+                client.stop();
+                errorMsg = "La TV informó un estado de encendido inválido";
+                return false;
+            }
+            reportedPowerState = stateValue == 1;
+            remoteStarted = true;
+            break;
+        }
+
+        if (parseAndroidTvVolume(rxBuf, rxLen, currentVolume, maxVolume)) {
+            continue;
+        }
+
+        const uint8_t* remoteError = nullptr;
+        size_t remoteErrorLength = 0;
+        if (findProtoBytesField(rxBuf, rxLen, 3, remoteError, remoteErrorLength)) {
+            client.stop();
+            errorMsg = "La TV rechazó la negociación del control remoto";
+            return false;
+        }
     }
-    if (client.available() == 0) {
+    if (!remoteStarted) {
         client.stop();
-        errorMsg = "La TV no confirmó el inicio de sesión remoto";
+        errorMsg = "La TV no confirmó el inicio de la sesión de control remoto";
         return false;
     }
-    rxLen = client.read(rxBuf, sizeof(rxBuf));
 
-    // 4. Enviar el comando solicitado
+    if (powerState) {
+        *powerState = reportedPowerState;
+        client.stop();
+        return true;
+    }
+
+    if (volumeLevel >= 0 && currentVolume < 0) {
+        const unsigned long volumeWaitStart = millis();
+        while (millis() - volumeWaitStart < 1500) {
+            const uint32_t remainingMs = 1500 - (millis() - volumeWaitStart);
+            if (!readAndroidTvFrame(client, rxBuf, sizeof(rxBuf), rxLen, remainingMs)) { break; }
+            if (parseAndroidTvVolume(rxBuf, rxLen, currentVolume, maxVolume)) { break; }
+        }
+        if (currentVolume < 0) {
+            client.stop();
+            errorMsg = "La TV no informó su nivel actual; no se puede ajustar el slider con seguridad";
+            return false;
+        }
+    }
+
+    // A remote_start confirms the session, not the visible effect of a key press.
     bool writeOk = false;
     if (keyCode >= 0) {
         writeOk = sendAndroidTvKeyPacket(client, keyCode);
     } else if (appLink.length() > 0) {
         writeOk = sendAndroidTvAppLinkPacket(client, appLink);
     } else if (volumeLevel >= 0) {
-        writeOk = sendAndroidTvVolumePacket(client, volumeLevel);
+        const int targetVolume = min(volumeLevel, maxVolume);
+        const int keyCode = targetVolume > currentVolume ? 24 : 25;
+        const int steps = abs(targetVolume - currentVolume);
+        writeOk = true;
+        Serial.printf("[AndroidTV] Volumen actual %d/%d; objetivo %d/%d; pasos %d\n",
+            currentVolume, maxVolume, targetVolume, maxVolume, steps);
+        for (int step = 0; step < steps; step++) {
+            if (!sendAndroidTvKeyPacket(client, keyCode)) {
+                writeOk = false;
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(60));
+        }
     }
 
     if (!writeOk) {
@@ -921,12 +1285,106 @@ bool executeAndroidTvRemote(const char* host, const char* certPem, const char* k
         return false;
     }
 
-    client.flush();
     vTaskDelay(pdMS_TO_TICKS(120)); // Tiempo de latencia para procesar el socket
     client.stop();
 
     Serial.printf("[AndroidTV] Orden enviada exitosamente a %s:6466\n", host);
     return true;
+}
+
+bool executeAndroidTvRemote(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState) {
+    if (tvRemoteMutex && xSemaphoreTake(tvRemoteMutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
+        errorMsg = "El control remoto de otra TV sigue ocupado; volvé a intentar";
+        return false;
+    }
+
+    const bool success = executeAndroidTvRemoteUnlocked(
+        host, tlsHostname, serverCertPem, certPem, keyPem, keyCode, appLink, volumeLevel, errorMsg, powerState
+    );
+
+    if (tvRemoteMutex) { xSemaphoreGive(tvRemoteMutex); }
+    return success;
+}
+
+bool readAndroidTvPowerState(const SmartTvDevice& tv, bool& powerState, String& errorMsg) {
+    if (!tv.ip || !tv.certPem || !tv.keyPem ||
+        !tv.serverCertPem || !tv.tlsHostname ||
+        strlen(tv.ip) == 0 || strlen(tv.certPem) == 0 || strlen(tv.keyPem) == 0 ||
+        strlen(tv.serverCertPem) == 0 || strlen(tv.tlsHostname) == 0) {
+        errorMsg = "Telemetría mTLS no configurada para esta TV";
+        return false;
+    }
+
+    return executeAndroidTvRemote(
+        tv.ip, tv.tlsHostname, tv.serverCertPem, tv.certPem, tv.keyPem,
+        -1, "", -1, errorMsg, &powerState
+    );
+}
+
+void publishTvPowerState(const SmartTvDevice& tv, const char* powerState, const char* reason) {
+    const time_t nowSec = time(nullptr);
+    if (nowSec < 100000) {
+        Serial.println("[TV Status] Esperando sincronización NTP; no se publica un estado sin hora válida.");
+        return;
+    }
+
+    FirebaseJson status;
+    status.set("status", powerState);
+    status.set("observedAt", (double)nowSec * 1000.0);
+    status.set("reason", reason);
+    const String path = String("/home/state/tvPower/") + tv.id;
+    if (!Firebase.RTDB.setJSON(&tvStatusData, path.c_str(), &status)) {
+        Serial.printf("[TV Status] No se pudo publicar %s: %s\n", tv.id, tvStatusData.errorReason().c_str());
+        return;
+    }
+    Serial.printf("[TV Status] %s: %s (%s)\n", tv.id, powerState, reason);
+}
+
+void tvStatusTask(void* param) {
+    bool hasPolled = false;
+    unsigned long lastPoll = 0;
+    for (;;) {
+        const bool refreshRequested = tvStatusRefreshRequested;
+        const bool intervalElapsed = !hasPolled || millis() - lastPoll >= TV_STATUS_POLL_INTERVAL_MS;
+        if (!refreshRequested && !intervalElapsed) {
+            vTaskDelay(pdMS_TO_TICKS(500));
+            continue;
+        }
+        if (WiFi.status() != WL_CONNECTED || !Firebase.ready() || time(nullptr) < 100000) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+        if (uxQueueMessagesWaiting(cmdQueue) > 0) {
+            tvStatusRefreshRequested = true;
+            vTaskDelay(pdMS_TO_TICKS(250));
+            continue;
+        }
+
+        tvStatusRefreshRequested = false;
+        hasPolled = true;
+        lastPoll = millis();
+        for (size_t i = 0; i < NUM_TVS; i++) {
+            if (WiFi.status() != WL_CONNECTED || !Firebase.ready()) { break; }
+            if (uxQueueMessagesWaiting(cmdQueue) > 0) {
+                tvStatusRefreshRequested = true;
+                break;
+            }
+
+            const SmartTvDevice& tv = SMART_TVS[i];
+            bool powerState = false;
+            String errorMsg;
+            const bool hasTlsConfig = tv.certPem && tv.keyPem && tv.serverCertPem && tv.tlsHostname &&
+                strlen(tv.certPem) > 0 && strlen(tv.keyPem) > 0 &&
+                strlen(tv.serverCertPem) > 0 && strlen(tv.tlsHostname) > 0;
+            const bool reported = hasTlsConfig && readAndroidTvPowerState(tv, powerState, errorMsg);
+            publishTvPowerState(
+                tv,
+                reported ? (powerState ? "on" : "off") : "unknown",
+                reported ? "reported" : (hasTlsConfig ? "connection_failed" : "not_configured")
+            );
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
 }
 
 bool handleTvCommand(const String& targetId, const String& action, const String& value, String& errorMsg) {
@@ -946,6 +1404,12 @@ bool handleTvCommand(const String& targetId, const String& action, const String&
     }
     if (!tv->certPem || !tv->keyPem || strlen(tv->certPem) == 0) {
         errorMsg = "Televisor sin credenciales mTLS emparejadas";
+        Serial.printf("[TV Directo] %s\n", errorMsg.c_str());
+        return false;
+    }
+    if (!tv->serverCertPem || strlen(tv->serverCertPem) == 0 ||
+        !tv->tlsHostname || strlen(tv->tlsHostname) == 0) {
+        errorMsg = "Televisor sin certificado TLS del servidor configurado";
         Serial.printf("[TV Directo] %s\n", errorMsg.c_str());
         return false;
     }
@@ -995,5 +1459,5 @@ bool handleTvCommand(const String& targetId, const String& action, const String&
         return false;
     }
 
-    return executeAndroidTvRemote(tv->ip, tv->certPem, tv->keyPem, keyCode, appLink, volumeLevel, errorMsg);
+    return executeAndroidTvRemote(tv->ip, tv->tlsHostname, tv->serverCertPem, tv->certPem, tv->keyPem, keyCode, appLink, volumeLevel, errorMsg);
 }

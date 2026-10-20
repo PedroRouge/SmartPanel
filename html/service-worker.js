@@ -45,7 +45,7 @@ self.addEventListener("notificationclick", function (event) {
 });
 
 var CACHE_PREFIX = "smart-panel-shell-";
-var CACHE_NAME = CACHE_PREFIX + "85";
+var CACHE_NAME = CACHE_PREFIX + "90";
 var STATIC_FILES = [
   "/",
   "/manifest.json",
@@ -63,7 +63,7 @@ var STATIC_FILES = [
   "/js/bootstrap.js?v=71",
   "/js/firebase-runtime-config.js?v=75",
   "/js/firebase-config.js?v=75",
-  "/js/app.js?v=84"
+  "/js/app.js?v=89"
 ];
 
 self.addEventListener("install", function (event) {

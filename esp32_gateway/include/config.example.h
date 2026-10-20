@@ -34,10 +34,10 @@ const size_t NUM_LIGHTS = sizeof(SMART_LIGHTS) / sizeof(SMART_LIGHTS[0]);
 #if __has_include("tv_certs.local.h")
 #include "tv_certs.local.h"
 const SmartTvDevice SMART_TVS[] = {
-    { "tv-pedro",  TV_PEDRO_IP,  TV_PEDRO_CERT,  TV_PEDRO_KEY },
-    { "tv-living", TV_LIVING_IP, TV_LIVING_CERT, TV_LIVING_KEY },
-    { "tv-padres", TV_PADRES_IP, TV_PADRES_CERT, TV_PADRES_KEY },
-    { "tv-lucas",  TV_LUCAS_IP,  TV_LUCAS_CERT,  TV_LUCAS_KEY }
+    { "tv-pedro",  TV_PEDRO_IP,  TV_PEDRO_CERT,  TV_PEDRO_KEY,  TV_PEDRO_SERVER_CERT,  TV_PEDRO_TLS_HOST },
+    { "tv-living", TV_LIVING_IP, TV_LIVING_CERT, TV_LIVING_KEY, TV_LIVING_SERVER_CERT, TV_LIVING_TLS_HOST },
+    { "tv-padres", TV_PADRES_IP, TV_PADRES_CERT, TV_PADRES_KEY, TV_PADRES_SERVER_CERT, TV_PADRES_TLS_HOST },
+    { "tv-lucas",  TV_LUCAS_IP,  TV_LUCAS_CERT,  TV_LUCAS_KEY,  TV_LUCAS_SERVER_CERT,  TV_LUCAS_TLS_HOST }
 };
 const size_t NUM_TVS = sizeof(SMART_TVS) / sizeof(SMART_TVS[0]);
 #else

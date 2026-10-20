@@ -2,7 +2,8 @@
   "home": {
     "state": {
       "lights": {},
-      "gateStatus": "unknown"
+      "gateStatus": "unknown",
+      "tvPower": {}
     },
     "commands": {},
     "tvs": {
@@ -12,7 +13,8 @@
         "room": "Living",
         "model": "Smart TV",
         "ip": "",
-        "volume": 35,
+        "volume": 9,
+        "volumeScale": 25,
         "muted": false,
         "powerControlReady": true
       },
@@ -22,7 +24,8 @@
         "room": "Habitación Pedro",
         "model": "Smart TV",
         "ip": "",
-        "volume": 30,
+        "volume": 8,
+        "volumeScale": 25,
         "muted": false,
         "powerControlReady": true
       },
@@ -32,7 +35,8 @@
         "room": "Habitación Padres",
         "model": "Smart TV",
         "ip": "",
-        "volume": 30,
+        "volume": 8,
+        "volumeScale": 25,
         "muted": false,
         "powerControlReady": true
       },
@@ -42,7 +46,8 @@
         "room": "Habitación Lucas",
         "model": "Smart TV",
         "ip": "",
-        "volume": 25,
+        "volume": 6,
+        "volumeScale": 25,
         "muted": false,
         "powerControlReady": true
       }

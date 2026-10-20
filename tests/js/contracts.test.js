@@ -97,6 +97,9 @@ test("la política web mantiene CSP sin scripts inline y el build coincide", () 
   const jsVersion = read("html/js/app.js").match(/APP_BUILD_VERSION\s*=\s*"(\d+)"/);
   assert.ok(htmlVersion && jsVersion, "no se pudo leer la versión de UI");
   assert.equal(htmlVersion[1], jsVersion[1], "la versión de HTML y JavaScript no coincide");
+  const serviceWorker = read("html/service-worker.js");
+  assert.match(serviceWorker, /CACHE_PREFIX \+ "90"/);
+  assert.match(serviceWorker, /\/js\/app\.js\?v=89/);
 });
 
 test("el bootstrap no borra la caché activa y el tema se precarga", () => {
@@ -162,24 +165,128 @@ test("las reglas Firebase no habilitan escritura general a cualquier usuario", (
   assert.equal(rules.home.state.gateStatus[".write"], "auth != null && auth.token.role == 'device'");
   assert.equal(rules.home.state.lights.$light[".write"], "auth != null && auth.token.role == 'device'");
   assert.equal(rules.home.state[".read"], "auth != null && auth.token.role == 'admin'");
+  assert.match(rules.home.state.tvPower.$tvId[".write"], /auth\.token\.role == 'device'/);
+  assert.equal(rules.home.state.tvPower.$tvId.$other[".validate"], false);
   assert.equal(rules.home.commands.timestamp[".write"], "auth != null && auth.token.role == 'admin'");
   assert.equal(rules.home.commands[".read"], "auth != null && (auth.token.role == 'admin' || auth.token.role == 'device')");
+  assert.match(rules.home.commands.tv[".validate"], /child\('value'\)\.val\(\) <= 25/);
   assert.equal(rules.home.gateway.status.$other[".validate"], false);
   assert.equal(rules.scheduledReminders, undefined, "no se conserva una cola usada solo por Cloud Functions");
 });
 
 test("el firmware conserva validaciones explícitas para órdenes TV y reloj", () => {
   const firmware = read("esp32_gateway/src/main.cpp");
+  const worker = firmware.slice(firmware.indexOf("void workerTask("), firmware.indexOf("// VALIDACIÓN TTL"));
   assert.match(firmware, /bool isValidTvCommand\(/);
   assert.match(firmware, /isCommandFresh\(/);
   assert.match(firmware, /isPrivateLanUrl\(/);
+  assert.match(firmware, /client\.connect\(remoteIp, 6466, tlsHostname, serverCertPem, certPem, keyPem\)/);
+  assert.doesNotMatch(firmware, /client\.setInsecure\(\)/);
+  assert.match(firmware, /serverCertPem/);
   assert.match(firmware, /first == 10/);
   assert.match(firmware, /second >= 16 && second <= 31/);
   assert.match(firmware, /first == 192 && second == 168/);
   assert.match(firmware, /NTP|time\(nullptr\)|time\(&/i);
   assert.match(firmware, /CMD_QUEUE_SIZE/);
   assert.match(firmware, /commandReceipts\/" \+ receiptKey/);
+  assert.match(firmware, /path == "\/tv" \|\| path == "\/"/);
+  assert.match(firmware, /rootJson\.get\(tvData, "tv"\)/);
+  assert.match(firmware, /cmd\.type == CMD_TV && cmd\.timestamp > 0[\s\S]*?publishTvCommandResult/);
+  assert.match(worker, /receiptData\.httpCode\(\) != FIREBASE_ERROR_HTTP_CODE_NOT_FOUND/);
+  assert.match(worker, /receiptData\.httpCode\(\) != FIREBASE_ERROR_PATH_NOT_EXIST/);
+  assert.match(worker, /if \(!receiptFound &&[\s\S]*?publishTvCommandResult/);
+  assert.match(worker, /if \(!Firebase\.RTDB\.setDouble\(&fbdo, receiptPath\.c_str\(\), \(double\)cmd\.timestamp\)\) \{[\s\S]*?publishTvCommandResult/);
   assert.doesNotMatch(firmware, /irsend|sendSAMSUNG|IRremote/i);
+});
+
+test("el control Android TV completa el handshake antes de transmitir teclas", () => {
+  const firmware = read("esp32_gateway/src/main.cpp");
+  const remoteCommandStart = firmware.indexOf(
+    "bool executeAndroidTvRemoteUnlocked(const char* host",
+    firmware.indexOf("bool readAndroidTvFrame("),
+  );
+  const remoteCommand = firmware.slice(
+    remoteCommandStart,
+    firmware.indexOf("bool handleTvCommand(", remoteCommandStart),
+  );
+
+  assert.match(firmware, /bool readAndroidTvFrame\(/);
+  assert.match(firmware, /bool sendAndroidTvSetActivePacket\(/);
+  assert.ok(
+    remoteCommand.indexOf("findProtoBytesField(rxBuf, rxLen, 40") <
+      remoteCommand.indexOf("sendAndroidTvKeyPacket(client, keyCode)"),
+    "no se debe transmitir la tecla antes de que la TV confirme remote_start",
+  );
+  assert.ok(
+    remoteCommand.indexOf("sendAndroidTvSetActivePacket(client, activeFeatures)") <
+      remoteCommand.indexOf("sendAndroidTvKeyPacket(client, keyCode)"),
+    "se debe responder remote_set_active antes de transmitir la tecla",
+  );
+  assert.doesNotMatch(remoteCommand, /client\.flush\(\)/, "flush vacía los mensajes recibidos de la TV");
+});
+
+test("el firmware publica el estado real de energia que informa Android TV Remote", () => {
+  const firmware = read("esp32_gateway/src/main.cpp");
+  const app = read("html/js/app.js");
+  const tvCommand = app.slice(app.indexOf("function sendTVCommand("), app.indexOf("function promptFirebaseConfig("));
+
+  assert.match(firmware, /bool readAndroidTvPowerState\(/);
+  assert.match(firmware, /findProtoBytesField\(rxBuf, rxLen, 40, remoteStart, remoteStartLength\)/);
+  assert.match(firmware, /findProtoVarintField\(remoteStart, remoteStartLength, 1, stateValue\)/);
+  assert.match(firmware, /home\/state\/tvPower\//);
+  assert.match(firmware, /tvStatusRefreshRequested/);
+  assert.match(app, /listen\("home\/state\/tvPower"/);
+  assert.match(app, /TV_POWER_STATUS_MAX_AGE_MS/);
+  assert.match(app, /function getTvPowerDisplay\(/);
+  assert.match(app, /report\.status === "on"[\s\S]*?report\.status === "off"/);
+  assert.match(app, /age <= TV_POWER_STATUS_MAX_AGE_MS/);
+  assert.doesNotMatch(tvCommand, /home\/tvs\/"\s*\+\s*tv\.id\s*\+\s*"\/poweredOn"/);
+});
+
+test("el slider de volumen ajusta con teclas usando el nivel informado por la TV", () => {
+  const firmware = read("esp32_gateway/src/main.cpp");
+  const tvCommand = firmware.slice(
+    firmware.indexOf("bool handleTvCommand(", firmware.indexOf("bool executeAndroidTvRemote(")),
+  );
+
+  assert.match(firmware, /bool parseAndroidTvVolume\(/);
+  assert.doesNotMatch(firmware, /sendAndroidTvVolumePacket/);
+  assert.match(firmware, /findProtoBytesField\(data, length, 50, volumeInfo, volumeInfoLength\)/);
+  assert.match(tvCommand, /action == "set_volume"[\s\S]*?volumeLevel = value\.toInt\(\)/);
+  assert.match(firmware, /targetVolume = min\(volumeLevel, maxVolume\)/);
+  assert.match(firmware, /targetVolume > currentVolume \? 24 : 25/);
+  assert.match(firmware, /abs\(targetVolume - currentVolume\)/);
+  assert.match(firmware, /return volume >= 0 && volume <= 25/);
+});
+
+test("el control de volumen usa escala 0–25 y migra valores porcentuales guardados", () => {
+  const html = read("html/index.html");
+  const app = read("html/js/app.js");
+  const initialData = JSON.parse(read("firebase_initial_data.json"));
+  assert.match(html, /id="volume-slider" type="range" min="0" max="25" step="1" value="9" aria-label="Volumen del televisor, de 0 a 25"/);
+  assert.match(app, /var TV_VOLUME_MAX = 25/);
+  assert.match(app, /normalizeTvVolume\(parsed\.volume, savedVolumeScale, defaults\.volume\)/);
+  assert.match(app, /normalizeTvVolume\(remoteTv\.volume, volumeScale, fallback\.volume\)/);
+  assert.match(app, /volumeScale"] = TV_VOLUME_MAX/);
+  assert.match(app, /tvState\.volume \+ "\/" \+ TV_VOLUME_MAX/);
+  assert.deepEqual(initialData.home.state.tvPower, {});
+  for (const tv of Object.values(initialData.home.tvs)) {
+    assert.ok(tv.volume >= 0 && tv.volume <= 25);
+    assert.equal(tv.volumeScale, 25);
+  }
+});
+
+test("la interfaz no puede borrar una confirmación TV después de publicar la orden", () => {
+  const app = read("html/js/app.js");
+  const tvCommand = app.slice(app.indexOf("function sendTVCommand("), app.indexOf("function promptFirebaseConfig("));
+  const directSetter = app.slice(app.indexOf("function setFirebaseValue("), app.indexOf("function waitForFirebaseValue("));
+
+  assert.match(tvCommand, /waitForFirebaseValue\(\s*"home\/state\/tvCommandResult\/timestamp"/);
+  assert.match(tvCommand, /setFirebaseValue\("home\/commands\/tv", commandPayload\)/);
+  assert.doesNotMatch(tvCommand, /clearStale\["home\/state\/tvCommandResult"\]\s*=\s*null/);
+  assert.match(tvCommand, /commandAt,\s*20000/);
+  assert.doesNotMatch(directSetter, /db\.ref\(path\)\.set\(value\)/);
+  assert.match(directSetter, /method:\s*"PUT"/);
 });
 
 test("la plataforma y bibliotecas PlatformIO están fijadas", () => {
