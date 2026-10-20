@@ -60,6 +60,7 @@ QueueHandle_t cmdQueue;
 SemaphoreHandle_t tvRemoteMutex = nullptr;
 volatile bool tvStatusRefreshRequested = true;
 const unsigned long TV_STATUS_POLL_INTERVAL_MS = 30000;
+const unsigned long TV_REMOTE_COMMAND_MUTEX_TIMEOUT_MS = 15000;
 
 // =========================================================================
 // VARIABLES DE CONTROL
@@ -154,9 +155,9 @@ void handleLightCommand(const String& lightName, bool targetState);
 void handlePoolCommand(bool targetState);
 void handleGateCommand(long long commandTimestamp);
 bool handleTvCommand(const String& targetId, const String& action, const String& value, String& errorMsg);
-bool executeAndroidTvRemote(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState = nullptr);
+bool executeAndroidTvRemote(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState = nullptr, unsigned long mutexTimeoutMs = TV_REMOTE_COMMAND_MUTEX_TIMEOUT_MS, bool* sessionAcquired = nullptr);
 bool executeAndroidTvRemoteUnlocked(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState);
-bool readAndroidTvPowerState(const SmartTvDevice& tv, bool& powerState, String& errorMsg);
+bool readAndroidTvPowerState(const SmartTvDevice& tv, bool& powerState, bool& sessionAcquired, String& errorMsg);
 void publishTvPowerState(const SmartTvDevice& tv, const char* powerState, const char* reason);
 bool sendAndroidTvKeyPacket(WiFiClientSecure& client, int keyCode);
 bool sendAndroidTvAppLinkPacket(WiFiClientSecure& client, const String& appLink);
@@ -1292,11 +1293,13 @@ bool executeAndroidTvRemoteUnlocked(const char* host, const char* tlsHostname, c
     return true;
 }
 
-bool executeAndroidTvRemote(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState) {
-    if (tvRemoteMutex && xSemaphoreTake(tvRemoteMutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
+bool executeAndroidTvRemote(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState, unsigned long mutexTimeoutMs, bool* sessionAcquired) {
+    if (sessionAcquired) { *sessionAcquired = false; }
+    if (tvRemoteMutex && xSemaphoreTake(tvRemoteMutex, pdMS_TO_TICKS(mutexTimeoutMs)) != pdTRUE) {
         errorMsg = "El control remoto de otra TV sigue ocupado; volvé a intentar";
         return false;
     }
+    if (sessionAcquired) { *sessionAcquired = true; }
 
     const bool success = executeAndroidTvRemoteUnlocked(
         host, tlsHostname, serverCertPem, certPem, keyPem, keyCode, appLink, volumeLevel, errorMsg, powerState
@@ -1306,7 +1309,7 @@ bool executeAndroidTvRemote(const char* host, const char* tlsHostname, const cha
     return success;
 }
 
-bool readAndroidTvPowerState(const SmartTvDevice& tv, bool& powerState, String& errorMsg) {
+bool readAndroidTvPowerState(const SmartTvDevice& tv, bool& powerState, bool& sessionAcquired, String& errorMsg) {
     if (!tv.ip || !tv.certPem || !tv.keyPem ||
         !tv.serverCertPem || !tv.tlsHostname ||
         strlen(tv.ip) == 0 || strlen(tv.certPem) == 0 || strlen(tv.keyPem) == 0 ||
@@ -1317,7 +1320,7 @@ bool readAndroidTvPowerState(const SmartTvDevice& tv, bool& powerState, String& 
 
     return executeAndroidTvRemote(
         tv.ip, tv.tlsHostname, tv.serverCertPem, tv.certPem, tv.keyPem,
-        -1, "", -1, errorMsg, &powerState
+        -1, "", -1, errorMsg, &powerState, 0, &sessionAcquired
     );
 }
 
@@ -1372,11 +1375,16 @@ void tvStatusTask(void* param) {
 
             const SmartTvDevice& tv = SMART_TVS[i];
             bool powerState = false;
+            bool sessionAcquired = false;
             String errorMsg;
             const bool hasTlsConfig = tv.certPem && tv.keyPem && tv.serverCertPem && tv.tlsHostname &&
                 strlen(tv.certPem) > 0 && strlen(tv.keyPem) > 0 &&
                 strlen(tv.serverCertPem) > 0 && strlen(tv.tlsHostname) > 0;
-            const bool reported = hasTlsConfig && readAndroidTvPowerState(tv, powerState, errorMsg);
+            const bool reported = hasTlsConfig && readAndroidTvPowerState(tv, powerState, sessionAcquired, errorMsg);
+            if (hasTlsConfig && !sessionAcquired) {
+                Serial.println("[TV Status] Sondeo omitido: hay una orden TV en curso.");
+                break;
+            }
             publishTvPowerState(
                 tv,
                 reported ? (powerState ? "on" : "off") : "unknown",

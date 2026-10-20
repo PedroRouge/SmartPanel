@@ -243,6 +243,24 @@ test("el firmware publica el estado real de energia que informa Android TV Remot
   assert.doesNotMatch(tvCommand, /home\/tvs\/"\s*\+\s*tv\.id\s*\+\s*"\/poweredOn"/);
 });
 
+test("el sondeo de estado no bloquea ordenes TV y no convierte contencion en estado desconocido", () => {
+  const firmware = read("esp32_gateway/src/main.cpp");
+  const statusTaskStart = firmware.indexOf("void tvStatusTask(void* param) {");
+  const remoteSessionStart = firmware.indexOf(
+    "bool executeAndroidTvRemote(",
+    firmware.indexOf("bool executeAndroidTvRemoteUnlocked("),
+  );
+  const statusTask = firmware.slice(statusTaskStart, firmware.indexOf("bool handleTvCommand(", statusTaskStart));
+  const remoteSession = firmware.slice(remoteSessionStart, firmware.indexOf("void publishTvPowerState(", remoteSessionStart));
+
+  assert.match(firmware, /TV_REMOTE_COMMAND_MUTEX_TIMEOUT_MS\s*=\s*15000/);
+  assert.match(remoteSession, /mutexTimeoutMs/);
+  assert.match(remoteSession, /pdMS_TO_TICKS\(mutexTimeoutMs\)/);
+  assert.match(statusTask, /readAndroidTvPowerState\(tv,\s*powerState,\s*sessionAcquired,\s*errorMsg\)/);
+  assert.match(statusTask, /if\s*\(hasTlsConfig\s*&&\s*!sessionAcquired\)[\s\S]*?break;/);
+  assert.match(statusTask, /Sondeo omitido: hay una orden TV en curso/);
+});
+
 test("el slider de volumen ajusta con teclas usando el nivel informado por la TV", () => {
   const firmware = read("esp32_gateway/src/main.cpp");
   const tvCommand = firmware.slice(
