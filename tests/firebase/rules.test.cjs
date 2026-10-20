@@ -91,6 +91,17 @@ test("device reporta telemetria de energia TV con estado y antiguedad validados"
   await assertFails(get(ref(environment.authenticatedContext("guest").database(), "home/state/tvPower/tv-pedro")));
 });
 
+test("admin solo puede emitir comandos de encendido TV con destino explicito seguro", async () => {
+  const adminDb = environment.authenticatedContext("admin", { role: "admin" }).database();
+  const command = ref(adminDb, "home/commands/tv");
+  const base = { targetId: "tv-pedro", action: "power", timestamp: Date.now() };
+
+  await assertSucceeds(set(command, { ...base, value: "on" }));
+  await assertSucceeds(set(command, { ...base, timestamp: Date.now() + 1, value: "off" }));
+  await assertSucceeds(set(command, { ...base, timestamp: Date.now() + 2 }));
+  await assertFails(set(command, { ...base, timestamp: Date.now() + 3, value: "delete" }));
+});
+
 test("gateway status exige el esquema exacto y valores acotados", async () => {
   const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
   const status = ref(deviceDb, "home/gateway/status");

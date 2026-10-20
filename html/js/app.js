@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "89";
+  var APP_BUILD_VERSION = "90";
   var STORAGE_KEY = "smart-panel-state-v3";
   var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
@@ -29,6 +29,7 @@
   var activityListenerRef = null;
   var activityEntries = [];
   var activityFilterBound = false;
+  var tvCommandInFlight = false;
   var apiAuthenticated = false;
   var currentUsername = "";
   var weatherHasData = false;
@@ -1096,12 +1097,26 @@
     });
   }
 
+  function clearPendingTvCommand(commandAt) {
+    if (!db) { return Promise.reject(new Error("Firebase no está disponible para limpiar la orden pendiente.")); }
+    return db.ref("home/commands/tv").transaction(function (current) {
+      if (!current || Number(current.timestamp) !== commandAt) { return; }
+      return null;
+    }, undefined, false);
+  }
+
   function sendTVCommand(action, value) {
+    if (tvCommandInFlight) { return; }
     var tv = getSelectedTv();
     if (!tv) { return; }
     var feedback = byId("media-feedback");
     if (!requireGatewayConnection("el televisor", feedback)) { renderMedia(); return; }
     var tvState = getSelectedTvState();
+    if (action === "power") {
+      var powerTarget = getTvPowerDisplay(tvState).status === "on" ? "off" : "on";
+      value = powerTarget;
+    }
+    tvCommandInFlight = true;
     var previous = { volume: tvState.volume, muted: tvState.muted };
     if (action === "set_volume") {
       tvState.volume = Number(value);
@@ -1134,6 +1149,7 @@
 
     setCommandFeedback("Enviando orden a " + tv.name + "...", "pending");
     feedback.textContent = tv.name + " - enviando orden...";
+    feedback.setAttribute("aria-busy", "true");
     var commandPublished = false;
     var stateUpdated = false;
     var stateUpdate = Object.keys(updates).length ? updateFirebasePaths(updates) : Promise.resolve();
@@ -1158,12 +1174,22 @@
       if (!result || Number(result.timestamp) !== commandAt || result.targetId !== tv.id) {
         throw new Error("El resultado recibido no corresponde a esta orden (posible desfase de reloj).");
       }
+      if (result.action !== action) {
+        throw new Error("El resultado recibido corresponde a otra acción.");
+      }
       if (result.success !== true) {
         throw new Error(result.message || "El ESP32 no pudo completar la orden. Verificá que la TV esté encendida y vinculada.");
       }
-      feedback.textContent = tv.name + " - el ESP32 confirmó el envío del comando.";
-      setCommandFeedback("El ESP32 ejecutó la solicitud para " + tv.name + ". El estado se actualiza con la telemetría del televisor.", "success");
-      recordActivity("Comando multimedia: " + tv.name, "ok", "ESP32 confirmó el envío de " + action.replace(/_/g, " "));
+      return clearPendingTvCommand(commandAt).catch(function (cleanupError) {
+        console.warn("No se pudo retirar la orden TV ya confirmada:", cleanupError);
+      }).then(function () {
+        feedback.textContent = tv.name + " - el ESP32 confirmó el envío del comando.";
+        var successMessage = action === "power" && value === "on"
+          ? "El ESP32 envió Wake-on-LAN a " + tv.name + ". El encendido físico se confirmará con la próxima telemetría."
+          : "El ESP32 ejecutó la solicitud para " + tv.name + ". El estado se actualiza con la telemetría del televisor.";
+        setCommandFeedback(successMessage, "success");
+        recordActivity("Comando multimedia: " + tv.name, "ok", action === "power" && value === "on" ? "ESP32 envió Wake-on-LAN" : "ESP32 confirmó el envío de " + action.replace(/_/g, " "));
+      });
     }).catch(function (error) {
       tvState.volume = previous.volume;
       tvState.muted = previous.muted;
@@ -1172,24 +1198,36 @@
       saveState();
       renderTVs();
       renderMedia();
-      if (commandPublished || stateUpdated) {
-        var rollback = {};
-        if (action === "set_volume") {
-          rollback["home/tvs/" + tv.id + "/volume"] = previous.volume;
-          rollback["home/tvs/" + tv.id + "/volumeScale"] = TV_VOLUME_MAX;
-          rollback["home/tvs/" + tv.id + "/muted"] = previous.muted;
-        } else if (action === "toggle_mute") {
-          rollback["home/tvs/" + tv.id + "/muted"] = previous.muted;
+      var cleanup = commandPublished
+        ? clearPendingTvCommand(commandAt).catch(function (cleanupError) {
+          console.warn("No se pudo retirar la orden TV pendiente:", cleanupError);
+        })
+        : Promise.resolve();
+      return cleanup.then(function () {
+        if (commandPublished || stateUpdated) {
+          var rollback = {};
+          if (action === "set_volume") {
+            rollback["home/tvs/" + tv.id + "/volume"] = previous.volume;
+            rollback["home/tvs/" + tv.id + "/volumeScale"] = TV_VOLUME_MAX;
+            rollback["home/tvs/" + tv.id + "/muted"] = previous.muted;
+          } else if (action === "toggle_mute") {
+            rollback["home/tvs/" + tv.id + "/muted"] = previous.muted;
+          }
+          if (Object.keys(rollback).length) {
+            updateFirebasePaths(rollback).catch(function (rollbackError) {
+              console.warn("No se pudo revertir el estado optimista de la TV:", rollbackError);
+            });
+          }
         }
-        if (Object.keys(rollback).length) {
-          updateFirebasePaths(rollback).catch(function (rollbackError) {
-            console.warn("No se pudo revertir el estado optimista de la TV:", rollbackError);
-          });
-        }
-      }
-      feedback.textContent = "Sin confirmación del ESP32 para " + tv.name + ": " + error.message;
-      setCommandFeedback("Error en el control de " + tv.name + ": " + error.message, "error");
-      recordActivity("Comando multimedia: " + tv.name, "error", error.message);
+        feedback.textContent = "Sin confirmación del ESP32 para " + tv.name + ": " + error.message;
+        setCommandFeedback("Error en el control de " + tv.name + ": " + error.message, "error");
+        recordActivity("Comando multimedia: " + tv.name, "error", error.message);
+      });
+    }).finally(function () {
+      tvCommandInFlight = false;
+      feedback.setAttribute("aria-busy", "false");
+      renderTVs();
+      renderMedia();
     });
   }
 
@@ -2242,12 +2280,12 @@
     if (status === "on") { return { status: status, text: "Encendido", className: "is-on", buttonLabel: "Apagar" }; }
     if (status === "off") { return { status: status, text: "Apagado", className: "is-off", buttonLabel: "Encender" }; }
     if (fresh && tvState.powerStatusReason === "not_configured") {
-      return { status: status, text: "Telemetría no configurada", className: "is-unknown", buttonLabel: "Cambiar estado" };
+      return { status: status, text: "Telemetría no configurada", className: "is-unknown", buttonLabel: "Encender" };
     }
     if (fresh && tvState.powerStatusReason === "connection_failed") {
-      return { status: status, text: "Sin respuesta de la TV", className: "is-unknown", buttonLabel: "Cambiar estado" };
+      return { status: status, text: "Sin respuesta de la TV", className: "is-unknown", buttonLabel: "Encender" };
     }
-    return { status: "unknown", text: "Estado físico desconocido", className: "is-unknown", buttonLabel: "Cambiar estado" };
+    return { status: "unknown", text: "Estado físico desconocido", className: "is-unknown", buttonLabel: "Encender" };
   }
 
   function updateTvPowerUI() {
@@ -2271,6 +2309,12 @@
     byId("selected-tv-dot").classList.add(selectedDisplay.className);
     byId("tv-power-label").textContent = selectedDisplay.buttonLabel;
     byId("tv-power-button").setAttribute("aria-label", selectedDisplay.buttonLabel + " televisor");
+    var canSendPowerCommand = selected.powerControlReady || selectedDisplay.status !== "on";
+    byId("tv-power-button").disabled = tvCommandInFlight || !canSendPowerCommand;
+    byId("tv-power-hint").hidden = selected.powerControlReady && selectedDisplay.status === "on";
+    byId("tv-power-hint").textContent = selectedDisplay.status === "on"
+      ? "Para apagar esta TV se necesita el control remoto por red configurado."
+      : "Encender envía Wake-on-LAN; requiere que la TV admita encendido por red. Para apagarla se necesita control remoto configurado.";
   }
 
   function renderTVs() {
@@ -2322,13 +2366,11 @@
     if (selected) {
       byId("selected-tv-name").textContent = selected.name;
       byId("selected-tv-location").textContent = selected.room + " · " + selected.model + " · " + (selected.ip || "IP sin configurar");
-      byId("tv-power-button").disabled = !selected.powerControlReady;
-      byId("tv-power-hint").hidden = selected.powerControlReady;
-      byId("volume-slider").disabled = !selected.powerControlReady;
-      byId("mute-button").disabled = !selected.powerControlReady;
+      byId("volume-slider").disabled = tvCommandInFlight || !selected.powerControlReady;
+      byId("mute-button").disabled = tvCommandInFlight || !selected.powerControlReady;
 
       Array.prototype.forEach.call(document.querySelectorAll("[data-remote-key]"), function (b) {
-        b.disabled = !selected.powerControlReady;
+        b.disabled = tvCommandInFlight || !selected.powerControlReady;
       });
       byId("remote-key-hint").textContent = "Los comandos requieren que el modelo y su protocolo de control por red estén configurados.";
     }
@@ -2514,7 +2556,8 @@
 
     // Power TV
     byId("tv-power-button").addEventListener("click", function () {
-      sendTVCommand("power", null);
+      var tvState = getSelectedTvState();
+      sendTVCommand("power", getTvPowerDisplay(tvState).status === "on" ? "off" : "on");
     });
 
     // Apps TV
@@ -2755,7 +2798,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=90").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=91").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -3495,7 +3538,7 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v89";
+    byId("frontend-version").textContent = "HTML v90";
     byId("script-build-version").textContent = "JS v" + APP_BUILD_VERSION;
 
     initializeConfirmDialog();

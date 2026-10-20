@@ -98,8 +98,9 @@ test("la política web mantiene CSP sin scripts inline y el build coincide", () 
   assert.ok(htmlVersion && jsVersion, "no se pudo leer la versión de UI");
   assert.equal(htmlVersion[1], jsVersion[1], "la versión de HTML y JavaScript no coincide");
   const serviceWorker = read("html/service-worker.js");
-  assert.match(serviceWorker, /CACHE_PREFIX \+ "90"/);
-  assert.match(serviceWorker, /\/js\/app\.js\?v=89/);
+  assert.match(serviceWorker, /CACHE_PREFIX \+ "91"/);
+  assert.match(serviceWorker, /\/js\/app\.js\?v=90/);
+  assert.match(read("html/js/app.js"), /service-worker\.js\?v=91/);
 });
 
 test("el bootstrap no borra la caché activa y el tema se precarga", () => {
@@ -259,6 +260,52 @@ test("el sondeo de estado no bloquea ordenes TV y no convierte contencion en est
   assert.match(statusTask, /readAndroidTvPowerState\(tv,\s*powerState,\s*sessionAcquired,\s*errorMsg\)/);
   assert.match(statusTask, /if\s*\(hasTlsConfig\s*&&\s*!sessionAcquired\)[\s\S]*?break;/);
   assert.match(statusTask, /Sondeo omitido: hay una orden TV en curso/);
+});
+
+test("el firmware puede despertar una TV por WoL sin depender de la sesion Android TV", () => {
+  const config = read("esp32_gateway/include/config.h");
+  const example = read("esp32_gateway/include/config.example.h");
+  const firmware = read("esp32_gateway/src/main.cpp");
+  const tvCommandStart = firmware.indexOf("bool handleTvCommand(", firmware.indexOf("bool executeAndroidTvRemote("));
+  const tvCommand = firmware.slice(tvCommandStart);
+
+  assert.match(firmware, /#include <WiFiUdp\.h>/);
+  assert.match(config, /const char\* macAddress;/);
+  assert.match(example, /TV_PEDRO_MAC/);
+  assert.match(firmware, /bool parseTvMacAddress\(/);
+  assert.match(firmware, /WOL_MAGIC_PACKET_SIZE\s*=\s*102/);
+  assert.match(firmware, /bool sendWakeOnLanPacket\(/);
+  assert.match(firmware, /memset\(packet,\s*0xFF,\s*6\)/);
+  assert.match(firmware, /for \(size_t i = 0; i < 16; i\+\+\)[\s\S]*?memcpy\(packet \+ 6 \+ i \* 6, mac, sizeof\(mac\)\)/);
+  assert.match(firmware, /commandTimestampMs > 0 && !isCommandFresh\(commandTimestampMs\)/);
+  assert.match(firmware, /La orden TV expiró al conectar con el televisor/);
+  assert.match(tvCommand, /action == "power"\s*&&\s*value == "on"[\s\S]*?sendWakeOnLanPacket\(\*tv,\s*errorMsg\)/);
+  assert.match(tvCommand, /action == "power"\s*&&\s*\(value == "off" \|\| value\.length\(\) == 0\)\)[\s\S]*?keyCode = 26/);
+  assert.match(firmware, /return value\.length\(\) == 0 \|\| value == "on" \|\| value == "off"/);
+});
+
+test("los comandos TV expiran limpiamente y la interfaz libera un unico control pendiente", () => {
+  const firmware = read("esp32_gateway/src/main.cpp");
+  const app = read("html/js/app.js");
+  const workerStart = firmware.indexOf("void workerTask(void* param) {");
+  const worker = firmware.slice(workerStart, firmware.indexOf("bool isCommandFresh(", workerStart));
+  const streamStart = firmware.indexOf("void streamCallback(FirebaseStream data) {");
+  const stream = firmware.slice(streamStart, firmware.indexOf("void streamTimeoutCallback(", streamStart));
+  const tvCommandStart = app.indexOf("function sendTVCommand(");
+  const tvCommand = app.slice(tvCommandStart, app.indexOf("function promptFirebaseConfig(", tvCommandStart));
+
+  assert.match(worker, /La orden TV expir[oó] durante la espera del control/);
+  assert.match(worker, /clearExecutedCommand\(String\(cmd\.sourcePath\)\)/);
+  assert.match(stream, /Cola llena[\s\S]*?xQueueSend\(tvFailureQueue,\s*&cmd,\s*0\)/);
+  assert.match(worker, /tvFailureQueue[\s\S]*?publishTvCommandResult[\s\S]*?clearExecutedCommand/);
+  assert.match(app, /var tvCommandInFlight = false/);
+  assert.match(tvCommand, /clearPendingTvCommand\(commandAt\)/);
+  assert.match(tvCommand, /\.finally\(function \(\) \{[\s\S]*?tvCommandInFlight = false/);
+  assert.match(app, /function clearPendingTvCommand\(commandAt\)/);
+  assert.match(app, /transaction\(function \(current\)[\s\S]*?Number\(current\.timestamp\) !== commandAt/);
+  assert.match(tvCommand, /var powerTarget = getTvPowerDisplay\(tvState\)\.status === "on" \? "off" : "on"/);
+  assert.match(app, /buttonLabel: "Encender"/);
+  assert.match(app, /selected\.powerControlReady \|\| selectedDisplay\.status !== "on"/);
 });
 
 test("el slider de volumen ajusta con teclas usando el nivel informado por la TV", () => {

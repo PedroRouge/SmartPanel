@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
@@ -38,6 +39,7 @@ FirebaseConfig config;
 // Core 0 -> Worker que despacha peticiones HTTP locales + TLS Android TV
 // =========================================================================
 #define CMD_QUEUE_SIZE 16
+#define TV_FAILURE_QUEUE_SIZE 4
 
 enum CmdType {
     CMD_LIGHT,
@@ -57,10 +59,12 @@ struct Command {
 };
 
 QueueHandle_t cmdQueue;
+QueueHandle_t tvFailureQueue;
 SemaphoreHandle_t tvRemoteMutex = nullptr;
 volatile bool tvStatusRefreshRequested = true;
 const unsigned long TV_STATUS_POLL_INTERVAL_MS = 30000;
 const unsigned long TV_REMOTE_COMMAND_MUTEX_TIMEOUT_MS = 15000;
+const size_t WOL_MAGIC_PACKET_SIZE = 102;
 
 // =========================================================================
 // VARIABLES DE CONTROL
@@ -154,10 +158,12 @@ bool isPrivateLanUrl(const String& url);
 void handleLightCommand(const String& lightName, bool targetState);
 void handlePoolCommand(bool targetState);
 void handleGateCommand(long long commandTimestamp);
-bool handleTvCommand(const String& targetId, const String& action, const String& value, String& errorMsg);
-bool executeAndroidTvRemote(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState = nullptr, unsigned long mutexTimeoutMs = TV_REMOTE_COMMAND_MUTEX_TIMEOUT_MS, bool* sessionAcquired = nullptr);
-bool executeAndroidTvRemoteUnlocked(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState);
+bool handleTvCommand(const String& targetId, const String& action, const String& value, String& errorMsg, long long commandTimestampMs);
+bool executeAndroidTvRemote(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState = nullptr, unsigned long mutexTimeoutMs = TV_REMOTE_COMMAND_MUTEX_TIMEOUT_MS, bool* sessionAcquired = nullptr, long long commandTimestampMs = 0);
+bool executeAndroidTvRemoteUnlocked(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState, long long commandTimestampMs);
 bool readAndroidTvPowerState(const SmartTvDevice& tv, bool& powerState, bool& sessionAcquired, String& errorMsg);
+bool parseTvMacAddress(const char* address, uint8_t mac[6]);
+bool sendWakeOnLanPacket(const SmartTvDevice& tv, String& errorMsg);
 void publishTvPowerState(const SmartTvDevice& tv, const char* powerState, const char* reason);
 bool sendAndroidTvKeyPacket(WiFiClientSecure& client, int keyCode);
 bool sendAndroidTvAppLinkPacket(WiFiClientSecure& client, const String& appLink);
@@ -196,6 +202,10 @@ void setup() {
     cmdQueue = xQueueCreate(CMD_QUEUE_SIZE, sizeof(Command));
     if (!cmdQueue) {
         Serial.println("[FreeRTOS] ERROR: No se pudo crear la cola de comandos.");
+    }
+    tvFailureQueue = xQueueCreate(TV_FAILURE_QUEUE_SIZE, sizeof(Command));
+    if (!tvFailureQueue) {
+        Serial.println("[FreeRTOS] ERROR: No se pudo crear la cola de fallos TV.");
     }
     tvRemoteMutex = xSemaphoreCreateMutex();
     if (!tvRemoteMutex) {
@@ -340,6 +350,13 @@ void initArduinoOTA() {
 void workerTask(void* param) {
     Command cmd;
     for (;;) {
+        if ((!cmdQueue || uxQueueMessagesWaiting(cmdQueue) == 0) &&
+            tvFailureQueue && xQueueReceive(tvFailureQueue, &cmd, 0) == pdTRUE) {
+            const String message = "La cola del ESP32 está ocupada; la orden no se ejecutó. Volvé a intentarlo.";
+            publishTvCommandResult(String(cmd.deviceId), String(cmd.action), cmd.timestamp, false, message);
+            if (cmd.sourcePath[0] != '\0') { clearExecutedCommand(String(cmd.sourcePath)); }
+            continue;
+        }
         if (xQueueReceive(cmdQueue, &cmd, pdMS_TO_TICKS(100)) == pdTRUE) {
             if (cmd.timestamp <= 0 && (cmd.type == CMD_LIGHT || cmd.type == CMD_POOL)) {
                 FirebaseData tsData;
@@ -395,6 +412,13 @@ void workerTask(void* param) {
                     continue;
                 }
             }
+            if (cmd.type == CMD_TV && !isCommandFresh(cmd.timestamp)) {
+                const String message = "La orden TV expiró durante la espera del control; no se ejecutó. Volvé a enviarla.";
+                Serial.printf("[Worker] %s\n", message.c_str());
+                publishTvCommandResult(String(cmd.deviceId), String(cmd.action), cmd.timestamp, false, message);
+                if (cmd.sourcePath[0] != '\0') { clearExecutedCommand(String(cmd.sourcePath)); }
+                continue;
+            }
             switch (cmd.type) {
                 case CMD_LIGHT:
                     handleLightCommand(String(cmd.deviceId), cmd.boolParam);
@@ -412,7 +436,7 @@ void workerTask(void* param) {
                     String value = String(cmd.value);
                     String errorMsg = "";
 
-                    bool success = handleTvCommand(targetId, action, value, errorMsg);
+                    bool success = handleTvCommand(targetId, action, value, errorMsg, cmd.timestamp);
                     publishTvCommandResult(targetId, action, cmd.timestamp, success, errorMsg);
                     if (action == "power") { tvStatusRefreshRequested = true; }
                     break;
@@ -454,7 +478,8 @@ bool isCommandFresh(long long cmdTimestampMs) {
 bool isValidTvCommand(const String& targetId, const String& action, const String& value) {
     bool knownTv = targetId == "tv-living" || targetId == "tv-pedro" || targetId == "tv-padres" || targetId == "tv-lucas";
     if (!knownTv) return false;
-    if (action == "power" || action == "toggle_mute") return value.length() == 0;
+    if (action == "power") return value.length() == 0 || value == "on" || value == "off";
+    if (action == "toggle_mute") return value.length() == 0;
     if (action == "set_volume") {
         if (value.length() == 0) return false;
         for (size_t i = 0; i < value.length(); i++) if (!isDigit(value[i])) return false;
@@ -475,7 +500,9 @@ bool isValidTvCommand(const String& targetId, const String& action, const String
 
 void clearExecutedCommand(const String& path) {
     if (!Firebase.ready()) { return; }
-    Firebase.RTDB.deleteNode(&fbdo, path.c_str());
+    if (!Firebase.RTDB.deleteNode(&fbdo, path.c_str())) {
+        Serial.printf("[Worker] No se pudo limpiar %s: %s\n", path.c_str(), fbdo.errorReason().c_str());
+    }
 }
 
 void publishTvCommandResult(const String& targetId, const String& action, long long timestamp, bool success, const String& errorMsg) {
@@ -732,6 +759,11 @@ void streamCallback(FirebaseStream data) {
     if (enqueue && cmdQueue) {
         if (xQueueSend(cmdQueue, &cmd, 0) != pdTRUE) {
             Serial.println("[Stream] Cola llena — comando descartado.");
+            if (cmd.type == CMD_TV) {
+                if (!tvFailureQueue || xQueueSend(tvFailureQueue, &cmd, 0) != pdTRUE) {
+                    Serial.println("[Stream] No se pudo registrar el fallo TV: la cola de fallos también está llena.");
+                }
+            }
         }
     }
 }
@@ -1127,7 +1159,7 @@ bool parseAndroidTvVolume(const uint8_t* data, size_t length, int& currentVolume
     return true;
 }
 
-bool executeAndroidTvRemoteUnlocked(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState) {
+bool executeAndroidTvRemoteUnlocked(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState, long long commandTimestampMs) {
     WiFiClientSecure client;
     client.setTimeout(4000);
     client.setHandshakeTimeout(8);
@@ -1258,6 +1290,12 @@ bool executeAndroidTvRemoteUnlocked(const char* host, const char* tlsHostname, c
         }
     }
 
+    if (commandTimestampMs > 0 && !isCommandFresh(commandTimestampMs)) {
+        client.stop();
+        errorMsg = "La orden TV expiró al conectar con el televisor; no se ejecutó. Volvé a enviarla.";
+        return false;
+    }
+
     // A remote_start confirms the session, not the visible effect of a key press.
     bool writeOk = false;
     if (keyCode >= 0) {
@@ -1272,6 +1310,11 @@ bool executeAndroidTvRemoteUnlocked(const char* host, const char* tlsHostname, c
         Serial.printf("[AndroidTV] Volumen actual %d/%d; objetivo %d/%d; pasos %d\n",
             currentVolume, maxVolume, targetVolume, maxVolume, steps);
         for (int step = 0; step < steps; step++) {
+            if (commandTimestampMs > 0 && !isCommandFresh(commandTimestampMs)) {
+                errorMsg = "La orden TV expiró durante el ajuste de volumen; se detuvieron las teclas restantes.";
+                writeOk = false;
+                break;
+            }
             if (!sendAndroidTvKeyPacket(client, keyCode)) {
                 writeOk = false;
                 break;
@@ -1282,7 +1325,7 @@ bool executeAndroidTvRemoteUnlocked(const char* host, const char* tlsHostname, c
 
     if (!writeOk) {
         client.stop();
-        errorMsg = "Fallo al transmitir la orden a la TV";
+        if (errorMsg.length() == 0) { errorMsg = "Fallo al transmitir la orden a la TV"; }
         return false;
     }
 
@@ -1293,16 +1336,21 @@ bool executeAndroidTvRemoteUnlocked(const char* host, const char* tlsHostname, c
     return true;
 }
 
-bool executeAndroidTvRemote(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState, unsigned long mutexTimeoutMs, bool* sessionAcquired) {
+bool executeAndroidTvRemote(const char* host, const char* tlsHostname, const char* serverCertPem, const char* certPem, const char* keyPem, int keyCode, const String& appLink, int volumeLevel, String& errorMsg, bool* powerState, unsigned long mutexTimeoutMs, bool* sessionAcquired, long long commandTimestampMs) {
     if (sessionAcquired) { *sessionAcquired = false; }
     if (tvRemoteMutex && xSemaphoreTake(tvRemoteMutex, pdMS_TO_TICKS(mutexTimeoutMs)) != pdTRUE) {
         errorMsg = "El control remoto de otra TV sigue ocupado; volvé a intentar";
         return false;
     }
     if (sessionAcquired) { *sessionAcquired = true; }
+    if (commandTimestampMs > 0 && !isCommandFresh(commandTimestampMs)) {
+        errorMsg = "La orden TV expiró mientras esperaba el control; no se ejecutó. Volvé a enviarla.";
+        if (tvRemoteMutex) { xSemaphoreGive(tvRemoteMutex); }
+        return false;
+    }
 
     const bool success = executeAndroidTvRemoteUnlocked(
-        host, tlsHostname, serverCertPem, certPem, keyPem, keyCode, appLink, volumeLevel, errorMsg, powerState
+        host, tlsHostname, serverCertPem, certPem, keyPem, keyCode, appLink, volumeLevel, errorMsg, powerState, commandTimestampMs
     );
 
     if (tvRemoteMutex) { xSemaphoreGive(tvRemoteMutex); }
@@ -1395,7 +1443,81 @@ void tvStatusTask(void* param) {
     }
 }
 
-bool handleTvCommand(const String& targetId, const String& action, const String& value, String& errorMsg) {
+int hexDigitValue(char character) {
+    if (character >= '0' && character <= '9') { return character - '0'; }
+    if (character >= 'a' && character <= 'f') { return character - 'a' + 10; }
+    if (character >= 'A' && character <= 'F') { return character - 'A' + 10; }
+    return -1;
+}
+
+bool parseTvMacAddress(const char* address, uint8_t mac[6]) {
+    if (!address || !mac || strlen(address) != 17) { return false; }
+    const char separator = address[2];
+    if (separator != ':' && separator != '-') { return false; }
+
+    bool allZero = true;
+    bool allOnes = true;
+    for (size_t i = 0; i < 6; i++) {
+        const size_t offset = i * 3;
+        const int high = hexDigitValue(address[offset]);
+        const int low = hexDigitValue(address[offset + 1]);
+        if (high < 0 || low < 0) { return false; }
+        if (i < 5 && address[offset + 2] != separator) { return false; }
+        mac[i] = static_cast<uint8_t>((high << 4) | low);
+        allZero = allZero && mac[i] == 0;
+        allOnes = allOnes && mac[i] == 0xFF;
+    }
+    return !allZero && !allOnes && (mac[0] & 0x01) == 0;
+}
+
+bool sendWakeOnLanPacket(const SmartTvDevice& tv, String& errorMsg) {
+    if (!tv.macAddress || strlen(tv.macAddress) == 0) {
+        errorMsg = "No hay una MAC Wi-Fi configurada para Wake-on-LAN en esta TV";
+        return false;
+    }
+    if (WiFi.status() != WL_CONNECTED) {
+        errorMsg = "ESP32 sin conexión Wi-Fi; no se pudo enviar Wake-on-LAN";
+        return false;
+    }
+
+    uint8_t mac[6] = {};
+    if (!parseTvMacAddress(tv.macAddress, mac)) {
+        errorMsg = String("La MAC Wi-Fi configurada para Wake-on-LAN no es válida: ") + tv.id;
+        return false;
+    }
+
+    uint8_t packet[WOL_MAGIC_PACKET_SIZE];
+    memset(packet, 0xFF, 6);
+    for (size_t i = 0; i < 16; i++) {
+        memcpy(packet + 6 + i * 6, mac, sizeof(mac));
+    }
+
+    WiFiUDP udp;
+    if (!udp.begin(0)) {
+        errorMsg = "No se pudo abrir UDP para Wake-on-LAN";
+        return false;
+    }
+
+    const IPAddress localIp = WiFi.localIP();
+    const IPAddress subnetMask = WiFi.subnetMask();
+    IPAddress broadcastIp;
+    for (size_t i = 0; i < 4; i++) {
+        broadcastIp[i] = localIp[i] | static_cast<uint8_t>(~subnetMask[i]);
+    }
+    if (!udp.beginPacket(broadcastIp, 9) ||
+        udp.write(packet, sizeof(packet)) != sizeof(packet) ||
+        udp.endPacket() != 1) {
+        udp.stop();
+        errorMsg = "No se pudo transmitir el paquete Wake-on-LAN";
+        return false;
+    }
+
+    udp.stop();
+    Serial.printf("[Wake-on-LAN] Paquete mágico UDP enviado para %s (%s).\n", tv.id, tv.macAddress);
+    return true;
+}
+
+bool handleTvCommand(const String& targetId, const String& action, const String& value, String& errorMsg, long long commandTimestampMs) {
     Serial.printf("[TV Directo] %s | Acción: %s | Valor: %s\n", targetId.c_str(), action.c_str(), value.c_str());
 
     const SmartTvDevice* tv = nullptr;
@@ -1405,8 +1527,21 @@ bool handleTvCommand(const String& targetId, const String& action, const String&
             break;
         }
     }
-    if (!tv || !tv->ip || strlen(tv->ip) == 0) {
+    if (!tv) {
         errorMsg = "Televisor no encontrado en la configuración";
+        Serial.printf("[TV Directo] %s\n", errorMsg.c_str());
+        return false;
+    }
+    if (WiFi.status() != WL_CONNECTED) {
+        errorMsg = "ESP32 sin conexión Wi-Fi";
+        Serial.printf("[TV Directo] %s\n", errorMsg.c_str());
+        return false;
+    }
+    if (action == "power" && value == "on") {
+        return sendWakeOnLanPacket(*tv, errorMsg);
+    }
+    if (!tv->ip || strlen(tv->ip) == 0) {
+        errorMsg = "IP del televisor no configurada";
         Serial.printf("[TV Directo] %s\n", errorMsg.c_str());
         return false;
     }
@@ -1422,17 +1557,11 @@ bool handleTvCommand(const String& targetId, const String& action, const String&
         return false;
     }
 
-    if (WiFi.status() != WL_CONNECTED) {
-        errorMsg = "ESP32 sin conexión Wi-Fi";
-        Serial.printf("[TV Directo] %s\n", errorMsg.c_str());
-        return false;
-    }
-
     int keyCode = -1;
     String appLink = "";
     int volumeLevel = -1;
 
-    if (action == "power") {
+    if (action == "power" && (value == "off" || value.length() == 0)) {
         keyCode = 26; // KEYCODE_POWER
     } else if (action == "toggle_mute") {
         keyCode = 164; // KEYCODE_VOLUME_MUTE
@@ -1467,5 +1596,9 @@ bool handleTvCommand(const String& targetId, const String& action, const String&
         return false;
     }
 
-    return executeAndroidTvRemote(tv->ip, tv->tlsHostname, tv->serverCertPem, tv->certPem, tv->keyPem, keyCode, appLink, volumeLevel, errorMsg);
+    return executeAndroidTvRemote(
+        tv->ip, tv->tlsHostname, tv->serverCertPem, tv->certPem, tv->keyPem,
+        keyCode, appLink, volumeLevel, errorMsg, nullptr,
+        TV_REMOTE_COMMAND_MUTEX_TIMEOUT_MS, nullptr, commandTimestampMs
+    );
 }

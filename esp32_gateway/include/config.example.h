@@ -30,14 +30,19 @@ const size_t NUM_LIGHTS = sizeof(SMART_LIGHTS) / sizeof(SMART_LIGHTS[0]);
 #define TV_PEDRO_IP "192.168.1.10"
 #define TV_PADRES_IP "192.168.1.53"
 #define TV_LUCAS_IP "192.168.1.51"
+// Replace with each TV's Wi-Fi MAC. The all-zero placeholder deliberately fails WoL validation.
+#define TV_LIVING_MAC "00:00:00:00:00:00"
+#define TV_PEDRO_MAC "00:00:00:00:00:00"
+#define TV_PADRES_MAC "00:00:00:00:00:00"
+#define TV_LUCAS_MAC "00:00:00:00:00:00"
 
 #if __has_include("tv_certs.local.h")
 #include "tv_certs.local.h"
 const SmartTvDevice SMART_TVS[] = {
-    { "tv-pedro",  TV_PEDRO_IP,  TV_PEDRO_CERT,  TV_PEDRO_KEY,  TV_PEDRO_SERVER_CERT,  TV_PEDRO_TLS_HOST },
-    { "tv-living", TV_LIVING_IP, TV_LIVING_CERT, TV_LIVING_KEY, TV_LIVING_SERVER_CERT, TV_LIVING_TLS_HOST },
-    { "tv-padres", TV_PADRES_IP, TV_PADRES_CERT, TV_PADRES_KEY, TV_PADRES_SERVER_CERT, TV_PADRES_TLS_HOST },
-    { "tv-lucas",  TV_LUCAS_IP,  TV_LUCAS_CERT,  TV_LUCAS_KEY,  TV_LUCAS_SERVER_CERT,  TV_LUCAS_TLS_HOST }
+    { "tv-pedro",  TV_PEDRO_IP,  TV_PEDRO_CERT,  TV_PEDRO_KEY,  TV_PEDRO_SERVER_CERT,  TV_PEDRO_TLS_HOST,  TV_PEDRO_MAC },
+    { "tv-living", TV_LIVING_IP, TV_LIVING_CERT, TV_LIVING_KEY, TV_LIVING_SERVER_CERT, TV_LIVING_TLS_HOST, TV_LIVING_MAC },
+    { "tv-padres", TV_PADRES_IP, TV_PADRES_CERT, TV_PADRES_KEY, TV_PADRES_SERVER_CERT, TV_PADRES_TLS_HOST, TV_PADRES_MAC },
+    { "tv-lucas",  TV_LUCAS_IP,  TV_LUCAS_CERT, TV_LUCAS_KEY, TV_LUCAS_SERVER_CERT, TV_LUCAS_TLS_HOST, TV_LUCAS_MAC }
 };
 const size_t NUM_TVS = sizeof(SMART_TVS) / sizeof(SMART_TVS[0]);
 #else
