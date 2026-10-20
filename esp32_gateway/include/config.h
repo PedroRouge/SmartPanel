@@ -20,6 +20,7 @@ struct SmartTvDevice {
     const char* keyPem;
     const char* serverCertPem;
     const char* tlsHostname;
+    const char* macAddress;
 };
 
 #if __has_include("config.local.h")

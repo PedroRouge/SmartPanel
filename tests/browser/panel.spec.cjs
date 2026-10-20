@@ -27,7 +27,7 @@ test("abre el dashboard y conserva una única pestaña seleccionada", async ({ p
   await expect(page).toHaveTitle("Smart Panel");
   await expect(page.locator('[data-panel="inicio"]')).toBeVisible();
   await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
-  await expect(page.locator("#frontend-version")).toHaveText("HTML v89");
+  await expect(page.locator("#frontend-version")).toHaveText("HTML v90");
 });
 
 test("el slider de TV usa niveles enteros de volumen 0 a 25", async ({ page }) => {
