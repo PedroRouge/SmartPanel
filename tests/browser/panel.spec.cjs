@@ -27,7 +27,15 @@ test("abre el dashboard y conserva una única pestaña seleccionada", async ({ p
   await expect(page).toHaveTitle("Smart Panel");
   await expect(page.locator('[data-panel="inicio"]')).toBeVisible();
   await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
-  await expect(page.locator("#frontend-version")).toHaveText("HTML v83");
+  await expect(page.locator("#frontend-version")).toHaveText("HTML v89");
+});
+
+test("el slider de TV usa niveles enteros de volumen 0 a 25", async ({ page }) => {
+  const slider = page.locator("#volume-slider");
+  await expect(slider).toHaveAttribute("min", "0");
+  await expect(slider).toHaveAttribute("max", "25");
+  await expect(slider).toHaveAttribute("step", "1");
+  await expect(slider).toHaveAttribute("aria-label", "Volumen del televisor, de 0 a 25");
 });
 
 test("respeta el tema del sistema y guarda el tema elegido", async ({ page }) => {

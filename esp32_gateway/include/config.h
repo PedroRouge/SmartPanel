@@ -13,6 +13,15 @@ struct WifiSmartDevice {
     DeviceProtocol protocol;
 };
 
+struct SmartTvDevice {
+    const char* id;
+    const char* ip;
+    const char* certPem;
+    const char* keyPem;
+    const char* serverCertPem;
+    const char* tlsHostname;
+};
+
 #if __has_include("config.local.h")
 #include "config.local.h"
 #else
@@ -41,13 +50,12 @@ struct WifiSmartDevice {
 #error "Local device IP configuration must be defined in config.local.h"
 #endif
 
-// Placa ESP32-S3-N16R8 de doble USB mostrada: LED RGB integrado en GPIO48.
+// Placa ESP32-S3-N16R8: LED RGB integrado en GPIO48.
 #ifndef RGB_LED_PIN
 #define RGB_LED_PIN 48
 #endif
 
-// Android TV Remote pairing keys live on the local PC bridge, so route TV
-// commands there instead of attempting the unsupported TV HTTP port 8080.
-#ifndef TV_COMMANDS_VIA_ANDROID_BRIDGE
-#define TV_COMMANDS_VIA_ANDROID_BRIDGE 1
+// Contraseña para flasheo por Wi-Fi (ArduinoOTA)
+#ifndef OTA_PASSWORD
+#define OTA_PASSWORD "SmartPanelOTA2026"
 #endif

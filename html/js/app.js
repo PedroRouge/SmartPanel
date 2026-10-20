@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "83";
+  var APP_BUILD_VERSION = "89";
   var STORAGE_KEY = "smart-panel-state-v3";
   var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
@@ -62,11 +62,21 @@
   var agendaRestSyncBusy = false;
   var lastRenderedDay = ""; // PERF-03: sólo actualizar date-line cuando cambia el día
 
+  var TV_VOLUME_MAX = 25;
+  var TV_POWER_STATUS_MAX_AGE_MS = 90000;
+
+  function normalizeTvVolume(value, scale, fallback) {
+    if (!Number.isInteger(value) || value < 0) { return fallback; }
+    if (scale === TV_VOLUME_MAX) { return Math.min(value, TV_VOLUME_MAX); }
+    if (scale === 100 && value <= 100) { return Math.round(value * TV_VOLUME_MAX / 100); }
+    return fallback;
+  }
+
   var TV_DEVICES = [
-    { id: "tv-living", name: "TV Living", room: "Living", model: "Modelo no configurado", ip: "", powerControlReady: false, volume: 35, muted: false },
-    { id: "tv-pedro", name: "TV Pedro", room: "Habitación Pedro", model: "Modelo no configurado", ip: "", powerControlReady: false, volume: 30, muted: false },
-    { id: "tv-padres", name: "TV Habitación Padres", room: "Habitación Padres", model: "Modelo no configurado", ip: "", powerControlReady: false, volume: 30, muted: false },
-    { id: "tv-lucas", name: "TV Lucas", room: "Habitación Lucas", model: "Modelo no configurado", ip: "", powerControlReady: false, volume: 25, muted: false }
+    { id: "tv-living", name: "TV Living", room: "Living", model: "Modelo no configurado", ip: "", powerControlReady: false, volume: 9, muted: false },
+    { id: "tv-pedro", name: "TV Pedro", room: "Habitación Pedro", model: "Modelo no configurado", ip: "", powerControlReady: false, volume: 8, muted: false },
+    { id: "tv-padres", name: "TV Habitación Padres", room: "Habitación Padres", model: "Modelo no configurado", ip: "", powerControlReady: false, volume: 8, muted: false },
+    { id: "tv-lucas", name: "TV Lucas", room: "Habitación Lucas", model: "Modelo no configurado", ip: "", powerControlReady: false, volume: 6, muted: false }
   ];
 
   function readState() {
@@ -75,7 +85,8 @@
       poolOn: null,
       gateStatus: "unknown",
       gateStatusAt: 0,
-      volume: 35,
+      volume: 9,
+      volumeScale: TV_VOLUME_MAX,
       muted: false,
       tvId: "tv-living",
       tvStates: {},
@@ -92,7 +103,8 @@
             });
           }
           if (parsed.schemaVersion === 3 && typeof parsed.poolOn === "boolean") { defaults.poolOn = parsed.poolOn; }
-          if (Number.isInteger(parsed.volume) && parsed.volume >= 0 && parsed.volume <= 100) { defaults.volume = parsed.volume; }
+          var savedVolumeScale = parsed.volumeScale === TV_VOLUME_MAX ? TV_VOLUME_MAX : 100;
+          defaults.volume = normalizeTvVolume(parsed.volume, savedVolumeScale, defaults.volume);
           defaults.muted = parsed.muted === true;
           if (TV_DEVICES.some(function (tv) { return tv.id === parsed.tvId; })) { defaults.tvId = parsed.tvId; }
           if (parsed.tvStates && typeof parsed.tvStates === "object") {
@@ -100,9 +112,11 @@
               var savedTv = parsed.tvStates[tv.id];
               if (!savedTv || typeof savedTv !== "object") { return; }
               defaults.tvStates[tv.id] = {
-                volume: Number.isInteger(savedTv.volume) && savedTv.volume >= 0 && savedTv.volume <= 100 ? savedTv.volume : tv.volume,
+                volume: normalizeTvVolume(savedTv.volume, savedVolumeScale, tv.volume),
                 muted: savedTv.muted === true,
-                poweredOn: typeof savedTv.poweredOn === "boolean" ? savedTv.poweredOn : null
+                powerStatus: "unknown",
+                powerStatusAt: 0,
+                powerStatusReason: ""
               };
             });
           }
@@ -261,7 +275,8 @@
       var remoteTv = tvsData[key];
       var fallback = TV_DEVICES.find(function (tv) { return tv.id === key; });
       if (!remoteTv || typeof remoteTv !== "object" || !fallback) { return null; }
-      var volume = Number.isInteger(remoteTv.volume) && remoteTv.volume >= 0 && remoteTv.volume <= 100 ? remoteTv.volume : fallback.volume;
+      var volumeScale = remoteTv.volumeScale === TV_VOLUME_MAX ? TV_VOLUME_MAX : 100;
+      var volume = normalizeTvVolume(remoteTv.volume, volumeScale, fallback.volume);
       return {
         id: key,
         name: typeof remoteTv.name === "string" && remoteTv.name.length <= 80 ? remoteTv.name : fallback.name,
@@ -269,8 +284,8 @@
         model: typeof remoteTv.model === "string" && remoteTv.model.length <= 80 ? remoteTv.model : fallback.model,
         ip: typeof remoteTv.ip === "string" && remoteTv.ip.length <= 64 ? remoteTv.ip : fallback.ip,
         powerControlReady: remoteTv.powerControlReady === true,
-        poweredOn: typeof remoteTv.poweredOn === "boolean" ? remoteTv.poweredOn : null,
         volume: volume,
+        volumeScale: TV_VOLUME_MAX,
         muted: remoteTv.muted === true
       };
     });
@@ -283,8 +298,31 @@
       else if (typeof cached.volume !== "number") { cached.volume = 35; }
       if (typeof tv.muted === "boolean") { cached.muted = tv.muted; }
       else if (typeof cached.muted !== "boolean") { cached.muted = false; }
-      if (typeof tv.poweredOn === "boolean") { cached.poweredOn = tv.poweredOn; }
-      else if (typeof cached.poweredOn !== "boolean") { cached.poweredOn = null; }
+      if (typeof cached.powerStatus !== "string") { cached.powerStatus = "unknown"; }
+      if (typeof cached.powerStatusAt !== "number") { cached.powerStatusAt = 0; }
+      if (typeof cached.powerStatusReason !== "string") { cached.powerStatusReason = ""; }
+      state.tvStates[tv.id] = cached;
+    });
+    saveState();
+    renderTVs();
+    renderMedia();
+  }
+
+  function applyTvPowerTelemetry(tvsData) {
+    TV_DEVICES.forEach(function (tv) {
+      var cached = state.tvStates[tv.id] || {};
+      var report = tvsData && typeof tvsData === "object" ? tvsData[tv.id] : null;
+      if (report && typeof report === "object" &&
+          (report.status === "on" || report.status === "off" || report.status === "unknown") &&
+          Number.isFinite(Number(report.observedAt)) && Number(report.observedAt) > 0) {
+        cached.powerStatus = report.status;
+        cached.powerStatusAt = Number(report.observedAt);
+        cached.powerStatusReason = typeof report.reason === "string" ? report.reason : "";
+      } else {
+        cached.powerStatus = "unknown";
+        cached.powerStatusAt = 0;
+        cached.powerStatusReason = "";
+      }
       state.tvStates[tv.id] = cached;
     });
     saveState();
@@ -386,6 +424,10 @@
     // 3. TVs en tiempo real
     listen("home/tvs", function (snapshot) {
       applySharedTvState(snapshot.val());
+    });
+
+    listen("home/state/tvPower", function (snapshot) {
+      applyTvPowerTelemetry(snapshot.val());
     });
 
     // 4. Agenda privada para la cuenta actual.
@@ -581,7 +623,26 @@
     });
   }
 
-  function waitForFirebaseValue(path, target, timeoutMs) {
+  function setFirebaseValue(path, value) {
+    var user = auth && auth.currentUser;
+    if (!db || !apiAuthenticated || !user) { return Promise.reject(new Error("Inicia sesi\u00f3n para enviar ordenes.")); }
+    var config = window.SMART_PANEL_FIREBASE_CONFIG || {};
+    if (!config.databaseURL || !window.fetch) { return Promise.reject(new Error("Firebase no esta disponible.")); }
+    return user.getIdToken().then(function (token) {
+      var baseUrl = config.databaseURL.replace(/\/+$/, "");
+      var safePath = path.split("/").map(encodeURIComponent).join("/");
+      return fetch(baseUrl + "/" + safePath + ".json?auth=" + encodeURIComponent(token), {
+        method: "PUT",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(value)
+      });
+    }).then(function (response) {
+      if (!response.ok) { throw new Error("Firebase respondio HTTP " + response.status + " al publicar la orden."); }
+    });
+  }
+
+  function waitForFirebaseValue(path, target, timeoutMs, timeoutMessage) {
     var user = auth && auth.currentUser;
     var expires = Date.now() + timeoutMs;
     var stopped = false;
@@ -590,13 +651,17 @@
       if (stopped) { return Promise.reject(new Error("Se cancelo la espera de confirmacion.")); }
       return fetchFirebaseValueViaRest(user, path).then(function (value) {
         if (stopped) { throw new Error("Se cancelo la espera de confirmacion."); }
-        if (value === target) { return value; }
-        if (Date.now() >= expires) { throw new Error("El ESP32 no confirmo la accion a tiempo."); }
-        return new Promise(function (resolve) { setTimeout(resolve, 900); }).then(poll);
+        // Usar Number() para comparar timestamps: Firebase REST puede devolver floats
+        // (ej. 1729040252123.0) que no pasan la comparación estricta === con enteros JS.
+        var numericMatch = (typeof target === "number" && Number(value) === target);
+        var exactMatch   = (typeof target !== "number" && value === target);
+        if (numericMatch || exactMatch) { return value; }
+        if (Date.now() >= expires) { throw new Error(timeoutMessage || "El ESP32 no confirmó la acción a tiempo."); }
+        return new Promise(function (resolve) { setTimeout(resolve, 800); }).then(poll);
       });
     }
     var timeout = new Promise(function (_, reject) {
-      timer = setTimeout(function () { stopped = true; reject(new Error("El ESP32 no confirmo la accion a tiempo.")); }, timeoutMs);
+      timer = setTimeout(function () { stopped = true; reject(new Error(timeoutMessage || "El ESP32 no confirmó la acción a tiempo.")); }, timeoutMs);
     });
     return Promise.race([poll(), timeout]).finally(function () { stopped = true; clearTimeout(timer); });
   }
@@ -1037,7 +1102,7 @@
     var feedback = byId("media-feedback");
     if (!requireGatewayConnection("el televisor", feedback)) { renderMedia(); return; }
     var tvState = getSelectedTvState();
-    var previous = { volume: tvState.volume, muted: tvState.muted, poweredOn: tvState.poweredOn };
+    var previous = { volume: tvState.volume, muted: tvState.muted };
     if (action === "set_volume") {
       tvState.volume = Number(value);
       tvState.muted = false;
@@ -1046,8 +1111,6 @@
     } else if (action === "toggle_mute") {
       tvState.muted = !tvState.muted;
       state.muted = tvState.muted;
-    } else if (action === "power") {
-      tvState.poweredOn = tvState.poweredOn === true ? false : true;
     }
     saveState();
     renderTVs();
@@ -1060,52 +1123,63 @@
       value: value !== undefined ? value : null,
       timestamp: commandAt
     };
-    var updates = { "home/commands/tv": commandPayload };
+    var updates = {};
     if (action === "set_volume") {
       updates["home/tvs/" + tv.id + "/volume"] = tvState.volume;
+      updates["home/tvs/" + tv.id + "/volumeScale"] = TV_VOLUME_MAX;
       updates["home/tvs/" + tv.id + "/muted"] = false;
     } else if (action === "toggle_mute") {
       updates["home/tvs/" + tv.id + "/muted"] = tvState.muted;
-    } else if (action === "power") {
-      updates["home/tvs/" + tv.id + "/poweredOn"] = tvState.poweredOn;
     }
 
-    setCommandFeedback("Orden publicada. Esperando confirmación del control Android TV...", "pending");
-    feedback.textContent = tv.name + " - esperando respuesta del control Android TV...";
+    setCommandFeedback("Enviando orden a " + tv.name + "...", "pending");
+    feedback.textContent = tv.name + " - enviando orden...";
     var commandPublished = false;
-    updateFirebasePaths(updates).then(function () {
+    var stateUpdated = false;
+    var stateUpdate = Object.keys(updates).length ? updateFirebasePaths(updates) : Promise.resolve();
+    stateUpdate.then(function () {
+      stateUpdated = Object.keys(updates).length > 0;
+      // A direct node write yields the /tv stream event the ESP32 handles.
+      return setFirebaseValue("home/commands/tv", commandPayload);
+    }).then(function () {
       commandPublished = true;
-      return waitForFirebaseValue("home/state/tvCommandResult/timestamp", commandAt, 20000);
+      setCommandFeedback("Orden publicada. Esperando confirmación del ESP32...", "pending");
+      feedback.textContent = tv.name + " - esperando respuesta del ESP32...";
+      // El TTL del firmware es 15 s; este margen permite publicar el acuse final.
+      return waitForFirebaseValue(
+        "home/state/tvCommandResult/timestamp",
+        commandAt,
+        20000,
+        "El ESP32 no confirmó la orden a tiempo. Verificá que el gateway esté en línea y la TV accesible."
+      );
     }).then(function () {
       return fetchFirebaseValueViaRest(auth.currentUser, "home/state/tvCommandResult");
     }).then(function (result) {
       if (!result || Number(result.timestamp) !== commandAt || result.targetId !== tv.id) {
-        throw new Error("El resultado recibido no corresponde a esta orden.");
+        throw new Error("El resultado recibido no corresponde a esta orden (posible desfase de reloj).");
       }
       if (result.success !== true) {
-        throw new Error("El puente Android TV no pudo completar la orden. Verificá que la TV esté encendida y vinculada.");
+        throw new Error(result.message || "El ESP32 no pudo completar la orden. Verificá que la TV esté encendida y vinculada.");
       }
-      feedback.textContent = tv.name + " - el control Android TV confirmó el envío; no se recibe telemetría del estado físico.";
-      setCommandFeedback("El control Android TV ejecutó la solicitud para " + tv.name + "; el estado físico de la pantalla no está confirmado.", "success");
-      recordActivity("Comando multimedia: " + tv.name, "ok", "Android TV Remote confirmó el envío de " + action.replace(/_/g, " ") + "; estado físico sin telemetría");
+      feedback.textContent = tv.name + " - el ESP32 confirmó el envío del comando.";
+      setCommandFeedback("El ESP32 ejecutó la solicitud para " + tv.name + ". El estado se actualiza con la telemetría del televisor.", "success");
+      recordActivity("Comando multimedia: " + tv.name, "ok", "ESP32 confirmó el envío de " + action.replace(/_/g, " "));
     }).catch(function (error) {
       tvState.volume = previous.volume;
       tvState.muted = previous.muted;
-      tvState.poweredOn = previous.poweredOn;
       state.volume = previous.volume;
       state.muted = previous.muted;
       saveState();
       renderTVs();
       renderMedia();
-      if (commandPublished) {
+      if (commandPublished || stateUpdated) {
         var rollback = {};
         if (action === "set_volume") {
           rollback["home/tvs/" + tv.id + "/volume"] = previous.volume;
+          rollback["home/tvs/" + tv.id + "/volumeScale"] = TV_VOLUME_MAX;
           rollback["home/tvs/" + tv.id + "/muted"] = previous.muted;
         } else if (action === "toggle_mute") {
           rollback["home/tvs/" + tv.id + "/muted"] = previous.muted;
-        } else if (action === "power") {
-          rollback["home/tvs/" + tv.id + "/poweredOn"] = previous.poweredOn;
         }
         if (Object.keys(rollback).length) {
           updateFirebasePaths(rollback).catch(function (rollbackError) {
@@ -1113,8 +1187,8 @@
           });
         }
       }
-      feedback.textContent = "No se confirmó la orden de " + tv.name + ": " + error.message;
-      setCommandFeedback("Firebase publicó la solicitud, pero falló el control Android TV de " + tv.name + ": " + error.message, "error");
+      feedback.textContent = "Sin confirmación del ESP32 para " + tv.name + ": " + error.message;
+      setCommandFeedback("Error en el control de " + tv.name + ": " + error.message, "error");
       recordActivity("Comando multimedia: " + tv.name, "error", error.message);
     });
   }
@@ -2148,9 +2222,55 @@
     var tv = getSelectedTv();
     if (!tv) { return { volume: state.volume, muted: state.muted }; }
     if (!state.tvStates[tv.id]) {
-      state.tvStates[tv.id] = { volume: tv.volume || 35, muted: tv.muted === true, poweredOn: typeof tv.poweredOn === "boolean" ? tv.poweredOn : null };
+      state.tvStates[tv.id] = {
+        volume: Number.isInteger(tv.volume) ? tv.volume : 9,
+        muted: tv.muted === true,
+        powerStatus: "unknown",
+        powerStatusAt: 0,
+        powerStatusReason: ""
+      };
     }
     return state.tvStates[tv.id];
+  }
+
+  function getTvPowerDisplay(tvState) {
+    var status = tvState && tvState.powerStatus;
+    var observedAt = Number(tvState && tvState.powerStatusAt) || 0;
+    var age = Date.now() - observedAt;
+    var fresh = observedAt > 0 && age >= -30000 && age <= TV_POWER_STATUS_MAX_AGE_MS;
+    if (!fresh || (status !== "on" && status !== "off" && status !== "unknown")) { status = "unknown"; }
+    if (status === "on") { return { status: status, text: "Encendido", className: "is-on", buttonLabel: "Apagar" }; }
+    if (status === "off") { return { status: status, text: "Apagado", className: "is-off", buttonLabel: "Encender" }; }
+    if (fresh && tvState.powerStatusReason === "not_configured") {
+      return { status: status, text: "Telemetría no configurada", className: "is-unknown", buttonLabel: "Cambiar estado" };
+    }
+    if (fresh && tvState.powerStatusReason === "connection_failed") {
+      return { status: status, text: "Sin respuesta de la TV", className: "is-unknown", buttonLabel: "Cambiar estado" };
+    }
+    return { status: "unknown", text: "Estado físico desconocido", className: "is-unknown", buttonLabel: "Cambiar estado" };
+  }
+
+  function updateTvPowerUI() {
+    TV_DEVICES.forEach(function (tv) {
+      var tvState = state.tvStates[tv.id];
+      var display = getTvPowerDisplay(tvState);
+      var cardStatus = document.querySelector('[data-tv-power-id="' + tv.id + '"]');
+      if (cardStatus) {
+        cardStatus.textContent = display.text;
+        cardStatus.classList.remove("is-on", "is-off", "is-unknown");
+        cardStatus.classList.add(display.className);
+      }
+    });
+
+    var selected = getSelectedTv();
+    if (!selected) { return; }
+    var selectedState = getSelectedTvState();
+    var selectedDisplay = getTvPowerDisplay(selectedState);
+    byId("selected-tv-power").textContent = selectedDisplay.text;
+    byId("selected-tv-dot").classList.remove("is-on", "is-off", "is-unknown");
+    byId("selected-tv-dot").classList.add(selectedDisplay.className);
+    byId("tv-power-label").textContent = selectedDisplay.buttonLabel;
+    byId("tv-power-button").setAttribute("aria-label", selectedDisplay.buttonLabel + " televisor");
   }
 
   function renderTVs() {
@@ -2160,7 +2280,7 @@
 
     var selected = getSelectedTv();
     byId("tv-list-empty").hidden = TV_DEVICES.length > 0;
-    byId("tv-api-status").textContent = "Comandos por ESP32-S3 · " + TV_DEVICES.length + " dispositivos configurados · estado físico sin confirmar";
+    byId("tv-api-status").textContent = "Android TV Wi-Fi (ESP32-S3) · estado de energía leído desde cada televisor";
 
     TV_DEVICES.forEach(function (tv) {
       var btn = document.createElement("button");
@@ -2176,6 +2296,7 @@
       copy.appendChild(createTextElement("span", "", tv.room + " · " + tv.model + (tv.ip ? " (" + tv.ip + ")" : "")));
 
       var power = createTextElement("span", "tv-power-state", "Estado físico desconocido");
+      power.setAttribute("data-tv-power-id", tv.id);
       power.classList.add("is-unknown");
       copy.appendChild(power);
 
@@ -2199,15 +2320,8 @@
 
     byId("tv-control").hidden = !selected;
     if (selected) {
-      var selectedTvState = getSelectedTvState();
-      var powerLabel = selectedTvState.poweredOn === true ? "Apagar" : "Encender";
       byId("selected-tv-name").textContent = selected.name;
       byId("selected-tv-location").textContent = selected.room + " · " + selected.model + " · " + (selected.ip || "IP sin configurar");
-      byId("selected-tv-power").textContent = "Estado físico desconocido";
-      byId("selected-tv-dot").classList.remove("is-off");
-      byId("selected-tv-dot").classList.add("is-unknown");
-      byId("tv-power-label").textContent = powerLabel;
-      byId("tv-power-button").setAttribute("aria-label", powerLabel + " televisor");
       byId("tv-power-button").disabled = !selected.powerControlReady;
       byId("tv-power-hint").hidden = selected.powerControlReady;
       byId("volume-slider").disabled = !selected.powerControlReady;
@@ -2218,11 +2332,12 @@
       });
       byId("remote-key-hint").textContent = "Los comandos requieren que el modelo y su protocolo de control por red estén configurados.";
     }
+    updateTvPowerUI();
   }
 
   function renderMedia() {
     var tvState = getSelectedTvState();
-    byId("volume-value").textContent = tvState.muted ? "--" : tvState.volume + "%";
+    byId("volume-value").textContent = tvState.muted ? "--" : tvState.volume + "/" + TV_VOLUME_MAX;
     byId("volume-slider").value = String(tvState.volume);
     byId("mute-button").setAttribute("aria-pressed", tvState.muted ? "true" : "false");
     byId("mute-button").classList.toggle("is-muted", tvState.muted);
@@ -2385,7 +2500,7 @@
     var slider = byId("volume-slider");
     slider.addEventListener("input", function () {
       var val = Number(this.value);
-      byId("volume-value").textContent = val + "%";
+      byId("volume-value").textContent = val + "/" + TV_VOLUME_MAX;
     });
 
     slider.addEventListener("change", function () {
@@ -2640,7 +2755,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=83").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=90").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -3380,8 +3495,8 @@
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v83";
-    byId("script-build-version").textContent = "JS v81";
+    byId("frontend-version").textContent = "HTML v89";
+    byId("script-build-version").textContent = "JS v" + APP_BUILD_VERSION;
 
     initializeConfirmDialog();
     initializeTabs();
@@ -3397,6 +3512,7 @@
     renderSystemStatus();
     setInterval(refreshGatewayFreshness, 5000);
     setInterval(updateSharedStateFreshnessUI, 30000);
+    setInterval(updateTvPowerUI, 15000);
     renderMedia();
     saveState(); // Rewrite old local cache through the current validation/migration rules.
 
@@ -3415,7 +3531,7 @@
       byId("tv-api-status").textContent = "Actualizando lista guardada en Firebase...";
       fetchFirebaseValueViaRest(user, "home/tvs").then(function (tvData) {
         applySharedTvState(tvData);
-        byId("tv-api-status").textContent = "Lista sincronizada · disponibilidad y estado físico requieren telemetría del televisor.";
+        byId("tv-api-status").textContent = "Lista sincronizada · el estado de energía se actualiza desde la telemetría Android TV.";
       }).catch(function (error) {
         byId("tv-api-status").textContent = "No se pudo actualizar la lista: " + error.message;
       }).finally(function () {
