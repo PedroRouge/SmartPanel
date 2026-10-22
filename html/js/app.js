@@ -9,6 +9,7 @@
     longitude: -60.57469,
     location: "Colonia Ensayo, Entre Ríos"
   };
+  var WEATHER_UPDATE_INTERVAL_MS = 15 * 60 * 1000;
   var WEATHER_STORAGE_KEY = "smart-panel-weather-v5-" + WEATHER_CONFIG.latitude + "-" + WEATHER_CONFIG.longitude;
 
   var state = readState();
@@ -1504,10 +1505,10 @@ function sendGateCommand() {
     if (refreshBtn) { refreshBtn.disabled = true; }
     if (status) { status.textContent = "Consultando Open-Meteo..."; }
 
-    var url = "https://api.open-meteo.com/v1/forecast?latitude=" + WEATHER_CONFIG.latitude +
-      "&longitude=" + WEATHER_CONFIG.longitude +
-      "&current=temperature_2m,weather_code" +
-      "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_mean" +
+    var url = "https://api.open-meteo.com/v1/forecast?latitude=" + WEATHER_CONFIG.latitude.toFixed(6) +
+      "&longitude=" + WEATHER_CONFIG.longitude.toFixed(6) +
+      "&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,is_day" +
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max" +
       "&forecast_days=7&timezone=auto";
 
     fetch(url, { cache: "no-store" })
@@ -3677,7 +3678,7 @@ function sendGateCommand() {
     // Cargar clima (una sola vez al inicio + caché)
     loadCachedWeather();
     loadWeather();
-    every("weather", 30 * 60 * 1000, loadWeather);
+    every("weather", WEATHER_UPDATE_INTERVAL_MS, loadWeather);
 
     // Inicializar sistema de notificaciones
     loadAgendaNotifSent();
