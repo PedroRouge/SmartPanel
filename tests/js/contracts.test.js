@@ -163,17 +163,45 @@ test("el worker gratuito de Apps Script se ejecuta cada cinco minutos y usa cred
 
 test("las reglas Firebase no habilitan escritura general a cualquier usuario", () => {
   const rules = JSON.parse(read("firebase_rules.json")).rules;
+  const deviceUid = "PKgoqB7KCMSiM9lnEH8TawsXwiU2";
   assert.equal(rules.home.state[".write"], undefined);
-  assert.equal(rules.home.state.gateStatus[".write"], "auth != null && auth.token.role == 'device'");
-  assert.equal(rules.home.state.lights.$light[".write"], "auth != null && auth.token.role == 'device'");
+  assert.equal(rules.home.state.gateStatus[".write"], `auth != null && auth.token.role == 'device' && auth.uid == '${deviceUid}'`);
+  assert.equal(rules.home.state.lights.$light[".write"], `auth != null && auth.token.role == 'device' && auth.uid == '${deviceUid}'`);
   assert.equal(rules.home.state[".read"], "auth != null && auth.token.role == 'admin'");
   assert.match(rules.home.state.tvPower.$tvId[".write"], /auth\.token\.role == 'device'/);
+  assert.match(rules.home.state.tvPower.$tvId[".write"], new RegExp(`auth\\.uid == '${deviceUid}'`));
   assert.equal(rules.home.state.tvPower.$tvId.$other[".validate"], false);
   assert.equal(rules.home.commands.timestamp[".write"], "auth != null && auth.token.role == 'admin'");
-  assert.equal(rules.home.commands[".read"], "auth != null && (auth.token.role == 'admin' || auth.token.role == 'device')");
+  assert.equal(rules.home.commands[".read"], `auth != null && (auth.token.role == 'admin' || auth.token.role == 'device' && auth.uid == '${deviceUid}')`);
   assert.match(rules.home.commands.tv[".validate"], /child\('value'\)\.val\(\) <= 25/);
   assert.equal(rules.home.gateway.status.$other[".validate"], false);
   assert.equal(rules.scheduledReminders, undefined, "no se conserva una cola usada solo por Cloud Functions");
+
+  // Cada escritura de dispositivo queda atada a la identidad del gateway.
+  const deviceWrites = [];
+  const walk = (node) => {
+    for (const [key, value] of Object.entries(node || {})) {
+      if (key === ".write" && typeof value === "string" && value.includes("auth.token.role == 'device'")) {
+        deviceWrites.push(value);
+      } else if (value && typeof value === "object") {
+        walk(value);
+      }
+    }
+  };
+  walk(rules);
+  assert.ok(deviceWrites.length >= 10, "se esperaban las escrituras del dispositivo");
+  for (const expression of deviceWrites) {
+    assert.match(expression, new RegExp(`auth\\.uid == '${deviceUid}'`), `escritura sin identidad de dispositivo: ${expression}`);
+  }
+
+  // La agenda legacy no admite escrituras y cada TV sólo acepta campos conocidos.
+  assert.equal(rules.home.events[".write"], false);
+  assert.equal(rules.home.tvs.$tvId.$other[".validate"], false);
+  assert.equal(rules.home.tvs.$tvId.volumeScale[".validate"], "newData.isNumber() && (newData.val() == 25 || newData.val() == 100)");
+  assert.equal(rules.users.$uid.events.$eventId.repeat[".validate"], true);
+  assert.equal(rules.users.$uid.events.$eventId.seriesId[".validate"], true);
+  assert.equal(rules.users.$uid.events.$eventId.occurrence[".validate"], true);
+  assert.ok((rules.users.$uid.events[".indexOn"] || []).includes("date"));
 });
 
 test("el firmware conserva validaciones explícitas para órdenes TV y reloj", () => {

@@ -4,36 +4,36 @@
       "state": {
         ".read": "auth != null && auth.token.role == 'admin'",
         "updatedAt": {
-          ".write": "auth != null && auth.token.role == 'device'",
+          ".write": "auth != null && auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2'",
           ".validate": "newData.isNumber() && newData.val() > 0"
         },
         "lights": {
           "$light": {
-            ".write": "auth != null && auth.token.role == 'device'",
+            ".write": "auth != null && auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2'",
             ".validate": "($light == 'living' || $light == 'kitchen' || $light == 'bedroom' || $light == 'garden') && newData.isBoolean()"
           }
         },
         "poolOn": {
-          ".write": "auth != null && auth.token.role == 'device'",
+          ".write": "auth != null && auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2'",
           ".validate": "newData.isBoolean()"
         },
         "gateStatus": {
-          ".write": "auth != null && auth.token.role == 'device'",
+          ".write": "auth != null && auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2'",
           ".validate": "newData.isString() && (newData.val() == 'unknown' || newData.val() == 'pulse_sent' || newData.val() == 'pulse_failed')"
         },
         "gateStatusAt": {
-          ".write": "auth != null && auth.token.role == 'device'",
+          ".write": "auth != null && auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2'",
           ".validate": "newData.isNumber() && newData.val() > 0"
         },
         "commandReceipts": {
-          ".read": "auth != null && auth.token.role == 'device'",
+          ".read": "auth != null && auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2'",
           "$command": {
-            ".write": "auth != null && auth.token.role == 'device'",
+            ".write": "auth != null && auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2'",
             ".validate": "newData.isNumber() && newData.val() > 0"
           }
         },
         "tvCommandResult": {
-          ".write": "auth != null && auth.token.role == 'device'",
+          ".write": "auth != null && auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2'",
           ".validate": "newData.hasChildren(['timestamp', 'targetId', 'action', 'success']) && newData.child('timestamp').isNumber() && newData.child('timestamp').val() > 0 && (newData.child('targetId').val() == 'tv-living' || newData.child('targetId').val() == 'tv-pedro' || newData.child('targetId').val() == 'tv-padres' || newData.child('targetId').val() == 'tv-lucas') && (newData.child('action').val() == 'power' || newData.child('action').val() == 'toggle_mute' || newData.child('action').val() == 'set_volume' || newData.child('action').val() == 'launch_app' || newData.child('action').val() == 'remote_key') && newData.child('success').isBoolean()",
           "timestamp": { ".validate": "newData.isNumber() && newData.val() > 0" },
           "targetId": { ".validate": "newData.isString()" },
@@ -44,7 +44,7 @@
         },
         "tvPower": {
           "$tvId": {
-            ".write": "auth != null && auth.token.role == 'device' && ($tvId == 'tv-living' || $tvId == 'tv-pedro' || $tvId == 'tv-padres' || $tvId == 'tv-lucas')",
+            ".write": "auth != null && auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2' && ($tvId == 'tv-living' || $tvId == 'tv-pedro' || $tvId == 'tv-padres' || $tvId == 'tv-lucas')",
             ".validate": "newData.hasChildren(['status', 'observedAt', 'reason']) && (newData.child('status').val() == 'on' || newData.child('status').val() == 'off' || newData.child('status').val() == 'unknown') && newData.child('observedAt').isNumber() && newData.child('observedAt').val() > 0 && (newData.child('reason').val() == 'reported' || newData.child('reason').val() == 'not_configured' || newData.child('reason').val() == 'connection_failed')",
             "status": { ".validate": "newData.isString() && (newData.val() == 'on' || newData.val() == 'off' || newData.val() == 'unknown')" },
             "observedAt": { ".validate": "newData.isNumber() && newData.val() > 0" },
@@ -54,34 +54,34 @@
         }
       },
       "commands": {
-        ".read": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'device')",
+        ".read": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2')",
         "timestamp": {
           ".write": "auth != null && auth.token.role == 'admin'",
           ".validate": "newData.isNumber() && newData.val() > 0"
         },
         "lights": {
           "$light": {
-            ".write": "auth != null && (auth.token.role == 'admin' || (auth.token.role == 'device' && !newData.exists()))",
+            ".write": "auth != null && (auth.token.role == 'admin' || (auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2' && !newData.exists()))",
             ".validate": "($light == 'living' || $light == 'kitchen' || $light == 'bedroom' || $light == 'garden') && newData.isBoolean()"
           }
         },
         "poolOn": {
-          ".write": "auth != null && (auth.token.role == 'admin' || (auth.token.role == 'device' && !newData.exists()))",
+          ".write": "auth != null && (auth.token.role == 'admin' || (auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2' && !newData.exists()))",
           ".validate": "newData.isBoolean()"
         },
         "gateTrigger": {
-          ".write": "auth != null && (auth.token.role == 'admin' || (auth.token.role == 'device' && !newData.exists()))",
+          ".write": "auth != null && (auth.token.role == 'admin' || (auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2' && !newData.exists()))",
           ".validate": "newData.isNumber() && newData.val() > 0"
         },
         "tv": {
-          ".write": "auth != null && (auth.token.role == 'admin' || (auth.token.role == 'device' && !newData.exists()))",
+          ".write": "auth != null && (auth.token.role == 'admin' || (auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2' && !newData.exists()))",
           ".validate": "newData.hasChildren(['timestamp', 'targetId', 'action']) && newData.child('timestamp').isNumber() && newData.child('timestamp').val() > 0 && (newData.child('targetId').val() == 'tv-living' || newData.child('targetId').val() == 'tv-pedro' || newData.child('targetId').val() == 'tv-padres' || newData.child('targetId').val() == 'tv-lucas') && ((newData.child('action').val() == 'power' && (!newData.child('value').exists() || (newData.child('value').isString() && (newData.child('value').val() == 'on' || newData.child('value').val() == 'off')))) || (newData.child('action').val() == 'toggle_mute' && !newData.child('value').exists()) || (newData.child('action').val() == 'set_volume' && newData.child('value').isNumber() && newData.child('value').val() >= 0 && newData.child('value').val() <= 25) || (newData.child('action').val() == 'launch_app' && (newData.child('value').val() == 'Netflix' || newData.child('value').val() == 'YouTube' || newData.child('value').val() == 'Flow' || newData.child('value').val() == 'Prime Video' || newData.child('value').val() == 'Disney+' || newData.child('value').val() == 'Spotify')) || (newData.child('action').val() == 'remote_key' && (newData.child('value').val() == 'UP' || newData.child('value').val() == 'DOWN' || newData.child('value').val() == 'LEFT' || newData.child('value').val() == 'RIGHT' || newData.child('value').val() == 'ENTER' || newData.child('value').val() == 'OK' || newData.child('value').val() == 'BACK' || newData.child('value').val() == 'HOME' || newData.child('value').val() == 'MENU' || newData.child('value').val() == 'PLAY_PAUSE')))"
         }
       },
       "gateway": {
         "status": {
           ".read": "auth != null && auth.token.role == 'admin'",
-          ".write": "auth != null && auth.token.role == 'device'",
+          ".write": "auth != null && auth.token.role == 'device' && auth.uid == 'PKgoqB7KCMSiM9lnEH8TawsXwiU2'",
           ".validate": "newData.hasChildren(['online', 'ip', 'rssi', 'uptime', 'last_seen', 'version'])",
           "online": { ".validate": "newData.isBoolean()" },
           "ip": { ".validate": "newData.isString() && newData.val().length <= 45" },
@@ -96,12 +96,22 @@
         ".read": "auth != null && auth.token.role == 'admin'",
         "$tvId": {
           ".write": "auth != null && auth.token.role == 'admin' && ($tvId == 'tv-living' || $tvId == 'tv-pedro' || $tvId == 'tv-padres' || $tvId == 'tv-lucas')",
-          ".validate": "newData.hasChildren(['id', 'name', 'room', 'model', 'volume', 'muted']) && newData.child('id').val() == $tvId && newData.child('name').isString() && newData.child('name').val().length <= 80 && newData.child('room').isString() && newData.child('room').val().length <= 80 && newData.child('model').isString() && newData.child('model').val().length <= 80 && newData.child('volume').isNumber() && newData.child('volume').val() >= 0 && newData.child('volume').val() <= 100 && newData.child('muted').isBoolean()"
+          ".validate": "newData.hasChildren(['id', 'name', 'room', 'model', 'volume', 'muted']) && newData.child('id').val() == $tvId && newData.child('name').isString() && newData.child('name').val().length <= 80 && newData.child('room').isString() && newData.child('room').val().length <= 80 && newData.child('model').isString() && newData.child('model').val().length <= 80 && newData.child('volume').isNumber() && newData.child('volume').val() >= 0 && newData.child('volume').val() <= 100 && newData.child('muted').isBoolean()",
+          "id": { ".validate": "newData.isString() && newData.val() == $tvId" },
+          "name": { ".validate": "newData.isString() && newData.val().length <= 80" },
+          "room": { ".validate": "newData.isString() && newData.val().length <= 80" },
+          "model": { ".validate": "newData.isString() && newData.val().length <= 80" },
+          "ip": { ".validate": "newData.isString() && newData.val().length <= 45" },
+          "volume": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+          "volumeScale": { ".validate": "newData.isNumber() && (newData.val() == 25 || newData.val() == 100)" },
+          "muted": { ".validate": "newData.isBoolean()" },
+          "powerControlReady": { ".validate": "newData.isBoolean()" },
+          "$other": { ".validate": false }
         }
       },
       "events": {
         ".read": "auth != null && auth.token.role == 'admin'",
-        ".write": "auth != null && auth.token.role == 'admin'"
+        ".write": false
       },
       "pushAlerts": {
         "$alertId": {
@@ -120,9 +130,10 @@
         "events": {
           ".read": "auth != null && auth.uid == $uid",
           ".write": "auth != null && auth.uid == $uid",
+          ".indexOn": ["date"],
           "$eventId": {
             ".write": "auth != null && auth.uid == $uid",
-            ".validate": "newData.hasChildren(['title', 'date', 'all_day', 'notes', 'category', 'updatedAt']) && newData.child('title').isString() && newData.child('title').val().length > 0 && newData.child('title').val().length <= 120 && newData.child('date').isString() && newData.child('date').val().matches(/^(19|20)[0-9][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/) && newData.child('all_day').isBoolean() && newData.child('notes').isString() && newData.child('notes').val().length <= 2000 && newData.child('category').isString() && (newData.child('category').val() == 'personal' || newData.child('category').val() == 'hogar' || newData.child('category').val() == 'salud' || newData.child('category').val() == 'trabajo' || newData.child('category').val() == 'otro') && newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() > 0 && (!newData.child('start_time').exists() || newData.child('start_time').val() == null || (newData.child('start_time').isString() && newData.child('start_time').val().matches(/^([01][0-9]|2[0-3]):[0-5][0-9]$/))) && (!newData.child('end_time').exists() || newData.child('end_time').val() == null || (newData.child('end_time').isString() && newData.child('end_time').val().matches(/^([01][0-9]|2[0-3]):[0-5][0-9]$/)))",
+            ".validate": "newData.hasChildren(['title', 'date', 'all_day', 'notes', 'category', 'updatedAt']) && newData.child('title').isString() && newData.child('title').val().length > 0 && newData.child('title').val().length <= 120 && newData.child('date').isString() && newData.child('date').val().matches(/^(19|20)[0-9][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/) && newData.child('all_day').isBoolean() && newData.child('notes').isString() && newData.child('notes').val().length <= 2000 && newData.child('category').isString() && (newData.child('category').val() == 'personal' || newData.child('category').val() == 'hogar' || newData.child('category').val() == 'salud' || newData.child('category').val() == 'trabajo' || newData.child('category').val() == 'otro') && newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() > 0 && (!newData.child('start_time').exists() || newData.child('start_time').val() == null || (newData.child('start_time').isString() && newData.child('start_time').val().matches(/^([01][0-9]|2[0-3]):[0-5][0-9]$/))) && (!newData.child('end_time').exists() || newData.child('end_time').val() == null || (newData.child('end_time').isString() && newData.child('end_time').val().matches(/^([01][0-9]|2[0-3]):[0-5][0-9]$/))) && (!newData.child('repeat').exists() || (newData.child('repeat').isString() && (newData.child('repeat').val() == 'none' || newData.child('repeat').val() == 'weekly' || newData.child('repeat').val() == 'monthly'))) && (!newData.child('seriesId').exists() || (newData.child('seriesId').isString() && newData.child('seriesId').val().length <= 64)) && (!newData.child('occurrence').exists() || (newData.child('occurrence').isNumber() && newData.child('occurrence').val() >= 1 && newData.child('occurrence').val() <= 24))",
             "title": { ".validate": true },
             "date": { ".validate": true },
             "all_day": { ".validate": true },
@@ -131,6 +142,9 @@
             "updatedAt": { ".validate": true },
             "start_time": { ".validate": true },
             "end_time": { ".validate": true },
+            "repeat": { ".validate": true },
+            "seriesId": { ".validate": true },
+            "occurrence": { ".validate": true },
             "$other": { ".validate": false }
           }
         }

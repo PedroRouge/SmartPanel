@@ -2,9 +2,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { after, before, beforeEach, test } = require("node:test");
 const { initializeTestEnvironment, assertFails, assertSucceeds } = require("@firebase/rules-unit-testing");
-const { ref, get, set } = require("firebase/database");
+const { ref, get, set, update } = require("firebase/database");
 
 const projectId = "demo-smart-panel";
+// Identidad del gateway (ESP32) registrada en Firebase Auth.
+const deviceUid = "PKgoqB7KCMSiM9lnEH8TawsXwiU2";
 let environment;
 
 before(async () => {
@@ -26,7 +28,7 @@ beforeEach(async () => {
 
 test("admin puede emitir comandos; device solo puede retirarlos", async () => {
   const adminDb = environment.authenticatedContext("admin", { role: "admin" }).database();
-  const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
+  const deviceDb = environment.authenticatedContext(deviceUid, { role: "device" }).database();
   const strangerDb = environment.authenticatedContext("guest", { email: "otro@example.com" }).database();
   const command = ref(adminDb, "home/commands/lights/living");
 
@@ -37,7 +39,7 @@ test("admin puede emitir comandos; device solo puede retirarlos", async () => {
 });
 
 test("gateway reporta estados de portón enumerados y admin puede leerlos", async () => {
-  const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
+  const deviceDb = environment.authenticatedContext(deviceUid, { role: "device" }).database();
   const adminDb = environment.authenticatedContext("admin", { role: "admin" }).database();
   const guestDb = environment.authenticatedContext("guest", { email: "otro@example.com" }).database();
 
@@ -48,7 +50,7 @@ test("gateway reporta estados de portón enumerados y admin puede leerlos", asyn
 });
 
 test("device solo puede escribir campos conocidos en home/state", async () => {
-  const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
+  const deviceDb = environment.authenticatedContext(deviceUid, { role: "device" }).database();
   const guestDb = environment.authenticatedContext("guest").database();
   const state = ref(deviceDb, "home/state");
 
@@ -66,7 +68,7 @@ test("device solo puede escribir campos conocidos en home/state", async () => {
 });
 
 test("device reporta telemetria de energia TV con estado y antiguedad validados", async () => {
-  const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
+  const deviceDb = environment.authenticatedContext(deviceUid, { role: "device" }).database();
   const adminDb = environment.authenticatedContext("admin", { role: "admin" }).database();
   const state = ref(deviceDb, "home/state/tvPower/tv-pedro");
   const observedAt = Date.now();
@@ -103,7 +105,7 @@ test("admin solo puede emitir comandos de encendido TV con destino explicito seg
 });
 
 test("gateway status exige el esquema exacto y valores acotados", async () => {
-  const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
+  const deviceDb = environment.authenticatedContext(deviceUid, { role: "device" }).database();
   const status = ref(deviceDb, "home/gateway/status");
   const validStatus = {
     online: true,
@@ -159,7 +161,7 @@ test("el acceso de administrador depende del claim y no del email", async () => 
 });
 
 test("device puede reportar tvCommandResult con o sin message", async () => {
-  const deviceDb = environment.authenticatedContext("gateway", { role: "device" }).database();
+  const deviceDb = environment.authenticatedContext(deviceUid, { role: "device" }).database();
   const resultRef = ref(deviceDb, "home/state/tvCommandResult");
 
   const successResult = {
@@ -178,4 +180,80 @@ test("device puede reportar tvCommandResult con o sin message", async () => {
     message: "Couldn't connect to 192.168.0.10:6466",
   };
   await assertSucceeds(set(resultRef, errorResult));
+});
+
+
+test("solo la identidad del gateway puede escribir el estado del dispositivo", async () => {
+  const gatewayDb = environment.authenticatedContext(deviceUid, { role: "device" }).database();
+  const otherDeviceDb = environment.authenticatedContext("otro-device", { role: "device" }).database();
+  const adminDb = environment.authenticatedContext("admin", { role: "admin" }).database();
+
+  await assertSucceeds(set(ref(gatewayDb, "home/state/poolOn"), true));
+  await assertFails(set(ref(otherDeviceDb, "home/state/poolOn"), false));
+  await assertFails(set(ref(otherDeviceDb, "home/state/lights/living"), true));
+  await assertFails(set(ref(otherDeviceDb, "home/gateway/status"), { online: true }));
+  await assertFails(set(ref(otherDeviceDb, "home/state/tvCommandResult"), {
+    timestamp: Date.now(),
+    targetId: "tv-pedro",
+    action: "power",
+    success: true,
+  }));
+  // Un administrador tampoco escribe el estado reservado al dispositivo.
+  await assertFails(set(ref(adminDb, "home/state/poolOn"), false));
+});
+
+test("la agenda admite repeticiones y rechaza campos desconocidos", async () => {
+  const aliceDb = environment.authenticatedContext("alice").database();
+  const event = {
+    title: "Repeticion",
+    date: "2026-10-14",
+    all_day: false,
+    start_time: "09:30",
+    notes: "Evento de CI",
+    category: "personal",
+    updatedAt: Date.now(),
+  };
+
+  await assertSucceeds(set(ref(aliceDb, "users/alice/events/event-1"), event));
+  await assertSucceeds(set(ref(aliceDb, "users/alice/events/event-2"), {
+    ...event,
+    repeat: "weekly",
+    seriesId: "event-2",
+    occurrence: 1,
+  }));
+  await assertFails(set(ref(aliceDb, "users/alice/events/event-3"), { ...event, repeat: "yearly" }));
+  await assertFails(set(ref(aliceDb, "users/alice/events/event-4"), { ...event, seriesId: "x".repeat(65) }));
+  await assertFails(set(ref(aliceDb, "users/alice/events/event-5"), { ...event, occurrence: 99 }));
+  await assertFails(set(ref(aliceDb, "users/alice/events/event-6"), { ...event, isAdmin: true }));
+});
+
+test("los teleportables solo admiten los campos conocidos", async () => {
+  const adminDb = environment.authenticatedContext("admin", { role: "admin" }).database();
+  const tv = {
+    id: "tv-living",
+    name: "TV Living",
+    room: "Living",
+    model: "Smart TV",
+    ip: "",
+    volume: 9,
+    volumeScale: 25,
+    muted: false,
+    powerControlReady: true,
+  };
+
+  await assertSucceeds(set(ref(adminDb, "home/tvs/tv-living"), tv));
+  await assertSucceeds(update(ref(adminDb), {
+    "home/tvs/tv-living/volume": 12,
+    "home/tvs/tv-living/volumeScale": 25,
+    "home/tvs/tv-living/muted": false,
+  }));
+  await assertFails(set(ref(adminDb, "home/tvs/tv-living/arbitrary"), "x"));
+  await assertFails(set(ref(adminDb, "home/tvs/tv-living/volumeScale"), 10));
+});
+
+test("la agenda legacy es de solo lectura y no acepta inyecciones de eventos", async () => {
+  const adminDb = environment.authenticatedContext("admin", { role: "admin" }).database();
+
+  await assertFails(set(ref(adminDb, "home/events"), { injected: { title: "x" } }));
+  await assertFails(set(ref(adminDb, "home/events/injected"), { title: "x" }));
 });
