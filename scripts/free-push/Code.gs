@@ -114,16 +114,17 @@ function deliverSystemAlerts_() {
   var tokensByUser = rtdbGet_("pushTokens") || {};
   var tokens = [];
   Object.keys(tokensByUser).forEach(function (uid) {
+    var encodedUid = encodeURIComponent(uid);
     Object.keys(tokensByUser[uid] || {}).forEach(function (key) {
       var record = tokensByUser[uid][key];
-      if (record && record.token) tokens.push({ token: record.token, path: "pushTokens/" + uid + "/" + key });
+      if (record && record.token) tokens.push({ token: record.token, path: "pushTokens/" + encodedUid + "/" + encodeURIComponent(key) });
     });
   });
   Object.keys(alerts).forEach(function (alertId) {
     var alert = alerts[alertId];
     if (!alert || !alert.title || !tokens.length) return;
     sendToTokens_(tokens, alert.title, alert.body || "", "system-" + alertId);
-    rtdbDelete_("home/pushAlerts/" + alertId);
+    rtdbDelete_("home/pushAlerts/" + encodeURIComponent(alertId));
   });
 }
 

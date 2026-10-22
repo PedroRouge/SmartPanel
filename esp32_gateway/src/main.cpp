@@ -441,6 +441,9 @@ void workerTask(void* param) {
                     if (action == "power") { tvStatusRefreshRequested = true; }
                     break;
                 }
+    default:
+        Serial.printf("[CMD] Tipo de orden no soportado: %d\n", static_cast<int>(cmd.type));
+        break;
             }
             if (cmd.sourcePath[0] != '\0') { clearExecutedCommand(String(cmd.sourcePath)); }
         }

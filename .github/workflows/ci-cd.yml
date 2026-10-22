@@ -47,7 +47,7 @@ jobs:
           node --check < scripts/free-push/Code.gs
 
       - name: Probar estructura de UI y firmware
-        run: node --test tests/js/*.test.js
+        run: npm run test:contracts
 
       - name: Instalar Chromium para pruebas de navegador
         run: npx playwright install --with-deps chromium

@@ -92,23 +92,39 @@ class FirebaseRest:
 
     def _url(self, path: str):
         self.ensure_token()
-        return self.base + path + ".json?" + urlencode({"auth": self.id_token})
+        return self.base + path + ".json"
+
+    def auth_headers(self) -> dict[str, str]:
+        # El token viaja en la cabecera Authorization: no se expone en la URL,
+        # donde quedaría registrado en logs de proxies y del propio servidor.
+        self.ensure_token()
+        return {"Authorization": "Bearer " + self.id_token}
 
     def read(self, path: str):
-        return self._json_request(self._url(path))
+        request = Request(self._url(path), headers=self.auth_headers(), method="GET")
+        with urlopen(request, timeout=FIREBASE_HTTP_TIMEOUT) as response:
+            body = response.read()
+            status = response.status
+        if status < 200 or status >= 300:
+            raise RuntimeError(f"Firebase Realtime Database rechazó la lectura de {path} (HTTP {status})")
+        return json.loads(body.decode("utf-8")) if body else None
 
     def write(self, path: str, value):
         request = Request(
             self._url(path),
             data=json.dumps(value).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers={**self.auth_headers(), "Content-Type": "application/json"},
             method="PUT",
         )
         with urlopen(request, timeout=FIREBASE_HTTP_TIMEOUT) as response:
             response.read()
+            status = response.status
+        if status < 200 or status >= 300:
+            raise RuntimeError(f"Firebase Realtime Database rechazó la escritura en {path} (HTTP {status})")
 
     def stream_url(self, path: str):
-        return self._url(path)
+        self.ensure_token()
+        return self.base + path + ".json"
 
 
 def load_last_timestamp() -> int:
@@ -125,7 +141,7 @@ def save_last_timestamp(timestamp: int):
     temporary.replace(LAST_COMMAND_FILE)
 
 
-def execute_command(firebase: FirebaseRest, command: dict):
+def execute_command(firebase: FirebaseRest, command: dict, local_config: dict[str, str]):
     target_id = command.get("targetId")
     action = command.get("action")
     value = command.get("value")
@@ -134,7 +150,7 @@ def execute_command(firebase: FirebaseRest, command: dict):
         raise ValueError("La orden de TV tiene un destino o acción no admitidos")
 
     ip_key = {"tv-pedro": "TV_PEDRO_IP", "tv-living": "TV_LIVING_IP", "tv-padres": "TV_PADRES_IP", "tv-lucas": "TV_LUCAS_IP"}[target_id]
-    host = read_local_config()[ip_key]
+    host = local_config[ip_key]
     if not power_control_ready(host):
         raise RuntimeError("Android TV sin emparejar")
 
@@ -159,7 +175,7 @@ def execute_command(firebase: FirebaseRest, command: dict):
     print(f"TV {TV_NAMES[target_id]}: {action} enviada por Android TV Remote.", flush=True)
 
 
-def process_current_command(firebase: FirebaseRest, last_timestamp: int) -> int:
+def process_current_command(firebase: FirebaseRest, last_timestamp: int, local_config: dict[str, str]) -> int:
     command = firebase.read("/home/commands/tv")
     if not isinstance(command, dict):
         return last_timestamp
@@ -175,9 +191,10 @@ def process_current_command(firebase: FirebaseRest, last_timestamp: int) -> int:
         print("Firebase: descarté un comando TV vencido; no se repetirá.", flush=True)
         return max(last_timestamp, timestamp)
 
-    save_last_timestamp(timestamp)
+    # El timestamp se guarda después de ejecutar: si el proceso se cae a mitad de
+    # camino, el comando queda pendiente y se reintenta en la próxima conexión.
     try:
-        execute_command(firebase, command)
+        execute_command(firebase, command, local_config)
     except Exception as error:
         result = {
             "timestamp": timestamp,
@@ -191,7 +208,8 @@ def process_current_command(firebase: FirebaseRest, last_timestamp: int) -> int:
         except Exception as write_error:
             print("Firebase: no se pudo publicar el error de ejecución:", write_error, flush=True)
         print("Error procesando comando TV:", error, flush=True)
-    return timestamp
+    save_last_timestamp(timestamp)
+    return max(last_timestamp, timestamp)
 
 
 def run():
@@ -202,29 +220,37 @@ def run():
             sys.stdout = log
         if sys.stderr is None:
             sys.stderr = log
-    firebase = FirebaseRest(read_local_config())
+    local_config = read_local_config()
+    firebase = FirebaseRest(local_config)
     last_timestamp = load_last_timestamp()
     print("Puente Android TV iniciado; no se reproducen órdenes antiguas.", flush=True)
+    backoff_seconds = 5
     while True:
         try:
             firebase.ensure_token()
             request = Request(
                 firebase.stream_url("/home/commands/tv"),
-                headers={"Accept": "text/event-stream", "Cache-Control": "no-cache"},
+                headers={
+                    **firebase.auth_headers(),
+                    "Accept": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                },
             )
             print("Firebase: escuchando órdenes TV.", flush=True)
+            backoff_seconds = 5
             with urlopen(request, timeout=300) as response:
                 for raw_line in response:
                     line = raw_line.decode("utf-8", errors="replace").strip()
                     if line.startswith("data:"):
-                        last_timestamp = process_current_command(firebase, last_timestamp)
+                        last_timestamp = process_current_command(firebase, last_timestamp, local_config)
         except KeyboardInterrupt:
             print("Puente Android TV detenido.", flush=True)
             return
         except (HTTPError, URLError, TimeoutError, socket.timeout, OSError, ValueError) as error:
             print("Firebase: se reconectará el puente TV:", error, flush=True)
             firebase.id_token = ""
-            time.sleep(5)
+            time.sleep(backoff_seconds)
+            backoff_seconds = min(backoff_seconds * 2, 60)
 
 
 if __name__ == "__main__":

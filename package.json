@@ -6,7 +6,10 @@
   },
   "scripts": {
     "test:ui": "playwright test",
+    "test:contracts": "node --test tests/js/*.test.js tests/js/*.test.cjs",
+    "test:all": "npm run test:contracts && npm run test:ui && npm run test:rules",
     "icons:generate": "node scripts/generate_pwa_icons.cjs",
+    "firebase:config": "node scripts/generate-firebase-runtime-config.cjs",
     "test:rules": "firebase emulators:exec --only database --project demo-smart-panel \"npm run test:rules:only\"",
     "test:rules:only": "node --test tests/firebase/rules.test.cjs"
   },

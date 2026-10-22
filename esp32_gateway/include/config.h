@@ -56,7 +56,8 @@ struct SmartTvDevice {
 #define RGB_LED_PIN 48
 #endif
 
-// Contraseña para flasheo por Wi-Fi (ArduinoOTA)
+// Contraseña para flasheo por Wi-Fi (ArduinoOTA). Es obligatoria y no tiene valor
+// por defecto: debe definirse en config.local.h (ignorado por Git).
 #ifndef OTA_PASSWORD
-#define OTA_PASSWORD "SmartPanelOTA2026"
+#error "OTA_PASSWORD must be defined in config.local.h"
 #endif
