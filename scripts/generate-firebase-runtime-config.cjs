@@ -20,6 +20,7 @@ const config = {
   authDefaultDomain: "smartpanel.local"
 };
 const destination = path.join(__dirname, "..", "html", "js", "firebase-runtime-config.js");
+fs.mkdirSync(path.dirname(destination), { recursive: true });
 fs.writeFileSync(
   destination,
   `// Generated during deployment; do not commit runtime credentials.\nself.SMART_PANEL_FIREBASE_RUNTIME_CONFIG = ${JSON.stringify(config, null, 2)};\n`,

@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var APP_BUILD_VERSION = "90";
+  var APP_BUILD_VERSION = "91";
   var STORAGE_KEY = "smart-panel-state-v3";
   var LEGACY_STORAGE_KEY = "smart-panel-state-v2";
   var WEATHER_CONFIG = {
@@ -80,6 +80,12 @@
     { id: "tv-lucas", name: "TV Lucas", room: "Habitación Lucas", model: "Modelo no configurado", ip: "", powerControlReady: false, volume: 6, muted: false }
   ];
 
+  // Lista inmutable de teleportares admitidos por el panel. TV_DEVICES se reemplaza
+  // con la información compartida de Firebase, por lo que no puede usarse como
+  // allowlist (de lo contrario la lista sólo podría reducirse, nunca crecer).
+  var TV_ALLOWED_IDS = TV_DEVICES.map(function (tv) { return tv.id; });
+  var TV_FALLBACKS = TV_DEVICES.reduce(function (acc, tv) { acc[tv.id] = tv; return acc; }, {});
+
   function readState() {
     var defaults = {
       lights: { living: null, kitchen: null, bedroom: null, garden: null },
@@ -146,6 +152,39 @@
     return document.getElementById(id);
   }
 
+  // --- Registro centralizado de temporizadores ---
+  // Evita duplicados, permite pausar los timers de alta frecuencia cuando la
+  // pestaña no está visible y libera los recursos al abandonar la página.
+  var appIntervals = {};
+  function every(label, milliseconds, handler) {
+    if (appIntervals[label]) { return appIntervals[label]; }
+    appIntervals[label] = window.setInterval(handler, milliseconds);
+    return appIntervals[label];
+  }
+  function stopEvery(label) {
+    if (!appIntervals[label]) { return; }
+    window.clearInterval(appIntervals[label]);
+    delete appIntervals[label];
+  }
+  function clearAllIntervals() {
+    Object.keys(appIntervals).forEach(function (label) {
+      window.clearInterval(appIntervals[label]);
+    });
+    appIntervals = {};
+  }
+
+  // Registro seguro de listeners: si el nodo no existe (o fue renombrado) no se rompe
+  // la inicialización completa del módulo.
+  function on(id, eventName, handler) {
+    var element = byId(id);
+    if (!element) {
+      console.warn("[UI] Elemento ausente, listener omitido: #" + id + " (" + eventName + ")");
+      return null;
+    }
+    element.addEventListener(eventName, handler);
+    return element;
+  }
+
   function svgIcon(name, className) {
     var paths = {
       bell: '<path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>',
@@ -163,7 +202,8 @@
       fog: '<path d="M5 10a7 7 0 0 1 14 0M3 14h18M5 18h14M8 22h8"/>',
       rain: '<path d="M6 14h12a4 4 0 0 0 .4-8A6 6 0 0 0 6 6a4 4 0 0 0 0 8Z"/><path d="m8 17-1 3m6-3-1 3m6-3-1 3"/>',
       snow: '<path d="M6 13h12a4 4 0 0 0 .4-8A6 6 0 0 0 6 5a4 4 0 0 0 0 8Z"/><path d="M8 17h.01M12 20h.01M16 17h.01"/>',
-      storm: '<path d="M6 14h12a4 4 0 0 0 .4-8A6 6 0 0 0 6 6a4 4 0 0 0 0 8Z"/><path d="m13 14-4 5h4l-2 4 6-7h-4l2-2"/>'
+      storm: '<path d="M6 14h12a4 4 0 0 0 .4-8A6 6 0 0 0 6 6a4 4 0 0 0 0 8Z"/><path d="m13 14-4 5h4l-2 4 6-7h-4l2-2"/>',
+      trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/>'
     };
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 24 24");
@@ -176,7 +216,8 @@
     svg.setAttribute("stroke-linejoin", "round");
     svg.setAttribute("aria-hidden", "true");
     svg.setAttribute("class", className || "ui-icon");
-    svg.innerHTML = paths[name] || paths.bell;
+    // Sólo se inyectan trazados del mapa literal: nunca datos externos.
+    svg.innerHTML = Object.prototype.hasOwnProperty.call(paths, name) ? paths[name] : paths.bell;
     return svg;
   }
 
@@ -237,6 +278,9 @@
                 return auth.signOut().then(function () {
                   showAuthGate("Esta cuenta no tiene permisos de administrador.");
                   updateAccountStatus(null);
+                }).catch(function () {
+                  showAuthGate("Esta cuenta no tiene permisos de administrador.");
+                  updateAccountStatus(null);
                 });
               }
               acceptSession((user.email || user.uid).split("@")[0]);
@@ -244,7 +288,21 @@
               probeFirebaseHttps(user);
             }).catch(function (error) {
               console.error("[Firebase Auth] No se pudieron validar los permisos:", error && error.code);
+              // Un fallo transitorio de red NO debe cerrar la sesión del administrador:
+              // sólo se cierra cuando Firebase rechaza explícitamente el token.
+              var transient = error && (error.code === "auth/network-request-failed" ||
+                error.code === "auth/internal-error" ||
+                error.code === "auth/too-many-requests" ||
+                /network|timeout|fetch|ECONN|ERR_/i.test(String(error && error.message || "")));
+              if (transient) {
+                showAuthGate("No se pudo verificar la conexión con Firebase. Reintentá en unos segundos.");
+                updateAccountStatus(null);
+                return;
+              }
               return auth.signOut().then(function () {
+                showAuthGate("No se pudieron validar los permisos. Inicia sesión nuevamente.");
+                updateAccountStatus(null);
+              }).catch(function () {
                 showAuthGate("No se pudieron validar los permisos. Inicia sesión nuevamente.");
                 updateAccountStatus(null);
               });
@@ -258,9 +316,9 @@
           }
         });
       }
-      window.setInterval(function () {
+      every("firebase-probe", 30000, function () {
         if (!firebaseConnected && auth && auth.currentUser && !firebaseProbeBusy) { probeFirebaseHttps(auth.currentUser); }
-      }, 30000);
+      });
     } catch (error) {
       console.error("[Firebase] Error al inicializar:", error);
       firebaseConnected = false;
@@ -271,10 +329,10 @@
 
   function applySharedTvState(tvsData) {
     if (!tvsData || typeof tvsData !== "object") { return; }
-    var allowedIds = TV_DEVICES.map(function (tv) { return tv.id; });
+    var allowedIds = TV_ALLOWED_IDS;
     var list = Object.keys(tvsData).filter(function (key) { return allowedIds.indexOf(key) !== -1; }).map(function (key) {
       var remoteTv = tvsData[key];
-      var fallback = TV_DEVICES.find(function (tv) { return tv.id === key; });
+      var fallback = TV_FALLBACKS[key];
       if (!remoteTv || typeof remoteTv !== "object" || !fallback) { return null; }
       var volumeScale = remoteTv.volumeScale === TV_VOLUME_MAX ? TV_VOLUME_MAX : 100;
       var volume = normalizeTvVolume(remoteTv.volume, volumeScale, fallback.volume);
@@ -1062,14 +1120,15 @@
     });
   }
 
-  function sendGateCommand() {
+function sendGateCommand() {
     var button = byId("gate-button");
     var feedbackEl = byId("gate-feedback");
     if (!requireGatewayConnection("el porton", feedbackEl)) { return; }
-    setCommandFeedback("Enviando pulso al port\u00f3n...", "pending");
+    setCommandFeedback("Enviando pulso al portón...", "pending");
+    if (!button) { return; }
     if (button.disabled) { return; }
     button.disabled = true;
-    feedbackEl.textContent = "Enviando pulso por Wi-Fi...";
+    if (feedbackEl) { feedbackEl.textContent = "Enviando pulso por Wi-Fi..."; }
     var updates = {};
     var commandAt = Date.now();
     updates["home/commands/gateTrigger"] = commandAt;
@@ -1077,19 +1136,21 @@
     state.gateStatus = "pending";
     renderGate();
     updateFirebasePaths(updates).then(function () {
-      feedbackEl.textContent = "Orden enviada. Esperando respuesta del ESP32...";
+      if (feedbackEl) { feedbackEl.textContent = "Orden enviada. Esperando respuesta del ESP32..."; }
       return waitForFirebaseValue("home/state/gateStatusAt", commandAt, 10000);
     }).then(function () {
       var pulseSent = state.gateStatus === "pulse_sent";
-      feedbackEl.textContent = pulseSent ? "Pulso enviado; la posición física no está confirmada." : "El ESP32 informó que no pudo enviar el pulso.";
+      if (feedbackEl) {
+        feedbackEl.textContent = pulseSent ? "Pulso enviado; la posición física no está confirmada." : "El ESP32 informó que no pudo enviar el pulso.";
+      }
       setCommandFeedback(pulseSent ? "Pulso enviado; posición física desconocida porque no hay sensor." : "Falló el pulso; la posición física sigue siendo desconocida.", pulseSent ? "pending" : "error");
       button.disabled = false;
       recordActivity(pulseSent ? "Pulso enviado al portón" : "Falló el pulso del portón", pulseSent ? "ok" : "error", "La posición física no está confirmada por un sensor");
-      setTimeout(function () { feedbackEl.textContent = ""; }, 6000);
+      if (feedbackEl) { setTimeout(function () { feedbackEl.textContent = ""; }, 6000); }
     }).catch(function (error) {
       state.gateStatus = "unknown";
       renderGate();
-      feedbackEl.textContent = "Sin respuesta del ESP32; no se conoce la posición del portón.";
+      if (feedbackEl) { feedbackEl.textContent = "Sin respuesta del ESP32; no se conoce la posición del portón."; }
       setCommandFeedback("No se recibió confirmación del relé: " + error.message, "error");
       button.disabled = false;
       recordActivity("Accion sobre el porton", "error", error.message);
@@ -1110,6 +1171,7 @@
     var tv = getSelectedTv();
     if (!tv) { return; }
     var feedback = byId("media-feedback");
+    if (!feedback) { return; }
     if (!requireGatewayConnection("el televisor", feedback)) { renderMedia(); return; }
     var tvState = getSelectedTvState();
     if (action === "power") {
@@ -1248,6 +1310,17 @@
         conf = { apiKey: parts[0].trim(), databaseURL: parts[1].trim() };
       }
       if (conf && conf.apiKey && conf.databaseURL) {
+        // Validar contra la misma allowlist que aplica firebase-config.js al leer:
+        // nunca persistir una databaseURL fuera de Firebase ni una apiKey inválida.
+        var apiKeyOk = typeof conf.apiKey === "string" && /^AIza[0-9A-Za-z_-]{30,}$/.test(conf.apiKey.trim());
+        var databaseOk = typeof conf.databaseURL === "string" &&
+          /^https:\/\/[a-z0-9-]+\.(firebaseio\.com|firebasedatabase\.app)$/i.test(conf.databaseURL.trim());
+        if (!apiKeyOk || !databaseOk) {
+          alert("La configuración no es válida: apiKey debe ser una clave web de Firebase y databaseURL debe apuntar a *.firebaseio.com o *.firebasedatabase.app.");
+          return;
+        }
+        conf.apiKey = conf.apiKey.trim();
+        conf.databaseURL = conf.databaseURL.trim();
         window.localStorage.setItem("smart-panel-firebase-config", JSON.stringify(conf));
         alert("¡Credenciales guardadas con éxito! Recargando...");
         window.location.reload();
@@ -1292,7 +1365,7 @@
       });
     }
 
-    byId("auth-form").addEventListener("submit", function (e) {
+    on("auth-form", "submit", function (e) {
       e.preventDefault();
       var submit = byId("auth-submit");
       var userInput = (byId("auth-username").value || "").trim().toLowerCase();
@@ -1323,8 +1396,14 @@
         return;
       }
 
-      // Intentar iniciar sesión
-      auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+        // Intentar iniciar sesión
+      // Persistencia LOCAL expone el token de refresco en IndexedDB; XSS puede exfiltrarlo.
+      // Usar SESSION para limitar la persistencia al cierre de pestaña cuando sea posible.
+      var persistence = (firebase && firebase.auth && firebase.auth.Auth && firebase.auth.Auth.Persistence)
+        ? firebase.auth.Auth.Persistence.SESSION
+        : null;
+      var authChain = persistence ? auth.setPersistence(persistence) : Promise.resolve();
+      authChain
         .then(function () { return auth.signInWithEmailAndPassword(email, pass); })
         .then(function () {
         submit.disabled = false;
@@ -1348,12 +1427,17 @@
       });
     });
 
-    byId("api-logout").addEventListener("click", function () {
+    on("api-logout", "click", function () {
       if (auth) {
         auth.signOut().then(function () {
           apiAuthenticated = false;
           detachFirebaseListeners();
           showAuthGate("Sesión cerrada correctamente.");
+        }).catch(function (error) {
+          console.warn("[Auth] No se pudo cerrar sesión correctamente:", error);
+          apiAuthenticated = false;
+          detachFirebaseListeners();
+          showAuthGate("Sesión cerrada.");
         });
       } else {
         apiAuthenticated = false;
@@ -2152,19 +2236,19 @@
       });
     });
 
-    byId("new-event-button").addEventListener("click", function () { openEventForm(null); });
-    byId("new-event-for-day").addEventListener("click", function () { openEventForm(null); });
-    byId("calendar-previous").addEventListener("click", function () {
+    on("new-event-button", "click", function () { openEventForm(null); });
+    on("new-event-for-day", "click", function () { openEventForm(null); });
+    on("calendar-previous", "click", function () {
       calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1);
       loadArgentinaHolidays(calendarMonth.getFullYear());
       renderCalendar();
     });
-    byId("calendar-next").addEventListener("click", function () {
+    on("calendar-next", "click", function () {
       calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1);
       loadArgentinaHolidays(calendarMonth.getFullYear());
       renderCalendar();
     });
-    byId("calendar-today").addEventListener("click", function () {
+    on("calendar-today", "click", function () {
       selectedAgendaDate = formatDateISO(new Date());
       calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
       loadArgentinaHolidays(calendarMonth.getFullYear());
@@ -2172,12 +2256,12 @@
       renderAgendaDay();
     });
 
-    byId("event-form").addEventListener("submit", saveCalendarEvent);
+    on("event-form", "submit", saveCalendarEvent);
     byId("event-form").elements.all_day.addEventListener("change", function () {
       byId("event-time-row").hidden = this.checked;
     });
 
-    byId("event-delete").addEventListener("click", function () {
+    on("event-delete", "click", function () {
       var ev = calendarEvents.find(function (it) { return it.id === eventEditingId; });
       if (ev) {
         deleteCalendarEvent(ev, function () {
@@ -2190,7 +2274,7 @@
       btn.addEventListener("click", closeEventForm);
     });
 
-    byId("event-modal").addEventListener("keydown", function (e) {
+    on("event-modal", "keydown", function (e) {
       if (e.key === "Escape" || e.keyCode === 27) { closeEventForm(); }
     });
 
@@ -2529,12 +2613,12 @@
     });
 
     // Pileta
-    byId("pool-toggle").addEventListener("click", function () {
+    on("pool-toggle", "click", function () {
       sendPoolCommand(!state.poolOn);
     });
 
     // Portón
-    byId("gate-button").addEventListener("click", function () {
+    on("gate-button", "click", function () {
       sendGateCommand();
     });
 
@@ -2550,12 +2634,12 @@
     });
 
     // Mute
-    byId("mute-button").addEventListener("click", function () {
+    on("mute-button", "click", function () {
       sendTVCommand("toggle_mute", null);
     });
 
     // Power TV
-    byId("tv-power-button").addEventListener("click", function () {
+    on("tv-power-button", "click", function () {
       var tvState = getSelectedTvState();
       sendTVCommand("power", getTvPowerDisplay(tvState).status === "on" ? "off" : "on");
     });
@@ -2798,7 +2882,7 @@
     // Bind the control immediately so a fast first click is not lost while the
     // Service Worker is still installing.
     initializePushNotifications();
-    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=91").then(function (reg) {
+    pushWorkerPromise = navigator.serviceWorker.register("/service-worker.js?v=92").then(function (reg) {
       pushWorkerRegistration = reg;
       reg.update().catch(function () {});
       return reg;
@@ -3511,14 +3595,18 @@
 
     // Revisar horario cada minuto
     checkPoolSchedule();
-    setInterval(checkPoolSchedule, 60000);
+    every("pool-schedule", 60000, checkPoolSchedule);
   }
 
   // Notificación cuando el usuario enciende/apaga manualmente la pileta
   var prevPoolStateForNotif = null;
 
   function watchPoolStateForNotif() {
-    setInterval(function () {
+    every("pool-watcher", 3000, pollPoolStateForNotif);
+  }
+
+  function pollPoolStateForNotif() {
+    {
       if (prevPoolStateForNotif === null) {
         prevPoolStateForNotif = state.poolOn;
         return;
@@ -3534,11 +3622,11 @@
           }
         }
       }
-    }, 3000);
+    }
   }
 
   function initialize() {
-    byId("frontend-version").textContent = "HTML v90";
+    byId("frontend-version").textContent = "HTML v91";
     byId("script-build-version").textContent = "JS v" + APP_BUILD_VERSION;
 
     initializeConfirmDialog();
@@ -3553,17 +3641,17 @@
     renderPool();
     renderGate();
     renderSystemStatus();
-    setInterval(refreshGatewayFreshness, 5000);
-    setInterval(updateSharedStateFreshnessUI, 30000);
-    setInterval(updateTvPowerUI, 15000);
+    every("gateway-freshness", 5000, refreshGatewayFreshness);
+    every("shared-freshness", 30000, updateSharedStateFreshnessUI);
+    every("tv-power", 15000, updateTvPowerUI);
     renderMedia();
     saveState(); // Rewrite old local cache through the current validation/migration rules.
 
     updateClock();
-    setInterval(updateClock, 1000);
+    every("clock", 1000, updateClock);
 
-    byId("weather-refresh").addEventListener("click", loadWeather);
-    byId("tv-refresh").addEventListener("click", function () {
+    on("weather-refresh", "click", loadWeather);
+    on("tv-refresh", "click", function () {
       var user = auth && auth.currentUser;
       if (!user || !apiAuthenticated) {
         byId("tv-api-status").textContent = "Inicia sesión para actualizar la lista compartida.";
@@ -3589,7 +3677,7 @@
     // Cargar clima (una sola vez al inicio + caché)
     loadCachedWeather();
     loadWeather();
-    setInterval(loadWeather, 30 * 60 * 1000);
+    every("weather", 30 * 60 * 1000, loadWeather);
 
     // Inicializar sistema de notificaciones
     loadAgendaNotifSent();
@@ -3598,7 +3686,25 @@
     watchPoolStateForNotif();
 
     // Revisar notificaciones de agenda cada 5 minutos
-    setInterval(checkAgendaNotifications, 5 * 60 * 1000);
+    every("agenda-notifications", 5 * 60 * 1000, checkAgendaNotifications);
+
+    // Pausar los temporizadores de alta frecuencia cuando la pestaña no está visible
+    // (reduce consumo en la tablet del panel) y liberarlos al abandonar la página.
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "hidden") {
+        stopEvery("clock");
+        stopEvery("pool-watcher");
+        stopEvery("gateway-freshness");
+        return;
+      }
+      updateClock();
+      every("clock", 1000, updateClock);
+      every("pool-watcher", 3000, pollPoolStateForNotif);
+      every("gateway-freshness", 5000, refreshGatewayFreshness);
+    });
+    window.addEventListener("pagehide", function () {
+      clearAllIntervals();
+    });
   }
 
   if (document.readyState === "loading") {

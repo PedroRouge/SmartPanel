@@ -3,6 +3,14 @@ const http = require("node:http");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "../../html");
+// La configuración pública de Firebase se inyecta sólo en el despliegue. Las pruebas
+// usan una clave ficticia bien formada para no depender de credenciales reales.
+const runtimeApiKey = process.env.FIREBASE_WEB_API_KEY || `AIza${"T".repeat(35)}`;
+const runtimeVapidKey = process.env.FIREBASE_WEB_VAPID_KEY || `V${"T".repeat(87)}`;
+const runtimeConfigScript = `self.SMART_PANEL_FIREBASE_RUNTIME_CONFIG = ${JSON.stringify({
+  apiKey: runtimeApiKey,
+  vapidKey: runtimeVapidKey,
+}, null, 2)};\n`;
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -26,6 +34,14 @@ const server = http.createServer((request, response) => {
   const filePath = path.resolve(root, relativePath);
   if (filePath !== root && !filePath.startsWith(root + path.sep)) {
     response.writeHead(403).end("Forbidden");
+    return;
+  }
+  if (relativePath === "js/firebase-runtime-config.js") {
+    response.writeHead(200, {
+      "Content-Type": mimeTypes[".js"],
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+    }).end(runtimeConfigScript);
     return;
   }
   fs.readFile(filePath, (error, content) => {

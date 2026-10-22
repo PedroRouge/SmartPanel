@@ -3,7 +3,12 @@
 // Firebase Messaging se ejecuta dentro del mismo worker que controla la PWA.
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js");
-importScripts("/js/firebase-runtime-config.js?v=75");
+// La configuración runtime se genera en el despliegue; puede no existir en desarrollo.
+try {
+  importScripts("/js/firebase-runtime-config.js?v=75");
+} catch (error) {
+  console.warn("[ServiceWorker] No se encontró la configuración runtime de Firebase.", error);
+}
 try {
   var messaging = null;
   if (self.SMART_PANEL_FIREBASE_RUNTIME_CONFIG && self.SMART_PANEL_FIREBASE_RUNTIME_CONFIG.apiKey) {
@@ -45,7 +50,7 @@ self.addEventListener("notificationclick", function (event) {
 });
 
 var CACHE_PREFIX = "smart-panel-shell-";
-var CACHE_NAME = CACHE_PREFIX + "91";
+var CACHE_NAME = CACHE_PREFIX + "92";
 var STATIC_FILES = [
   "/",
   "/manifest.json",
@@ -63,12 +68,20 @@ var STATIC_FILES = [
   "/js/bootstrap.js?v=71",
   "/js/firebase-runtime-config.js?v=75",
   "/js/firebase-config.js?v=75",
-  "/js/app.js?v=90"
+  "/js/app.js?v=91"
 ];
 
 self.addEventListener("install", function (event) {
   event.waitUntil(caches.open(CACHE_NAME).then(function (cache) {
-    return cache.addAll(STATIC_FILES);
+    // Un recurso ausente no debe abortar la instalación completa del worker.
+    return Promise.allSettled(STATIC_FILES.map(function (file) {
+      return cache.add(new Request(file, { cache: "reload" }));
+    })).then(function (results) {
+      var failed = results.filter(function (result) { return result.status === "rejected"; });
+      if (failed.length) {
+        console.warn("[ServiceWorker] No se pudieron precachear " + failed.length + " recursos.");
+      }
+    });
   }).then(function () {
     return self.skipWaiting();
   }));
@@ -92,18 +105,27 @@ self.addEventListener("fetch", function (event) {
   var request = event.request;
   var url = new URL(request.url);
 
+  // Sólo se cachean peticiones GET del propio origen.
+  if (request.method !== "GET") { return; }
+
   // No interceptar peticiones a Firebase ni APIs externas
-  if (url.origin.indexOf("firebaseio.com") !== -1 ||
-      url.origin.indexOf("googleapis.com") !== -1 ||
-      url.origin.indexOf("open-meteo.com") !== -1 ||
+  if (url.origin.endsWith("firebaseio.com") ||
+      url.origin.endsWith("firebasedatabase.app") ||
+      url.origin.endsWith("googleapis.com") ||
+      url.origin.endsWith("open-meteo.com") ||
       url.origin !== self.location.origin) {
     return;
   }
 
   if (request.mode === "navigate") {
     event.respondWith(fetch(request).then(function (response) {
-      if (response.ok) {
-        caches.open(CACHE_NAME).then(function (cache) { cache.put("/", response.clone()); });
+      // Sólo se guarda en "/" la navegación real del shell: cachear cualquier otra
+      // ruta (SPA fallback, 404, error) envenenaría la entrada "/" del caché.
+      if (response.ok && response.type === "basic" && url.pathname === "/") {
+        var copy = response.clone();
+        event.waitUntil(caches.open(CACHE_NAME).then(function (cache) {
+          return cache.put("/", copy);
+        }));
       }
       return response;
     }).catch(function () {
@@ -120,7 +142,9 @@ self.addEventListener("fetch", function (event) {
     fetch(request).then(function (response) {
       if (response.ok) {
         var copy = response.clone();
-        caches.open(CACHE_NAME).then(function (cache) { cache.put(request, copy); });
+        event.waitUntil(caches.open(CACHE_NAME).then(function (cache) {
+          return cache.put(request, copy);
+        }));
       }
       return response;
     }).catch(function () {

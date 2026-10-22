@@ -17,9 +17,33 @@ data/
 .env
 .env.*
 !.env.example
+*.env
+secrets.env
+config.local.json
+*.local.json
 *service-account*.json
+*service_account*.json
+*serviceaccount*.json
 *firebase-adminsdk*.json
+*firebaseadminsdk*.json
+*-sa.json
+gcp-*.json
+*.runtimeconfig.json
 functions/.runtimeconfig.json
+
+# Claves privadas, certificados y material criptográfico
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Artefactos accidentales de shell (p. ej. redirecciones sin comillas)
+/in
+/~
 
 # Sistema operativo
 .DS_Store

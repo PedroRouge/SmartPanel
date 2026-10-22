@@ -98,9 +98,10 @@ test("la política web mantiene CSP sin scripts inline y el build coincide", () 
   assert.ok(htmlVersion && jsVersion, "no se pudo leer la versión de UI");
   assert.equal(htmlVersion[1], jsVersion[1], "la versión de HTML y JavaScript no coincide");
   const serviceWorker = read("html/service-worker.js");
-  assert.match(serviceWorker, /CACHE_PREFIX \+ "91"/);
-  assert.match(serviceWorker, /\/js\/app\.js\?v=90/);
-  assert.match(read("html/js/app.js"), /service-worker\.js\?v=91/);
+  assert.match(serviceWorker, /CACHE_PREFIX \+ "92"/);
+  assert.match(serviceWorker, /\/js\/app\.js\?v=91/);
+  assert.match(read("html/js/app.js"), /service-worker\.js\?v=92/);
+  assert.match(read("html/index.html"), /js\/app\.js\?v=91/);
 });
 
 test("el bootstrap no borra la caché activa y el tema se precarga", () => {
@@ -389,12 +390,19 @@ test("la configuración Firebase se inyecta solo durante el despliegue", () => {
   const firebaseConfig = read("html/js/firebase-config.js");
   const generator = read("scripts/generate-firebase-runtime-config.cjs");
   const worker = read("html/service-worker.js");
-  assert.match(runtime, /apiKey:\s*"AIza[0-9A-Za-z_-]{30,}"/);
-  assert.match(runtime, /vapidKey:\s*"[A-Za-z0-9_-]{80,}"/);
+  // El archivo versionado sólo puede contener marcadores de posición: las claves
+  // reales se inyectan en el paso de despliegue y nunca se commitean.
+  assert.match(runtime, /apiKey:\s*""/);
+  assert.match(runtime, /vapidKey:\s*""/);
+  assert.doesNotMatch(runtime, /AIza[0-9A-Za-z_-]{30,}/);
+  assert.doesNotMatch(runtime, /vapidKey:\s*"[A-Za-z0-9_-]{80,}"/);
+  assert.doesNotMatch(firebaseConfig, /AIza[0-9A-Za-z_-]{30,}/);
   assert.doesNotMatch(runtime + firebaseConfig + worker, /FIREBASE_USER_PASSWORD|WIFI_PASSWORD|-----BEGIN [A-Z ]*PRIVATE KEY-----/);
   assert.match(generator, /process\.env\.FIREBASE_WEB_API_KEY/);
   assert.match(generator, /process\.env\.FIREBASE_WEB_VAPID_KEY/);
+  assert.match(generator, /mkdirSync\(path\.dirname\(destination\), \{ recursive: true \}\)/);
   assert.doesNotMatch(worker, /AIza[0-9A-Za-z_-]{30,}/);
+  assert.doesNotMatch(read(".gitignore"), /html\/js\/firebase-runtime-config\.js/);
 });
 
 test("login valida el claim admin, autocompleta y persiste localmente", () => {
@@ -403,9 +411,50 @@ test("login valida el claim admin, autocompleta y persiste localmente", () => {
   assert.match(html, /id="auth-form" autocomplete="on"/);
   assert.match(html, /id="auth-username"[^>]*autocomplete="username"/);
   assert.match(html, /id="auth-password"[^>]*autocomplete="current-password"/);
-  assert.match(app, /auth\.setPersistence\(firebase\.auth\.Auth\.Persistence\.LOCAL\)/);
+  assert.match(app, /firebase\.auth\.Auth\.Persistence\.SESSION/);
+  assert.doesNotMatch(app, /Auth\.Persistence\.LOCAL/);
   assert.match(app, /tokenResult\.claims\.role !== "admin"/);
   assert.match(app, /getIdTokenResult\(true\)/);
   assert.doesNotMatch(app, /OWNER_EMAIL/);
   assert.doesNotMatch(app, /input\.value\s*=\s*""/);
+});
+
+test("la sesión de administrador no se cierra por fallos transitorios de red", () => {
+  const app = read("html/js/app.js");
+  const observer = app.slice(app.indexOf("auth.onAuthStateChanged("), app.indexOf("function applySharedTvState("));
+  assert.match(observer, /auth\/network-request-failed/);
+  assert.match(observer, /auth\/internal-error/);
+  assert.match(observer, /transient/);
+  assert.match(observer, /signOut\(\)\.then\([\s\S]*?\.catch\(/);
+});
+
+test("la lista de teleportables admitidos es inmutable y no depende de Firebase", () => {
+  const app = read("html/js/app.js");
+  assert.match(app, /var TV_ALLOWED_IDS = TV_DEVICES\.map/);
+  assert.match(app, /var TV_FALLBACKS = TV_DEVICES\.reduce/);
+  const sharedState = app.slice(app.indexOf("function applySharedTvState("), app.indexOf("function ", app.indexOf("function applySharedTvState(") + 10));
+  assert.match(sharedState, /var allowedIds = TV_ALLOWED_IDS/);
+  assert.doesNotMatch(sharedState, /allowedIds = TV_DEVICES\.map/);
+});
+
+test("los temporizadores del panel se registran, pausan en segundo plano y se liberan", () => {
+  const app = read("html/js/app.js");
+  assert.match(app, /function every\(label, milliseconds, handler\)/);
+  assert.match(app, /function stopEvery\(label\)/);
+  assert.match(app, /function clearAllIntervals\(\)/);
+  assert.match(app, /addEventListener\("visibilitychange"/);
+  assert.match(app, /addEventListener\("pagehide"/);
+  const rawIntervals = app.match(/setInterval\(/g) || [];
+  assert.equal(rawIntervals.length, 2, "sólo el helper every() y el temporizador de agenda deben crear intervalos");
+  assert.match(app, /appIntervals\[label\] = window\.setInterval\(handler, milliseconds\)/);
+  assert.match(app, /agendaRestSyncTimer = setInterval\(function \(\) \{/);
+});
+
+test("la configuración Firebase manual se valida antes de persistirse", () => {
+  const app = read("html/js/app.js");
+  const prompt = app.slice(app.indexOf("function promptFirebaseConfig("), app.indexOf("function ", app.indexOf("function promptFirebaseConfig(") + 10));
+  assert.match(prompt, /AIza\[0-9A-Za-z_-\]\{30,\}/);
+  assert.match(prompt, /firebaseio\\\.com\|firebasedatabase\\\.app/);
+  assert.match(prompt, /apiKeyOk/);
+  assert.match(prompt, /databaseOk/);
 });
