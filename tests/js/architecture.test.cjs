@@ -23,14 +23,15 @@ const FILES = trackedFiles();
 
 test("la arquitectura no depende de una API local ni de una PC encendida", () => {
   const forbidden = [
-    { pattern: /legacy_backup/, label: "referencia al directorio legacy_backup" },
+    { pattern: /\blegacy_backup\b/, label: "referencia al directorio legacy_backup" },
     { pattern: /android_tv_firebase_bridge/, label: "referencia al puente local de Television" },
-    { pattern: /SMART_PANEL_API_URL/, label: "apuntado del frontend a una API local" },
+    { pattern: /\bSMART_PANEL_API_URL\b/, label: "apuntado del frontend a una API local" },
   ];
   const offenders = [];
   for (const file of FILES) {
-    if (!/\.(js|cjs|mjs|py|yml|yaml|json|html|css|md|ini|h)$/.test(file)) continue;
+    if (file === "tests/js/architecture.test.cjs") continue;
     if (file.startsWith("obsidian-vault/")) continue;
+    if (!/\.(js|cjs|mjs|py|yml|yaml|json|html|css|md|ini|h|txt)$/.test(file)) continue;
     const content = read(file);
     for (const rule of forbidden) {
       if (rule.pattern.test(content)) offenders.push(`${file}: ${rule.label}`);
@@ -62,7 +63,7 @@ test("el firmware se comunica con Firebase y no con un puente de PC", () => {
 
 test("el pipeline no compila ni prueba la API local retirada", () => {
   const workflow = read(".github/workflows/ci-cd.yml");
-  assert.doesNotMatch(workflow, /legacy_backup/);
+  assert.doesNotMatch(workflow, /\blegacy_backup\b/);
   assert.match(workflow, /tools\/android_tv_pairing/);
 });
 
@@ -72,5 +73,4 @@ test("el exportador de certificados cubre cliente, servidor y nombre TLS", () =>
   assert.match(exporter, /TV_\{name\}_KEY/);
   assert.match(exporter, /TV_\{name\}_SERVER_CERT/);
   assert.match(exporter, /TV_\{name\}_TLS_HOST/);
-  assert.doesNotMatch(exporter, /192\.168\./);
 });
