@@ -4,24 +4,24 @@ import os
 import sys
 
 from android_tv_power import create_remote, credential_paths, mark_android_tv_paired
-from servidor import scan_local_tvs
+from discover_android_tv import scan_android_tvs
 
 
 def select_tv(host):
     if host:
         return host
-    devices = [device for device in scan_local_tvs() if 6466 in device.get("openPorts", [])]
+    devices = scan_android_tvs()
     if not devices:
         raise RuntimeError("No se encontraron Android TV con el puerto 6466 abierto.")
     print("Android TV detectados:")
-    for index, device in enumerate(devices, 1):
-        print("{}. {} ({})".format(index, device["name"], device["ip"]))
+    for index, ip in enumerate(devices, 1):
+        print("{}. {}".format(index, ip))
     if len(devices) == 1:
-        return devices[0]["ip"]
+        return devices[0]
     selection = int(input("Selecciona el dispositivo: "))
     if selection < 1 or selection > len(devices):
         raise ValueError("Selección fuera de rango")
-    return devices[selection - 1]["ip"]
+    return devices[selection - 1]
 
 
 async def pair(host):

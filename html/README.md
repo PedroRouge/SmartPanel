@@ -1,75 +1,63 @@
 # Smart Panel
 
-Panel domótico estático, pensado para una pantalla táctil y compatible con Safari de iOS 12. No requiere build, servidor de desarrollo ni dependencias: Nginx puede servir esta carpeta directamente.
+Panel domótico estático, pensado para una pantalla táctil y compatible con Safari de iOS 12. No requiere build, servidor de desarrollo ni dependencias: Nginx o Vercel pueden servir esta carpeta directamente.
+
+## Arquitectura
+
+El sistema es totalmente serverless y no necesita ninguna PC encendida:
+
+```text
+Navegador (PWA en Vercel)  ──►  Firebase (Auth + Realtime Database + FCM)
+                                        ▲
+                                        │  WiFi, comandos y estados
+                                   ESP32-S3 (firmware)
+                                        │
+                                   Relés y Android TV (LAN)
+```
+
+- El navegador escribe órdenes en Firebase Realtime Database y escucha el estado publicado por la placa.
+- El ESP32 se autentica con una cuenta de servicio de rol `device`, se suscribe a `/home/commands` y ejecuta las órdenes.
+- La placa publica el resultado en `/home/state` y su estado de vida en `/home/gateway/status`.
+- No hay API local, ni túnel, ni puerto serie en el camino de producción.
 
 ## Estructura
 
 ```text
 html/
-├── index.html       # Vistas de la SPA y estructura accesible
-├── css/
-│   └── styles.css   # Tema, componentes y diseño responsive
-├── js/
-│   └── app.js       # Pestañas, reloj, clima y controles locales
-├── .gitignore
+├── index.html          # Vistas de la SPA y estructura accesible
+├── css/styles.css      # Tema, componentes y diseño responsive
+├── js/app.js           # Pestañas, reloj, clima y control vía Firebase
+├── js/firebase-runtime-config.js  # Config pública generada en el build
+├── service-worker.js   # Shell estático versionado
 └── README.md
 ```
 
 ## Despliegue
 
-Vercel sirve solamente el contenido estático de `html/`; `vercel.json` no define funciones ni reescrituras de API. También se puede configurar el `root` de Nginx para apuntar a esta carpeta.
+Vercel sirve solamente el contenido estático de `html/`; `vercel.json` no define funciones ni reescrituras de API. El pipeline de GitHub Actions genera `html/js/firebase-runtime-config.js` con las variables `FIREBASE_WEB_API_KEY` y `FIREBASE_WEB_VAPID_KEY` antes del build y despliega las reglas de base de datos verificadas con el emulador.
+
+## Autenticación
+
+Firebase Authentication con correo y contraseña. La sesión se conserva con `Persistence.SESSION` y los roles viajan en los custom claims: `admin` para el panel web y `device` para el ESP32. Las reglas de `firebase_rules.json` solo permiten escribir en las rutas de estado al dispositivo con UID conocido y a los administradores en sus propias rutas de usuario.
 
 ## PWA en iPad
 
-En Safari abre Smart Panel, toca Compartir y elige “Añadir a pantalla de inicio”. El manifiesto y el icono Apple permiten abrirla como app. El Service Worker instala el shell estático versionado, comprueba actualizaciones al abrir la app y recarga cuando activa una versión nueva. No almacena respuestas `/api`, sesiones ni eventos. En Safari 12, cierra y vuelve a abrir la app desde el icono para aplicar una actualización desplegada; si el icono se creó antes de esta versión, elimínalo y añádelo de nuevo una sola vez.
+En Safari abre Smart Panel, toca Compartir y elige “Añadir a pantalla de inicio”. El manifiesto y el icono Apple permiten abrirla como app. El Service Worker instala el shell estático versionado, comprueba actualizaciones al abrir la app y recarga cuando activa una versión nueva. No almacena respuestas de la API, sesiones ni eventos. En Safari 12, cierra y vuelve a abrir la app desde el icono para aplicar una actualización desplegada; si el icono se creó antes de esta versión, elimínalo y añádelo de nuevo una sola vez.
 
-La API corre por separado en la notebook con `python servidor.py` (o mediante Docker con `docker compose up -d`) y escucha en `0.0.0.0:5000`. Instala sus paquetes con `python -m pip install -r requirements.txt`. El frontend apunta al Quick Tunnel actual `https://open-cost-levy-ignored.trycloudflare.com`. El túnel temporal debe seguir activo y dirigir tráfico HTTPS al puerto `5000` de esta notebook; su URL puede cambiar al reiniciarlo.
+## Clima
 
-## Clima, TVs y cámaras
-
-El backend de Python sirve `/api/health`, `/api/tvs`, `/api/tvs/{id}/status`, `/api/tvs/{id}/command`, pairing, `/api/weather` y CRUD de `/api/events`.
-
-### Autenticación con Usuario y Contraseña
-
-El sistema utiliza usuarios con contraseñas hasheadas mediante `scrypt`, almacenadas de forma segura fuera del repositorio en `~/.smart-panel/users.json` (o el volumen `/data` en Docker).
-
-- **Migración automática**: Si ya tenías una clave API en `api_password.txt`, al iniciar `servidor.py` se crea automáticamente el usuario `admin` con esa misma clave, sin interrumpir tu acceso.
-- **Crear o cambiar usuarios interactivamente**:
-  ```bash
-  python manage_users.py set [usuario]
-  ```
-- **Crear usuarios desde un prompt que no muestra la contraseña**:
-  ```bash
-  python manage_users.py set admin
-  ```
-- Para automatizaciones, `--stdin` permite leerla desde un gestor de secretos sin incluirla en los argumentos del proceso.
-- **Listar o eliminar usuarios**:
-  ```bash
-  python manage_users.py list
-  python manage_users.py remove otro_usuario
-  ```
-- **Ejecución con Docker**:
-  ```bash
-  docker compose up -d --build
-  ```
-  Los datos persisten en el volumen `smart-panel-data`. Puedes configurar `SMART_PANEL_ADMIN_USER` y `SMART_PANEL_ADMIN_PASSWORD` en el archivo de entorno o compose.
-
-El token de sesión dura 12 horas y revocar la sesión borra el acceso de inmediato. Se incluye protección contra ataques de fuerza bruta (rate limiting tras varios intentos fallidos por IP).
-
-Como el frontend vive en Vercel y la API en la notebook, el navegador requiere conectividad al túnel y CORS permitido. `servidor.py` responde CORS para `GET`, `POST`, `PUT`, `DELETE`, `OPTIONS` y los encabezados `Authorization` y `Content-Type`. Para cambiar la URL, define `window.SMART_PANEL_API_URL` en `index.html` antes de cargar `js/app.js`. Vercel no expone automáticamente variables de entorno al JavaScript de una web estática; también puede inyectarse ese valor durante un build si luego se incorpora uno.
-
-El clima consulta Open-Meteo a través de `/api/weather` en la API Python. Ajusta `WEATHER_CONFIG` en `js/app.js` para cambiar ubicación. Muestra siete días y renueva los datos cada 30 minutos; tiene timeout, reintento manual y guarda la última respuesta válida en `localStorage`.
+La app consulta Open-Meteo directamente desde el navegador. Ajusta `WEATHER_CONFIG` en `js/app.js` para cambiar ubicación. Muestra siete días y renueva los datos cada 30 minutos; tiene timeout, reintento manual y guarda la última respuesta válida en `localStorage`.
 
 El porcentaje es la probabilidad máxima de precipitación prevista en algún momento de ese día para la celda meteorológica de esas coordenadas; no significa que lloverá durante ese porcentaje del día ni que Google deba mostrar el mismo número. Google y Open-Meteo pueden combinar modelos, estaciones, radar/nowcast, cuadrículas, horarios de actualización y definiciones distintas. La app usa el punto fijo de Colonia Ensayo; el dispositivo de Google puede usar GPS o una zona cercana distinta.
 
-La interfaz consulta la lista de TVs del backend y envía volumen, mute, apps y navegación remota con `POST /api/tvs/{id}/command`. El pad direccional usa Android TV Remote y requiere emparejar cada dispositivo desde el botón de energía. Las credenciales de pairing se guardan bajo el usuario que ejecuta `servidor.py`.
+## Televisores
 
-Los eventos se guardan en `~/.smart-panel/events.sqlite3` en la notebook y se sincronizan entre navegadores autenticados. La Agenda permite ver el mes, seleccionar un día y crear, editar o eliminar eventos; Inicio muestra los de hoy. La versión inicial no incluye recurrencias ni notificaciones.
+El ESP32 habla directamente con cada Android TV por mTLS en el puerto 6466 con el protocolo Android TV Remote v2. El emparejamiento y los certificados se aprovisionan una sola vez desde una PC con `tools/android_tv_pairing/pair_android_tv.py` y `scripts/export_tv_certs.py`; después la placa trabaja sola por WiFi. La web solo publica órdenes en `/home/commands/tv` y muestra el estado que devuelve la placa.
 
-Para activar el esquema autenticado, publica primero el frontend actualizado y reinicia después `servidor.py` en la notebook. La versión de API anterior no tiene login y la UI anterior no puede autenticarse. El Quick Tunnel es temporal y el backend controla dispositivos de la casa; usa una clave fuerte y detén el túnel cuando no lo necesites.
+## Agenda y notificaciones
 
-Las luces, portón y pileta siguen usando el estado local del navegador; falta un contrato de endpoints para controlarlos desde el puente.
+Los eventos de la agenda viven en `users/<uid>/events` dentro de Firebase y se sincronizan entre navegadores autenticados. La Agenda permite ver el mes, seleccionar un día y crear, editar o eliminar eventos, con soporte de repeticiones semanales y mensuales. Las notificaciones push programadas salen del worker de Google Apps Script descrito en `PUSH_NOTIFICATIONS.md`; el panel también avisa en primer plano cuando la app está abierta.
 
-Las cámaras guardan nombre y URL en `localStorage`, pero nunca usuario ni contraseña. Las credenciales solo viven en memoria hasta recargar. Luces, motor de pileta y portón conservan su simulación local.
+## Cámaras
 
-La API Python heredada bloquea CORS por defecto. Si una instalación todavía la consume desde otro origen, configura `SMART_PANEL_CORS_ORIGINS` con una lista separada por comas de orígenes exactos (por ejemplo, `https://panel.example.com`); no uses `*`.
+Las cámaras guardan nombre y URL en `localStorage`, pero nunca usuario ni contraseña. Las credenciales solo viven en memoria hasta recargar.

@@ -12,16 +12,16 @@ tags:
 # CI/CD y calidad automatizada — Smart Panel
 
 > [!summary] Flujo
-> [Workflow de GitHub Actions](../.github/workflows/ci-cd.yml) ejecuta controles en cada push de rama y en cada pull request. Incluye pruebas en Chromium, reglas en Firebase Emulator, API Python, contratos y compilación PlatformIO. El deploy de producción ocurre únicamente en `main`, después de que todos esos jobs pasen.
+> [Workflow de GitHub Actions](../.github/workflows/ci-cd.yml) ejecuta controles en cada push de rama y en cada pull request. Incluye pruebas en Chromium, reglas en Firebase Emulator, contratos, herramientas de emparejamiento y compilación PlatformIO. El deploy de producción ocurre únicamente en `main`, después de que todos esos jobs pasen.
 
 ## Tubería
 
 1. **Frontend:** sintaxis JavaScript, referencias/IDs HTML, CSP y versión de UI. Playwright en Chromium valida login visible, pestañas, paneles y navegación por teclado.
 2. **Firebase Realtime Database:** Firebase Emulator verifica acceso por claims/UID y validaciones de comandos, portón y eventos.
-3. **API Python:** instala requisitos de `legacy_backup/` y ejecuta pruebas unitarias de eventos y pruebas HTTP de estado/autorización.
+3. **Herramientas Python:** instala `tools/android_tv_pairing/requirements.txt` y comprueba sintaxis e importación del emparejamiento Android TV y del exportador de certificados. No hay API local: la arquitectura es Web + Firebase + ESP32.
 4. **ESP32-S3:** copia el header de ejemplo a `config.local.h` y compila con PlatformIO. Los valores ficticios sirven solo para compilar.
-5. **Functions:** instalación reproducible desde su lockfile y auditoría de dependencias de producción.
-6. **Deploy:** al hacer push a `main`, Vercel publica el artefacto web y Firebase CLI publica Functions. Ambos despliegues esperan que los checks esten verdes.
+5. **Dependencias:** auditoría npm de producción y de desarrollo en cada push.
+6. **Deploy:** al hacer push a `main`, Vercel publica el artefacto web y Firebase CLI publica las reglas de Realtime Database. Ambos despliegues esperan que los checks esten verdes.
 
 Si un job falla, GitHub marca el check como fallido y no ejecuta el deploy. Configura las notificaciones de Actions en tu cuenta para recibir los avisos.
 
@@ -53,7 +53,7 @@ Los dos jobs de deploy requieren además la variable de repositorio `DEPLOYMENTS
 En **Settings → Branches**, protege `main`, exige pull request y marca los checks requeridos:
 
 - `Frontend, Firebase y contratos`
-- `API Python`
+- `Herramientas de emparejamiento Android TV`
 - `Compilar firmware ESP32-S3`
 
 El deploy está condicionado a la configuración del repositorio. Firebase publica únicamente las reglas de Realtime Database; no hay despliegue de Cloud Functions ni hace falta activar facturación. Los push en segundo plano usan el worker gratuito descrito en [[Guía de notificaciones push]].
@@ -68,10 +68,10 @@ El deploy está condicionado a la configuración del repositorio. Firebase publi
 npm ci
 npm run test:ui
 npm run test:rules
-node --test tests/js/*.test.js
-python -m pip install -r legacy_backup/requirements.txt
-python -m unittest discover -s legacy_backup/tests -v
-cp esp32_gateway/include/config.example.h esp32_gateway/include/config.local.h
+npm run test:contracts
+python -m pip install -r tools/android_tv_pairing/requirements.txt
+python scripts/export_tv_certs.py
+Copy-Item esp32_gateway/include/config.example.h esp32_gateway/include/config.local.h
 pio run -d esp32_gateway -e esp32-s3-devkitc-1-n16r8
 ```
 

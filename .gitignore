@@ -75,3 +75,6 @@ node_modules/
 functions/node_modules/
 scripts/free-push/.clasp.json
 scripts/free-push/clasp-oauth.json
+
+# Cachés de herramientas de grafo
+graphify-out/

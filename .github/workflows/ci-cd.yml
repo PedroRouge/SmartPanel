@@ -64,8 +64,8 @@ jobs:
       - name: Probar permisos Firebase en el emulador
         run: npm run test:rules
 
-  python-api:
-    name: API Python
+  python-tools:
+    name: Herramientas de emparejamiento Android TV
     runs-on: ubuntu-24.04
     steps:
       - name: Descargar código
@@ -76,11 +76,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Instalar dependencias de la API
-        run: python -m pip install -r legacy_backup/requirements.txt
+      - name: Instalar dependencias del emparejamiento
+        run: python -m pip install -r tools/android_tv_pairing/requirements.txt
 
-      - name: Probar validaciones y endpoints
-        run: python -m unittest discover -s legacy_backup/tests -v
+      - name: Revisar sintaxis y carga de las herramientas
+        run: |
+          python -m py_compile tools/android_tv_pairing/android_tv_power.py
+          python -m py_compile tools/android_tv_pairing/discover_android_tv.py
+          python -m py_compile tools/android_tv_pairing/pair_android_tv.py
+          python -m py_compile scripts/export_tv_certs.py
+          PYTHONPATH=tools/android_tv_pairing python -c "import android_tv_power, discover_android_tv, pair_android_tv"
 
   esp32-build:
     name: Compilar firmware ESP32-S3
@@ -105,7 +110,7 @@ jobs:
 
   deploy:
     name: Publicar sitio en Vercel
-    needs: [frontend-and-firebase, python-api, esp32-build]
+    needs: [frontend-and-firebase, python-tools, esp32-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-24.04
     environment:
@@ -142,7 +147,7 @@ jobs:
 
   deploy-firebase-rules:
     name: Publicar reglas Firebase (Spark)
-    needs: [frontend-and-firebase, python-api, esp32-build]
+    needs: [frontend-and-firebase, python-tools, esp32-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.FIREBASE_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-24.04
     environment:

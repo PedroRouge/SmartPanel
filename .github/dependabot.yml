@@ -13,7 +13,7 @@ updates:
           - "firebase-tools"
 
   - package-ecosystem: pip
-    directory: "/legacy_backup"
+    directory: "/tools/android_tv_pairing"
     schedule:
       interval: weekly
 
